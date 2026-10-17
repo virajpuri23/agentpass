@@ -7,10 +7,14 @@
     "dev:authority": "tsx --env-file=.env apps/authority/src/server.ts",
     "dev:mcp": "tsx --env-file=.env apps/mcp/src/server.ts",
     "seed:authority": "tsx db/seed.ts",
-    "setup:postgres": "tsx db/setup-postgres.ts",
-    "pretest": "AUTHORITY_URL=http://127.0.0.1:4100 npm --prefix apps/mcp/agentpass-manufact run build",
+    "dev:supplier": "tsx --env-file=.env apps/supplier/src/server.ts",
+    "demo:reset": "tsx --env-file=.env scripts/seed-demo.ts",
+    "demo:run": "tsx --env-file=.env scripts/run-e2e.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "start": "tsx apps/remote/src/server.ts",
+    "setup:postgres": "tsx db/setup-postgres.ts",
+    "pretest": "AUTHORITY_URL=http://127.0.0.1:4100 npm --prefix apps/mcp/agentpass-manufact run build"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "^2.3.1",
@@ -18,14 +22,14 @@
     "better-sqlite3": "^12.11.1",
     "express": "^5.3.0",
     "pg": "^8.23.1",
-    "zod": "^4.6.5"
+    "zod": "^4.6.5",
+    "tsx": "^4.23.15"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.5",
     "@types/pg": "^8.23.1",
-    "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^4.1.11"
   }
