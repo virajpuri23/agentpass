@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS purchases (
   grant_id TEXT NOT NULL REFERENCES grants(id),
   quote_id TEXT NOT NULL,
   idempotency_key TEXT NOT NULL,
+  request_json TEXT NOT NULL CHECK (json_valid(request_json)),
   amount_cents INTEGER NOT NULL CHECK (amount_cents >= 0),
   status TEXT NOT NULL CHECK (status IN ('PENDING','COMPLETED','FAILED')),
   supplier_order_id TEXT,
