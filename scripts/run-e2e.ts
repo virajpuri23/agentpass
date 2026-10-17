@@ -11,7 +11,16 @@ import { launchAgents } from '../apps/agent-kit/src/launcher.js';
 import type { TraceEvent } from '../apps/agent-kit/src/transport.js';
 import { hostedStack, isolatedStack, servicesStack, viaHttpMcp, type DemoStack } from './demo-stack.js';
 
-type Check = { step: number; title: string; pass: boolean; detail: string };
+export type Check = { step: number; title: string; pass: boolean; detail: string };
+
+/** Structured stream for live views (apps/activity). Same facts as the printed trace. */
+export type DemoEvent =
+  | { type: 'meta'; mode: DemoStack['mode']; mcp: string; root: string; decider: 'deterministic' | 'llm' }
+  | { type: 'process'; at: string; agent: string; pid: number; kind: 'started' | 'exited' }
+  | { type: 'trace'; event: TraceEvent }
+  | { type: 'runner'; at: string; text: string }
+  | { type: 'check'; check: Check }
+  | { type: 'done'; passed: boolean };
 
 const args = process.argv.slice(2);
 const useServices = args.includes('--services');
@@ -22,18 +31,28 @@ const color = process.stdout.isTTY && !process.env.NO_COLOR;
 const c = (code: number, s: string) => (color ? `\x1b[${code}m${s}\x1b[0m` : s);
 const usd = (cents: unknown) => (typeof cents === 'number' ? `$${(cents / 100).toFixed(2)}` : '?');
 
-export async function runDemo(opts: { stack: DemoStack; print?: (line: string) => void }) {
+export async function runDemo(opts: { stack: DemoStack; print?: (line: string) => void; onEvent?: (e: DemoEvent) => void }) {
   const print = opts.print ?? (() => {});
+  const emit = opts.onEvent ?? (() => {});
+  const runner = (text: string) => { emit({ type: 'runner', at: new Date().toISOString(), text }); print(c(90, `${clock()}  ${'runner'.padEnd(15)} ${text}`)); };
+  emit({ type: 'meta', mode: opts.stack.mode, mcp: 'mcpUrl' in opts.stack.connection ? opts.stack.connection.mcpUrl : 'stdio', root: opts.stack.rootGrantId, decider: 'deterministic' });
   const trace: TraceEvent[] = [];
   const checks: Check[] = [];
-  const check = (step: number, title: string, pass: boolean, detail: string) => checks.push({ step, title, pass, detail });
+  const check = (step: number, title: string, pass: boolean, detail: string) => {
+    const x = { step, title, pass, detail };
+    checks.push(x);
+    emit({ type: 'check', check: x });
+  };
 
   const agents = await launchAgents({
     connection: opts.stack.connection,
     keys: { 'buyer-agent': opts.stack.keys.buyer, 'sourcing-agent': opts.stack.keys.sourcing },
     rootGrantId: opts.stack.rootGrantId,
-    onTrace: (e) => { trace.push(e); print(formatEvent(e)); },
-    onProcess: (p) => print(c(90, `${clock()}  ${'platform'.padEnd(15)} ${p.kind === 'started' ? 'started' : 'exited'} ${p.agent} (pid ${p.pid})`)),
+    onTrace: (e) => { trace.push(e); emit({ type: 'trace', event: e }); print(formatEvent(e)); },
+    onProcess: (p) => {
+      emit({ type: 'process', at: new Date().toISOString(), agent: p.agent, pid: p.pid, kind: p.kind });
+      print(c(90, `${clock()}  ${'platform'.padEnd(15)} ${p.kind === 'started' ? 'started' : 'exited'} ${p.agent} (pid ${p.pid})`));
+    },
   });
 
   try {
@@ -45,7 +64,7 @@ export async function runDemo(opts: { stack: DemoStack; print?: (line: string) =
       calls.find((c) => c.agent === agent && c.tool === tool && pred(c));
 
     // Step 1 probe: the child cannot see the root grant.
-    print(c(90, `${clock()}  ${'runner'.padEnd(15)} asks sourcing-agent to list its own grants`));
+    runner("asks sourcing-agent to list its own grants");
     const childGrants = await agents.probe('my_grants');
     const buyerGrants = find('buyer-agent', 'get_my_grants', (x) => x.status === 'OK');
     const root = opts.stack.rootGrantId;
@@ -82,13 +101,13 @@ export async function runDemo(opts: { stack: DemoStack; print?: (line: string) =
     `receipt ${short(s.receipt?.receipt_id)}, order ${short(s.receipt?.order_id)}, ${usd(s.receipt?.amount_cents)} (simulated)`);
 
     // Step 7: margin read.
-    print(c(90, `${clock()}  ${'runner'.padEnd(15)} asks sourcing-agent to try reading supplier margins`));
+    runner("asks sourcing-agent to try reading supplier margins");
     const margin = await agents.probe('margin_read', { grant_id: s.purchase_grant_id, quote_id: s.quote?.quote_id });
     const leak = /internal_unit_cost|margin_cents|"cost/i.test(JSON.stringify(trace)) || /"internal|cost_cents/.test(JSON.stringify(margin));
     check(7, 'Margin read denied; no private cost data anywhere', margin.code === 'SELLER_POLICY_DENIED' && !leak, `${margin.status} ${margin.code ?? ''}; trace scanned for private fields: ${leak ? 'LEAK' : 'clean'}`);
 
     // Step 8: overspend / widening / self-approval / forged identity.
-    print(c(90, `${clock()}  ${'runner'.padEnd(15)} asks sourcing-agent to overspend, widen scope, self-approve, forge identity`));
+    runner("asks sourcing-agent to overspend, widen scope, self-approve, forge identity");
     const overspend = await agents.probe('overspend', { quote_grant_id: s.quote_only_grant_id, purchase_grant_id: s.purchase_grant_id });
     const widen = await agents.probe('widen_scope', { grant_id: s.purchase_grant_id });
     const selfApprove = await agents.probe('self_approve', { request_id: s.request_id });
@@ -100,7 +119,7 @@ export async function runDemo(opts: { stack: DemoStack; print?: (line: string) =
       `overspend ${overspend.code}; widen ${widen.code}; self-approve ${selfApprove.code}; forged ${forged.code}`);
 
     // Step 9: revoke, then retry.
-    print(c(90, `${clock()}  ${'runner'.padEnd(15)} owner instructs buyer-agent to revoke the child's purchase grant`));
+    runner("owner instructs buyer-agent to revoke the child's purchase grant");
     const revoked = await agents.revoke(s.purchase_grant_id, 'Demo: owner revokes delegated authority');
     const after = await agents.probe('purchase_again', { grant_id: s.purchase_grant_id, quote_id: s.quote?.quote_id });
     check(9, 'After revocation the child is blocked', revoked.ok && after.code === 'GRANT_REVOKED', `revoke ${revoked.ok ? 'OK' : revoked.code}; retry -> ${after.status} ${after.code}`);
@@ -109,7 +128,9 @@ export async function runDemo(opts: { stack: DemoStack; print?: (line: string) =
   } finally {
     await agents.stop();
   }
-  return { trace, checks, passed: checks.length >= 9 && checks.every((x) => x.pass) };
+  const passed = checks.length >= 9 && checks.every((x) => x.pass);
+  emit({ type: 'done', passed });
+  return { trace, checks, passed };
 }
 
 function clock(at?: string) { return (at ?? new Date().toISOString()).slice(11, 23); }

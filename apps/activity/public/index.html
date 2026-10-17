@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>AgentPass Live Activity</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><span class="mark" aria-hidden="true">◆</span> AgentPass <span class="sub">live agent activity</span></div>
+    <div id="source" class="source idle">Idle</div>
+    <div class="controls">
+      <button data-run="local" title="Fresh local authority + supplier, agents over stdio MCP">Run local</button>
+      <button data-run="local-http" title="Agents over Developer A's HTTP MCP app (bearer keys)">Run via HTTP MCP</button>
+      <button data-run="hosted" id="run-hosted" class="primary" title="Agents call the deployed Manufact MCP server">Run on Manufact</button>
+      <select id="recording" aria-label="Recorded run"></select>
+      <button id="replay" class="secondary">Replay</button>
+    </div>
+  </header>
+
+  <main class="grid">
+    <section class="panel chain" aria-label="Who is acting">
+      <h2>Who</h2>
+      <div class="org" data-org="buyer-co">
+        <div class="org-name">Acme Retail <span>buyer-co</span></div>
+        <div class="node" data-agent="owner-1"><b>Owner</b><small>human · sets $1,000 root</small></div>
+        <div class="link">delegates ↓</div>
+        <div class="node" data-agent="buyer-agent"><b>Buyer agent</b><small class="pid">not running</small><span class="grant" id="grant-buyer"></span></div>
+        <div class="link">spawns · quote-only ↓</div>
+        <div class="node" data-agent="sourcing-agent"><b>Sourcing agent</b><small class="pid">not running</small><span class="grant" id="grant-child"></span></div>
+      </div>
+      <div class="gateway">
+        <div class="node" data-agent="agentpass"><b>AgentPass</b><small id="mcp-label">MCP authority gateway</small></div>
+      </div>
+      <div class="org" data-org="supplier-co">
+        <div class="org-name">Packaging Supply Inc. <span>supplier-co</span></div>
+        <div class="node" data-agent="supplier"><b>Supplier</b><small>own policy · private costs</small></div>
+      </div>
+    </section>
+
+    <section class="panel timeline" aria-label="Timeline">
+      <h2>Timeline <span id="count" class="muted"></span></h2>
+      <ol id="events"><li class="empty">Start a run or replay a recording.</li></ol>
+    </section>
+
+    <section class="panel side" aria-label="Authority and checks">
+      <h2>Authority</h2>
+      <div class="budget" id="budget-root"><div class="label"><span>Root grant</span><span class="amt">—</span></div><div class="bar"><i></i></div><small class="note"></small></div>
+      <div class="budget" id="budget-child"><div class="label"><span>Child purchase grant</span><span class="amt">—</span></div><div class="bar"><i></i></div><small class="note"></small></div>
+
+      <h2>Supplier private data</h2>
+      <div class="private" id="private">
+        <div class="row"><span>Internal unit cost</span><span class="lock">private · never sent</span></div>
+        <div class="row"><span>Margin</span><span class="lock">private · never sent</span></div>
+        <small id="private-note">Waiting for a margin read attempt…</small>
+      </div>
+
+      <h2>Checks</h2>
+      <ol id="checks" class="checks"></ol>
+      <div id="result" class="result"></div>
+    </section>
+  </main>
+  <footer class="foot">Every row comes from a real MCP call made by a separate agent process. Purchases are simulated.</footer>
+</body>
+</html>
