@@ -79,7 +79,7 @@ Read [`docs/12-IMPLEMENTATION-QUICKSTART.md`](docs/12-IMPLEMENTATION-QUICKSTART.
 
 ## Manufact MCP App v2
 
-**Current verification:** local implementation and supplier-fixture tests pass; Manufact CLI authentication is verified; hosted deployment is pending the private AgentPass Supabase connection and Developer B's reachable supplier service. The selected project is `ebkcaqaybuklllefvuyv` (`https://ebkcaqaybuklllefvuyv.supabase.co`). No live MCP URL, dashboard server ID, or deployment ID has been issued. Local fixture success is not hosted supplier integration proof.
+**Current verification:** local implementation and supplier-fixture tests pass; Manufact CLI authentication is verified; the AgentPass Supabase connection is verified over TLS and its private schema/demo seed are initialized. Hosted deployment is pending Developer B's reachable supplier service. The selected project is `ebkcaqaybuklllefvuyv` (`https://ebkcaqaybuklllefvuyv.supabase.co`). No live MCP URL, dashboard server ID, or deployment ID has been issued. Local fixture success is not hosted supplier integration proof.
 
 Use Node **22.22.2+** for the MCP App (Node 24 recommended). If dependencies were installed under a different Node major, run `npm rebuild better-sqlite3` after switching. The existing stdio adapter remains available for headless per-agent processes. The nested app was generated with the required official `mcp-apps` template and pins published `mcp-use@2.8.2`.
 
