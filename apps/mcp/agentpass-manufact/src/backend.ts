@@ -4,6 +4,7 @@ import { HttpSupplierService } from '../../../authority/src/supplier.js';
 import { createSupplierApp } from '../../../supplier/src/app.js';
 import { createSupplierService } from '../../../supplier/src/service.js';
 import { postgresStore as supplierPostgresStore } from '../../../supplier/src/store.js';
+import { createHumanTokenVerifierFromEnv } from './oauth.js';
 import type { Server } from 'node:http';
 
 async function listen(app: ReturnType<typeof createAuthorityApp>) {
@@ -18,6 +19,7 @@ export async function authorityEndpoint(): Promise<string> {
     return process.env.AUTHORITY_URL;
   }
   if (process.env.AUTHORITY_URL) throw new Error('Configure either DATABASE_URL (embedded authority) or AUTHORITY_URL (external authority).');
+  const verifyHumanToken = createHumanTokenVerifierFromEnv();
   let supplierUrl = process.env.SUPPLIER_URL;
   const serviceKey = process.env.SUPPLIER_SERVICE_KEY;
   if (!serviceKey) throw new Error('SUPPLIER_SERVICE_KEY is required for embedded authority.');
@@ -39,7 +41,7 @@ export async function authorityEndpoint(): Promise<string> {
       servers.push(supplier.server);
       supplierUrl = supplier.url;
     }
-    const authority = await listen(createAuthorityApp({db:db.store,supplier:new HttpSupplierService(supplierUrl,serviceKey)}));
+    const authority = await listen(createAuthorityApp({db:db.store,supplier:new HttpSupplierService(supplierUrl,serviceKey),...(verifyHumanToken ? {verifyHumanToken} : {})}));
     servers.push(authority.server);
     process.once('SIGTERM', () => {void close();});process.once('SIGINT', () => {void close();});
     return authority.url;

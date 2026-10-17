@@ -3,20 +3,26 @@ import { MCPServer, type RequestContext } from 'mcp-use';
 import { z } from 'zod';
 import { authorityEndpoint } from './src/backend.js';
 import { ACTIONS, scopeSchema, envelopeSchema, createAuthorityClient, toolResult } from './src/authority-client.js';
+import { createAgentPassOAuthProvider, humanOAuthConfigFromEnv, type AgentPassOAuthUser } from './src/oauth.js';
 
+const oauthConfig = humanOAuthConfigFromEnv();
 const authorityUrl = await authorityEndpoint();
 const target = new URL(authorityUrl);
 if (target.protocol !== 'https:' && !((process.env.NODE_ENV !== 'production' || process.env.DATABASE_URL) && ['127.0.0.1', 'localhost', '[::1]'].includes(target.hostname))) {
   throw new Error('A hosted authority service must use HTTPS.');
 }
 
-const server = new MCPServer({
+const serverConfig = {
   name: 'agentpass',
   title: 'AgentPass Authority Inspector',
   version: '2.0.0',
   description: 'Scoped authority negotiation and simulated supplier purchases.',
   instructions: 'Agent onboarding requires no browser. Authenticate using your own credential provisioned by a trusted owner or orchestrator; never borrow a parent credential or self-assign identity. Call describe_authority, then get_my_grants. A parent may use provision_child with a runtime-generated credential verifier and bounded scope. With no grants, obtain initial delegation from a trusted parent. The UI is optional inspection. On AUTHORITY_REQUIRED, use request_authority, poll get_authority_request, then accept_authority_offer. All purchases are simulated.',
-});
+};
+const oauth = oauthConfig ? createAgentPassOAuthProvider(oauthConfig, authorityUrl) : undefined;
+const server = oauth
+  ? new MCPServer({ ...serverConfig, oauth })
+  : new MCPServer(serverConfig);
 
 server.get('/health', (c) => c.json({ status: 'OK' }));
 
@@ -30,7 +36,7 @@ function caller(request: Request) {
   const header = request.headers.get('authorization');
   return header?.match(/^Bearer ([^\s]+)$/)?.[1];
 }
-function authority(ctx: RequestContext) {
+function authority(ctx: RequestContext<AgentPassOAuthUser, 'optional'>) {
   const token = ctx.request && caller(ctx.request.raw);
   if (!token) throw new Error('Authenticated request required.');
   return createAuthorityClient({ authorityUrl: authorityUrl!, agentApiKey: token });
