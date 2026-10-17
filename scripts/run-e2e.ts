@@ -1,5 +1,5 @@
 /**
- * npm run demo:run [-- --services] [-- --trace-out trace.json]
+ * npm run demo:run [-- --services | --hosted] [-- --via-http] [-- --trace-out trace.json]
  *
  * Runs the 9-step judge demo (docs/06-DEVELOPER-B.md B5) with real HTTP
  * services, real MCP calls and two real agent processes. Prints a compact
@@ -9,12 +9,14 @@
 import { writeFileSync } from 'node:fs';
 import { launchAgents } from '../apps/agent-kit/src/launcher.js';
 import type { TraceEvent } from '../apps/agent-kit/src/transport.js';
-import { isolatedStack, servicesStack, type DemoStack } from './demo-stack.js';
+import { hostedStack, isolatedStack, servicesStack, viaHttpMcp, type DemoStack } from './demo-stack.js';
 
 type Check = { step: number; title: string; pass: boolean; detail: string };
 
 const args = process.argv.slice(2);
 const useServices = args.includes('--services');
+const useHosted = args.includes('--hosted');
+const viaHttp = args.includes('--via-http');
 const traceOut = args.includes('--trace-out') ? args[args.indexOf('--trace-out') + 1] : undefined;
 const color = process.stdout.isTTY && !process.env.NO_COLOR;
 const c = (code: number, s: string) => (color ? `\x1b[${code}m${s}\x1b[0m` : s);
@@ -27,7 +29,7 @@ export async function runDemo(opts: { stack: DemoStack; print?: (line: string) =
   const check = (step: number, title: string, pass: boolean, detail: string) => checks.push({ step, title, pass, detail });
 
   const agents = await launchAgents({
-    connection: { authorityUrl: opts.stack.authorityUrl },
+    connection: opts.stack.connection,
     keys: { 'buyer-agent': opts.stack.keys.buyer, 'sourcing-agent': opts.stack.keys.sourcing },
     onTrace: (e) => { trace.push(e); print(formatEvent(e)); },
     onProcess: (p) => print(c(90, `${clock()}  ${'platform'.padEnd(15)} ${p.kind === 'started' ? 'started' : 'exited'} ${p.agent} (pid ${p.pid})`)),
@@ -127,11 +129,14 @@ function formatEvent(e: TraceEvent): string {
 }
 
 async function main() {
-  const stack = useServices ? await servicesStack() : await isolatedStack();
+  let stack = useHosted ? hostedStack() : useServices ? await servicesStack() : await isolatedStack();
+  if (viaHttp && !useHosted) stack = await viaHttpMcp(stack);
   const out = (s: string) => console.log(s);
   out(c(1, '\nAgentPass demo: cross-company agent authority'));
-  out(c(90, `backends: ${stack.mode === 'isolated' ? 'fresh local services (temp DBs)' : 'running services from .env'} | authority ${stack.authorityUrl} | supplier ${stack.supplierUrl}`));
-  out(c(90, 'agents: separate OS processes, own keys, real MCP (stdio) | decisions: deterministic (no LLM) | purchases: simulated\n'));
+  const backends = { isolated: 'fresh local services (temp DBs)', services: 'running services from .env', hosted: 'hosted deployment' }[stack.mode];
+  const mcp = 'mcpUrl' in stack.connection ? `HTTP ${stack.connection.mcpUrl}` : 'stdio';
+  out(c(90, `backends: ${backends} | authority ${stack.authorityUrl} | supplier ${stack.supplierUrl}`));
+  out(c(90, `agents: separate OS processes, own keys, real MCP (${mcp}) | decisions: deterministic (no LLM) | purchases: simulated\n`));
 
   const { trace, checks, passed } = await runDemo({ stack, print: out });
   await stack.stop();
