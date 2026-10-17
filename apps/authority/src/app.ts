@@ -1,4 +1,5 @@
 import express from 'express';
+import { consoleSnapshot } from './console.js';
 import { randomUUID } from 'node:crypto';
 import { auditContext, setAuditContext } from './audit.js';
 import { SupplierPolicyDenial } from './supplier.js';
@@ -33,6 +34,7 @@ export function createAuthorityApp(options: { db: Database.Database | AuthorityS
     catch (error) { next(error); }
   };
   app.get('/v1/me',route(async p => ({principal_id:p.id,organization_id:p.organization_id,role:p.role,grants:await engine.grants(p),inspector:await engine.inspect(p)})));
+  app.get('/v1/console',route(p => consoleSnapshot(engine,p)));
   app.post('/v1/grants/:id/delegate',route((p,req) => {
     const body = z.object({recipient_principal_id:id,scope:scopeSchema}).strict().parse(req.body);
     setAuditContext({action:'grant.delegate',grantId:id.parse(req.params.id)});

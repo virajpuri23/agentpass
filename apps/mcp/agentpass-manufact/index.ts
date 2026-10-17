@@ -1,3 +1,4 @@
+import { createConsoleHandler } from '../../dashboard/src/handler.js';
 import { MCPServer, type RequestContext } from 'mcp-use';
 import { z } from 'zod';
 import { authorityEndpoint } from './src/backend.js';
@@ -18,6 +19,12 @@ const server = new MCPServer({
 });
 
 server.get('/health', (c) => c.json({ status: 'OK' }));
+
+// Explicit public origin prevents accepting arbitrary Host/proxy headers as a trusted origin.
+if (process.env.CONSOLE_ORIGIN && process.env.MCP_PUBLIC_URL) {
+  const consoleHandler = createConsoleHandler({authorityUrl,mcpUrl:process.env.MCP_PUBLIC_URL,origin:process.env.CONSOLE_ORIGIN});
+  for (const path of ['/connect','/console','/console.js','/console.css','/console-api/*']) server.all(path,c => consoleHandler(c.req.raw));
+}
 
 function caller(request: Request) {
   const header = request.headers.get('authorization');
@@ -60,7 +67,7 @@ export const getMyGrants = server.tool({
   if (result.status !== 'OK') return toolResult(result);
   if (!Array.isArray(result.data.grants)) return toolResult({ status: 'ERROR', code: 'SERVICE_UNAVAILABLE', reason: 'Authority grant list unavailable.', next_action: 'retry' });
   return { ...toolResult({ status: 'OK', data: { grants: result.data.grants } }),
-    _meta: { principal_id: result.data.principal_id, organization_id: result.data.organization_id, inspector: result.data.inspector } };
+    _meta: { principal_id: result.data.principal_id, organization_id: result.data.organization_id, inspector: result.data.inspector, ...(process.env.CONSOLE_ORIGIN && process.env.MCP_PUBLIC_URL ? {console_url:new URL('/connect',process.env.CONSOLE_ORIGIN).href} : {}) } };
 });
 
 export const requestAuthority = server.tool({

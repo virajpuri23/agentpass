@@ -143,3 +143,35 @@ Supplier **does not** offer an external endpoint that returns internal costs or 
 6. Purchase based on $850 trusted quote succeeds; retry same key returns identical receipt without a second debit.
 7. Margin read denied by seller and no private numeric fields in response.
 8. Expired or revoked grant fails even if subject/principal remains valid.
+
+## Console read extension (does not change frozen shared contracts)
+
+`GET /v1/console` requires the same existing bearer authentication as `/v1/me`.
+It returns `{status:"OK",data:{principal,grants,budgets,requests,activity,receipts,visibility,snapshot_at}}`.
+The response is an application read model, not a new grant or authorization contract.
+
+- `principal`: authenticated persisted principal (`id`, `organization_id`, `kind`, `role`).
+- `grants`: existing `Grant` shapes. An organization OWNER sees organization grants; other principals see only grants they hold or directly issued. No arbitrary grant-ID read is added.
+- `budgets`: existing Inspector budget shape, evaluated by the canonical chain and ledger logic for each visible grant. Revoked/expired/invalid chains return a denial code and null remaining budget.
+- `requests`: existing `AuthorityRequest` shapes plus persisted `created_at`/`updated_at`, visible only to requester or parent subject, including for OWNER callers. Existing lifecycle semantics remain unchanged.
+- `activity`: latest 200 persisted audit events, using the same safe field projection as `/v1/audit`. Owners see their organization; other principals see their own events. `activity_truncated` indicates omitted earlier rows.
+- `receipts`: latest 100 completed canonical purchase receipts. Owners see their organization; other principals see their own receipts. `receipts_truncated` indicates omitted earlier rows. No supplier storage rows are exposed.
+- `visibility`: `grants` (`organization` or `held_or_issued`), `descendants_complete`, `requests:"parties_only"`, `activity` (`organization` or `caller_only`), and the two truncation booleans above.
+- `snapshot_at`: server timestamp. Reads are transactionally consistent. Persistence failures fail closed.
+
+The browser console exposes `/connect`, `/console`, `/console.js`, `/console.css`, and
+`/console-api/*`. These are separate from `/mcp` and the private authority routes.
+`POST /console-api/session` accepts only `{credential}` and verifies `/v1/me` plus an
+actual MCP `get_my_grants` call with matching principal and organization. It sets an
+opaque HttpOnly, SameSite=Strict cookie (Secure over HTTPS). The bearer credential
+stays in a bounded, one-hour, process-local server session. Every subsequent read or
+write reauthenticates through the authority service. `/console-api/logout` destroys
+that session. All POSTs require the exact configured Origin and JSON content type.
+
+`GET /console-api/config` supplies the public MCP URL and OAuth configuration status.
+`GET /console-api/snapshot` proxies only `/v1/console`. The write proxy allowlist is
+limited to existing create-request/respond/accept/revoke endpoints under
+`/console-api/v1/…`; it cannot execute purchases, delegate root authority, select a
+caller, or forward arbitrary URLs. Existing service schemas and permission checks
+remain authoritative. Query parameters are rejected; request bodies are bounded to
+32 KiB. Errors retain machine-readable status/code/reason.
