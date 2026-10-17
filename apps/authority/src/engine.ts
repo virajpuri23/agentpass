@@ -35,20 +35,23 @@ export class AuthorityEngine {
     return Promise.all(rows.map(g => this.grant(g.id)));
   }
   async inspect(p: Principal) {
-    const budgets = await Promise.all((await this.grants(p)).map(async g => {
-      try {
-        const remaining = await Promise.all((await this.chain(g.id,p)).map(async ancestor => {
-          const {amount} = await this.db.prepare("SELECT COALESCE(SUM(amount_cents),0) AS amount FROM ledger_entries WHERE grant_id=? AND state IN ('RESERVED','COMMITTED')").get(ancestor.id) as {amount:number};
-          return Math.max(0,ancestor.scope.total_budget_cents-amount);
-        }));
-        return {grant_id:g.id,remaining_budget_cents:Math.min(...remaining),authority_code:'ACTIVE'};
-      } catch (error) {
-        if (!(error instanceof Denial)) throw error;
-        return {grant_id:g.id,remaining_budget_cents:null,authority_code:error.result.code};
-      }
-    }));
+    const budgets = await Promise.all((await this.grants(p)).map(g => this.grantBudget(g)));
     const latest_result = await this.db.prepare("SELECT timestamp,action,decision,reason_code,grant_id FROM audit_events WHERE principal_id=? AND action LIKE 'supplier.%' ORDER BY rowid DESC LIMIT 1").get(p.id) ?? null;
     return {budgets,latest_result};
+  }
+  async grantBudget(g: Grant) {
+    try {
+      const subject = await this.principal(g.subject_principal_id);
+      const remaining: number[] = [];
+      for (const ancestor of await this.chain(g.id,subject)) {
+        const {amount} = await this.db.prepare("SELECT COALESCE(SUM(amount_cents),0) AS amount FROM ledger_entries WHERE grant_id=? AND state IN ('RESERVED','COMMITTED')").get(ancestor.id) as {amount:number};
+        remaining.push(Math.max(0,ancestor.scope.total_budget_cents-amount));
+      }
+      return {grant_id:g.id,remaining_budget_cents:Math.min(...remaining),authority_code:'ACTIVE'};
+    } catch (error) {
+      if (!(error instanceof Denial)) throw error;
+      return {grant_id:g.id,remaining_budget_cents:null,authority_code:error.result.code};
+    }
   }
   subset(child: AuthorityScope, parent: AuthorityScope, delegation = true) {
     if (!child.actions.every(a => parent.actions.includes(a)) || !child.supplier_ids.every(x => parent.supplier_ids.includes(x)) || !child.sku_ids.every(x => parent.sku_ids.includes(x)) || child.max_per_action_cents > parent.max_per_action_cents || child.total_budget_cents > parent.total_budget_cents || Date.parse(child.expires_at) > Date.parse(parent.expires_at) || child.max_delegation_depth > parent.max_delegation_depth - (delegation ? 1 : 0)) deny('OUTSIDE_PARENT_SCOPE', 'Delegation must narrow every parent scope dimension');

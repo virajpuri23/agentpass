@@ -105,6 +105,15 @@ for (const backend of ['sqlite','postgres'] as const) describe(`Manufact HTTP MC
       if(pg) await pg.store.prepare('UPDATE grants SET scope_json=? WHERE id=?').run(JSON.stringify({...scope(0,['supplier.quote.request']),expires_at:new Date(0).toISOString()}),child.id);
       else sqlite!.prepare('UPDATE grants SET scope_json=? WHERE id=?').run(JSON.stringify({...scope(0,['supplier.quote.request']),expires_at:new Date(0).toISOString()}),child.id);
       expect((await call(sourcing,'execute_action',{grant_id:child.id,action:'supplier.quote.request',supplier_id:'supplier-co',sku_id:'PACK-500',quantity:500,idempotency_key:'expired'})).structuredContent).toMatchObject({code:'GRANT_EXPIRED'});
+      for (const [principal,token] of [['sourcing-agent',keys['sourcing-agent']],['supplier-agent',keys['supplier-agent']]] as const) {
+        const snapshot=await fetch(`${apiUrl}/v1/console`,{headers:{authorization:`Bearer ${token}`}}).then(r=>r.json());
+        expect(snapshot.status).toBe('OK');expect(snapshot.data.principal.id).toBe(principal);
+        if(principal==='sourcing-agent') {
+          expect(snapshot.data.requests[0].status).toBe('ACCEPTED');expect(snapshot.data.receipts).toContainEqual(receipt);
+          expect(snapshot.data.budgets).toContainEqual({grant_id:grant.id,remaining_budget_cents:null,authority_code:'GRANT_REVOKED'});
+        } else {expect(snapshot.data.grants).toEqual([]);expect(snapshot.data.requests).toEqual([]);expect(snapshot.data.receipts).toEqual([]);}
+        expect(JSON.stringify(snapshot)).not.toMatch(/manufact-fixture-|fixture-backend-secret|internal_unit_cost|key_hash/);
+      }
       expect(JSON.stringify([receipt,inspected,missing])).not.toMatch(/manufact-fixture-|fixture-backend-secret|internal_unit_cost|margin_cents/);
       const audit=await fetch(`${apiUrl}/v1/audit`,{headers:{authorization:`Bearer ${keys['owner-1']}`}}).then(r=>r.json());expect(audit.data.some((e:any)=>e.decision==='COMPLETED'&&e.principal_id==='sourcing-agent')).toBe(true);
       if(pg) {await pg.close();const reopened=postgresStore(process.env.AGENTPASS_TEST_DATABASE_URL!);try{expect((await reopened.store.prepare("SELECT COUNT(*)::int AS n FROM purchases WHERE status='COMPLETED'").get()).n).toBe(2);}finally{await reopened.close();}}
