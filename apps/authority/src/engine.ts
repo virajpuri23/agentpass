@@ -21,9 +21,15 @@ export class AuthorityEngine {
     return p;
   }
   async authenticate(token: string): Promise<Principal> {
-    const row = await this.db.prepare('SELECT principal_id FROM principal_keys WHERE key_hash = ? AND revoked_at IS NULL').get(createHash('sha256').update(token).digest('hex')) as any;
+    const row = await this.db.prepare('SELECT principal_id,key_id FROM principal_keys WHERE key_hash = ? AND revoked_at IS NULL').get(createHash('sha256').update(token).digest('hex')) as any;
     if (!row) deny('INVALID_CALLER', 'Valid bearer credentials required', 401);
-    return await this.principal(row.principal_id);
+    const principal = await this.principal(row.principal_id);
+    const binding = await this.db.prepare('SELECT child_grant_id FROM child_provisionings WHERE credential_key_id=?').get(row.key_id);
+    if (binding) {
+      try { await this.chain(binding.child_grant_id,principal); }
+      catch (error) { if (!(error instanceof Denial)) throw error;deny('INVALID_CALLER','Child credential authority is no longer live',401); }
+    }
+    return principal;
   }
   async grant(id: string): Promise<Grant> {
     const row = await this.db.prepare('SELECT * FROM grants WHERE id = ?').get(id) as any;
@@ -88,6 +94,34 @@ export class AuthorityEngine {
     return g;
   }
   async delegate(p: Principal, parent: string, recipient: string, scope: AuthorityScope) { return await this.db.transaction(async () => await this.issue(p, parent, recipient, scope)).immediate(); }
+  async provisionChild(p: Principal, parentId: string, scope: AuthorityScope, credentialHash: string, idempotencyKey: string) {
+    return this.db.transaction(async () => {
+      const parent = (await this.chain(parentId,p))[0];
+      const fingerprint = JSON.stringify([parentId,scope,credentialHash]);
+      const previous = await this.db.prepare('SELECT * FROM child_provisionings WHERE parent_principal_id=? AND idempotency_key=?').get(p.id,idempotencyKey);
+      if (previous) {
+        if (previous.request_json !== fingerprint) deny('ALREADY_EXECUTED','Provisioning key is bound to another request',409);
+        const child = await this.principal(previous.child_principal_id);
+        await this.chain(previous.child_grant_id,child);
+        const key = await this.db.prepare('SELECT revoked_at FROM principal_keys WHERE key_id=?').get(previous.credential_key_id);
+        if (!key || key.revoked_at) deny('INVALID_CALLER','Child credential is no longer active');
+        return {principal:child,grant:await this.grant(previous.child_grant_id)};
+      }
+      this.subset(scope,parent.scope);
+      const budget = await this.grantBudget(parent);
+      if (budget.remaining_budget_cents === null) deny('INSUFFICIENT_SCOPE','Parent authority unavailable');
+      if (scope.total_budget_cents > budget.remaining_budget_cents || scope.max_per_action_cents > budget.remaining_budget_cents) deny('BUDGET_EXCEEDED','Child limits exceed effective remaining ancestor budget');
+      if (await this.db.prepare('SELECT key_id FROM principal_keys WHERE key_hash=?').get(credentialHash)) deny('INVALID_REQUEST','Credential verifier is already registered',409);
+      const child: Principal = {id:`agent-${randomUUID()}`,organization_id:p.organization_id,kind:'AGENT',role:'SERVICE'};
+      const keyId = randomUUID();
+      await this.db.prepare('INSERT INTO principals(id,organization_id,kind,role) VALUES(?,?,?,?)').run(child.id,child.organization_id,child.kind,child.role);
+      await this.db.prepare('INSERT INTO principal_keys(key_id,principal_id,key_hash) VALUES(?,?,?)').run(keyId,child.id,credentialHash);
+      const grant = await this.issue(p,parentId,child.id,scope);
+      await this.db.prepare('INSERT INTO child_provisionings(parent_principal_id,idempotency_key,request_json,child_principal_id,child_grant_id,credential_key_id,created_at) VALUES(?,?,?,?,?,?,?)').run(p.id,idempotencyKey,fingerprint,child.id,grant.id,keyId,this.time());
+      await this.audit(p,'principal.provision','ALLOW',grant.id);
+      return {principal:child,grant};
+    }).immediate();
+  }
   async request(p: Principal, parentId: string, scope: AuthorityScope, reason: string) {
     const parent = await this.grant(parentId);
     const parentPrincipal = await this.principal(parent.subject_principal_id);
