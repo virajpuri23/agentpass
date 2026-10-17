@@ -10,7 +10,7 @@ import type { ApiResult, AuthorityRequest, Grant, PurchaseReceipt, SupplierQuote
 import type { AgentContext } from '../../agent-kit/src/runtime.js';
 import { isError } from '../../agent-kit/src/authority-client.js';
 import { deterministicChild, type ChildDecider } from '../../agent-kit/src/decider.js';
-import type { AgentMessage, Envelope } from '../../agent-kit/src/transport.js';
+import type { AgentMessage, Envelope, ProbeKind } from '../../agent-kit/src/transport.js';
 
 type Task = Extract<AgentMessage, { type: 'TASK_ASSIGNED' }>;
 
@@ -94,9 +94,52 @@ async function parentGrantOf(ctx: AgentContext, grantId: string): Promise<string
   return (mine.data as { grants: Grant[] }).grants.find((g) => g.id === grantId)?.parent_grant_id ?? undefined;
 }
 
+/**
+ * Demo probes: things a misbehaving or over-eager child might try. Each is a
+ * real MCP call under this agent's own identity; enforcement is AgentPass's
+ * and the supplier's, not the agent's.
+ */
+export async function runProbe(ctx: AgentContext, probe: ProbeKind, p: Record<string, string>) {
+  const a = ctx.authority;
+  const sku = { supplier_id: 'supplier-co', sku_id: 'PACK-500' };
+  switch (probe) {
+    case 'my_grants':
+      return a.getMyGrants();
+    case 'margin_read':
+      return a.executeAction({ grant_id: p.grant_id!, action: 'supplier.margin.read', ...sku, quote_id: p.quote_id, idempotency_key: `margin-${randomUUID()}` });
+    case 'overspend': {
+      // A second $850 quote against a $900 grant that already spent $850.
+      const q = await a.executeAction({ grant_id: p.quote_grant_id!, action: 'supplier.quote.request', ...sku, quantity: 500, idempotency_key: `quote-${randomUUID()}` });
+      if (isError(q)) return q;
+      return a.executeAction({ grant_id: p.purchase_grant_id!, action: 'supplier.purchase.execute', ...sku, quote_id: (q.data as SupplierQuote).quote_id, idempotency_key: `overspend-${randomUUID()}` });
+    }
+    case 'widen_scope':
+      // Try to mint itself a wider ($1,200) grant from its $900 grant.
+      return a.delegateAuthority({
+        parent_grant_id: p.grant_id!, recipient_principal_id: 'sourcing-agent',
+        scope: { actions: ['supplier.purchase.execute'], ...{ supplier_ids: ['supplier-co'], sku_ids: ['PACK-500'] }, max_per_action_cents: 120000, total_budget_cents: 120000, expires_at: new Date(Date.now() + 5 * 60_000).toISOString(), max_delegation_depth: 0 },
+      });
+    case 'self_approve':
+      return a.respondAuthorityRequest({
+        request_id: p.request_id!, decision: 'COUNTEROFFER',
+        offered_scope: { actions: ['supplier.purchase.execute'], supplier_ids: ['supplier-co'], sku_ids: ['PACK-500'], max_per_action_cents: 120000, total_budget_cents: 120000, expires_at: new Date(Date.now() + 5 * 60_000).toISOString(), max_delegation_depth: 0 },
+      });
+    case 'forged_identity':
+      // Claims to be the buyer in the arguments; identity comes only from the key.
+      return a.executeAction({ grant_id: p.grant_id!, action: 'supplier.quote.request', ...sku, quantity: 1, idempotency_key: `forge-${randomUUID()}`, agent_id: 'buyer-agent' } as never);
+    case 'purchase_again':
+      return a.executeAction({ grant_id: p.grant_id!, action: 'supplier.purchase.execute', ...sku, quote_id: p.quote_id, idempotency_key: `again-${randomUUID()}` });
+  }
+}
+
 /** Wires the agent to its message link: one task at a time, result goes back to the sender. */
 export function serveSourcing(ctx: AgentContext, opts: { decider?: ChildDecider } = {}) {
   ctx.link.onMessage(async (env: Envelope) => {
+    if (env.message.type === 'PROBE_REQUESTED') {
+      const result = await runProbe(ctx, env.message.probe, env.message.params);
+      await ctx.link.reply(env, { type: 'PROBE_RESULT', probe: env.message.probe, result });
+      return;
+    }
     if (env.message.type === 'SHUTDOWN') {
       await ctx.authority.close();
       ctx.link.close();

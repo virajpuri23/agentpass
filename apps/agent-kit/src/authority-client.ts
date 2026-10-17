@@ -77,7 +77,10 @@ export async function connectAuthority(
     try {
       const response = await client.callTool({ name: tool, arguments: args });
       result = (response.structuredContent ?? parseText(response.content)) as ApiResult<T>;
-      if (!result || typeof result !== 'object' || !('status' in result)) {
+      if ((!result || typeof result !== 'object' || !('status' in result)) && response.isError) {
+        // The MCP server rejected the arguments themselves (schema validation).
+        result = { status: 'ERROR', code: 'INVALID_REQUEST', reason: rawText(response.content).slice(0, 300) || 'Tool rejected the arguments' };
+      } else if (!result || typeof result !== 'object' || !('status' in result)) {
         result = { status: 'ERROR', code: 'SERVICE_UNAVAILABLE', reason: 'Malformed tool result', next_action: 'retry' };
       }
     } catch (error) {
@@ -100,6 +103,11 @@ export async function connectAuthority(
     revokeAuthority: (input) => call('revoke_authority', input),
     close: () => client.close(),
   };
+}
+
+function rawText(content: unknown): string {
+  const first = Array.isArray(content) ? content[0] : undefined;
+  return first && typeof first === 'object' && typeof (first as { text?: unknown }).text === 'string' ? (first as { text: string }).text : '';
 }
 
 function parseText(content: unknown): unknown {

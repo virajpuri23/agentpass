@@ -31,9 +31,14 @@ export type AgentMessage =
   | { type: 'AUTHORITY_RESPONDED'; request_id: string; decision: 'COUNTEROFFER' | 'REJECT' }
   | { type: 'TASK_RESULT'; ok: boolean; summary: Record<string, unknown> }
   | { type: 'GRANT_REVOKED'; grant_id: string; ok: boolean; code?: string }
+  // launcher -> sourcing: demo probes the child attempts under its own identity
+  | { type: 'PROBE_REQUESTED'; probe: ProbeKind; params: Record<string, string> }
+  | { type: 'PROBE_RESULT'; probe: ProbeKind; result: { status: string; code?: string; reason?: string; data?: unknown } }
   // any agent -> launcher (observability only)
   | { type: 'TRACE'; event: TraceEvent }
   | { type: 'ACK' };
+
+export type ProbeKind = 'my_grants' | 'margin_read' | 'overspend' | 'widen_scope' | 'self_approve' | 'forged_identity' | 'purchase_again';
 
 /** One line of the demo trace: a real tool call or an agent decision. */
 export type TraceEvent =

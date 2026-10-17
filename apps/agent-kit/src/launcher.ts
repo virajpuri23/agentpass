@@ -7,7 +7,7 @@
 import { fork, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import type { AgentMessage, Envelope, PurchaseTask, TraceEvent } from './transport.js';
+import type { AgentMessage, Envelope, ProbeKind, PurchaseTask, TraceEvent } from './transport.js';
 
 export type LaunchConnection = { authorityUrl: string } | { mcpUrl: string };
 
@@ -97,6 +97,12 @@ export async function launchAgents(opts: LaunchOptions) {
       const reply = await ask('buyer-agent', { type: 'REVOKE_REQUESTED', grant_id, reason }, 30_000);
       if (reply.type !== 'GRANT_REVOKED') throw new Error(`Unexpected reply ${reply.type}`);
       return reply;
+    },
+    /** Ask the sourcing agent to attempt a demo probe under its own identity. */
+    async probe(probe: ProbeKind, params: Record<string, string> = {}) {
+      const reply = await ask('sourcing-agent', { type: 'PROBE_REQUESTED', probe, params }, 30_000);
+      if (reply.type !== 'PROBE_RESULT') throw new Error(`Unexpected reply ${reply.type}`);
+      return reply.result;
     },
     stderr: () => [...stderr],
     async stop() {
