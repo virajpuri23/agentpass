@@ -1,6 +1,6 @@
 # Self-service MCP onboarding — Developer A implementation plan
 
-**Status:** planned; no implementation or deployment authorized by this document.
+**Status:** implementation requested; A9 review artifacts are in progress. No deployment is authorized by this document.
 **Planning baseline:** October 17, 2026, commit `4620555` on
 `codex/agent-onboarding`, [PR #11](https://github.com/virajpuri23/agentpass/pull/11).
 **Goal:** a person connects AgentPass from ChatGPT, Claude, or another compatible
@@ -152,6 +152,11 @@ or runner can unblock local work but must be labeled FIXTURE. It cannot satisfy
 the real provider/host/worker gates.
 
 ### A9 — Freeze the additive design and fixture contracts
+
+Current decision/contract pack: [A9 onboarding review](18-A9-ONBOARDING-CONTRACTS.md).
+A-side validators/fixtures are implemented; B acceptance and promotion to frozen
+shared contracts are pending. Auth0 and Supabase Vault are selected integration
+targets, not configured or hosted-verified services.
 
 **Reach:** this plan, [02](02-API-CONTRACTS.md), agreed shared types/fixtures,
 provider and secret-store configuration inventory. Record decisions without secrets.

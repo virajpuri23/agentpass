@@ -6,6 +6,8 @@ Self-service OAuth/workspace/agent-control interfaces are currently proposals in
 [the Developer A plan](17-SELF-SERVICE-ONBOARDING-PLAN.md#5-proposed-interface-and-worker-boundary).
 They are not implemented or part of this frozen contract. A9 requires both
 developers to agree and update this document/types/fixtures before new handlers.
+The [A9 review pack](18-A9-ONBOARDING-CONTRACTS.md) now supplies exact proposed
+paths and portable schemas; it remains separate until that agreement is recorded.
 
 ## Authentication, principals and errors
 

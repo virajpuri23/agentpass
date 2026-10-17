@@ -14,6 +14,10 @@ Worker execution and dashboard changes remain Developer B's responsibility.
 Do not change shared types without both developers' agreement or treat fixture
 OAuth/runner tests as a completed hosted journey.
 
+A9's [decision and contract pack](18-A9-ONBOARDING-CONTRACTS.md) is available with
+executable fixtures. Its proposed paths/types are not production handlers or a
+Developer B signoff. Continue independent A-owned work without changing B's files.
+
 ## Your mission
 
 Build a reliable authority engine for distinct principals that can request, counteroffer, delegate, execute within, and revoke scoped permissions. Make it callable through MCP. Your API must be executable independently of Developer B using the fixture responses.

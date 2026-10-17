@@ -1,0 +1,1408 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:agentpass:proposal:onboarding-v1",
+  "description": "PROPOSED A9 review bundle; not implemented or agreed by Developer B.",
+  "$defs": {
+    "context_request": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "context_data": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "account_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+        },
+        "organization": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            }
+          },
+          "required": [
+            "id",
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        "connection": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+                },
+                "principal_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+                },
+                "state": {
+                  "type": "string",
+                  "const": "CONSENT_REQUIRED"
+                },
+                "grant_id": {
+                  "type": "null"
+                },
+                "scope": {
+                  "type": "null"
+                }
+              },
+              "required": [
+                "id",
+                "principal_id",
+                "state",
+                "grant_id",
+                "scope"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+                },
+                "principal_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+                },
+                "state": {
+                  "type": "string",
+                  "const": "ACTIVE"
+                },
+                "grant_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+                },
+                "scope": {
+                  "type": "object",
+                  "properties": {
+                    "actions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "supplier.quote.request",
+                          "supplier.purchase.execute",
+                          "supplier.margin.read"
+                        ]
+                      }
+                    },
+                    "supplier_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "sku_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "max_per_action_cents": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "total_budget_cents": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "expires_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                    },
+                    "max_delegation_depth": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "actions",
+                    "supplier_ids",
+                    "sku_ids",
+                    "max_per_action_cents",
+                    "total_budget_cents",
+                    "expires_at",
+                    "max_delegation_depth"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "id",
+                "principal_id",
+                "state",
+                "grant_id",
+                "scope"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "simulated": {
+          "type": "boolean",
+          "const": true
+        }
+      },
+      "required": [
+        "account_id",
+        "organization",
+        "connection",
+        "simulated"
+      ],
+      "additionalProperties": false
+    },
+    "provision_request": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "task": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "requested_scope": {
+          "type": "object",
+          "properties": {
+            "actions": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "supplier.quote.request",
+                  "supplier.purchase.execute",
+                  "supplier.margin.read"
+                ]
+              }
+            },
+            "supplier_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "sku_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "max_per_action_cents": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "total_budget_cents": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "expires_at": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+            },
+            "max_delegation_depth": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "actions",
+            "supplier_ids",
+            "sku_ids",
+            "max_per_action_cents",
+            "total_budget_cents",
+            "expires_at",
+            "max_delegation_depth"
+          ],
+          "additionalProperties": false
+        },
+        "template_id": {
+          "type": "string",
+          "const": "sourcing-v1"
+        }
+      },
+      "required": [
+        "idempotency_key",
+        "display_name",
+        "task",
+        "requested_scope",
+        "template_id"
+      ],
+      "additionalProperties": false
+    },
+    "agent_data": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "agent_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+            },
+            "organization_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+            },
+            "connection_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+            },
+            "requester_account_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+            },
+            "display_name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "template_id": {
+              "type": "string",
+              "const": "sourcing-v1"
+            },
+            "execution_state": {
+              "type": "string",
+              "const": "NOT_STARTED"
+            },
+            "simulated": {
+              "type": "boolean",
+              "const": true
+            },
+            "state": {
+              "type": "string",
+              "const": "PENDING"
+            },
+            "authority": {
+              "type": "null"
+            }
+          },
+          "required": [
+            "agent_id",
+            "organization_id",
+            "connection_id",
+            "requester_account_id",
+            "display_name",
+            "template_id",
+            "execution_state",
+            "simulated",
+            "state",
+            "authority"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "agent_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+            },
+            "organization_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+            },
+            "connection_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+            },
+            "requester_account_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+            },
+            "display_name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "template_id": {
+              "type": "string",
+              "const": "sourcing-v1"
+            },
+            "execution_state": {
+              "type": "string",
+              "enum": [
+                "NOT_STARTED",
+                "RUNNING",
+                "COMPLETED",
+                "FAILED",
+                "STOPPED"
+              ]
+            },
+            "simulated": {
+              "type": "boolean",
+              "const": true
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "PROVISIONING",
+                "READY"
+              ]
+            },
+            "authority": {
+              "type": "object",
+              "properties": {
+                "principal_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+                },
+                "grant_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+                },
+                "scope": {
+                  "type": "object",
+                  "properties": {
+                    "actions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "supplier.quote.request",
+                          "supplier.purchase.execute",
+                          "supplier.margin.read"
+                        ]
+                      }
+                    },
+                    "supplier_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "sku_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "max_per_action_cents": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "total_budget_cents": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    },
+                    "expires_at": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                    },
+                    "max_delegation_depth": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "actions",
+                    "supplier_ids",
+                    "sku_ids",
+                    "max_per_action_cents",
+                    "total_budget_cents",
+                    "expires_at",
+                    "max_delegation_depth"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "principal_id",
+                "grant_id",
+                "scope"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "agent_id",
+            "organization_id",
+            "connection_id",
+            "requester_account_id",
+            "display_name",
+            "template_id",
+            "execution_state",
+            "simulated",
+            "state",
+            "authority"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "agent_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+            },
+            "organization_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+            },
+            "connection_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+            },
+            "requester_account_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+            },
+            "display_name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "template_id": {
+              "type": "string",
+              "const": "sourcing-v1"
+            },
+            "execution_state": {
+              "type": "string",
+              "enum": [
+                "NOT_STARTED",
+                "RUNNING",
+                "COMPLETED",
+                "FAILED",
+                "STOPPED"
+              ]
+            },
+            "simulated": {
+              "type": "boolean",
+              "const": true
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "FAILED",
+                "REVOKED"
+              ]
+            },
+            "authority": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "principal_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+                    },
+                    "grant_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128,
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+                    },
+                    "scope": {
+                      "type": "object",
+                      "properties": {
+                        "actions": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "supplier.quote.request",
+                              "supplier.purchase.execute",
+                              "supplier.margin.read"
+                            ]
+                          }
+                        },
+                        "supplier_ids": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "sku_ids": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "max_per_action_cents": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "total_budget_cents": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "expires_at": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                        },
+                        "max_delegation_depth": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "actions",
+                        "supplier_ids",
+                        "sku_ids",
+                        "max_per_action_cents",
+                        "total_budget_cents",
+                        "expires_at",
+                        "max_delegation_depth"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "principal_id",
+                    "grant_id",
+                    "scope"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "agent_id",
+            "organization_id",
+            "connection_id",
+            "requester_account_id",
+            "display_name",
+            "template_id",
+            "execution_state",
+            "simulated",
+            "state",
+            "authority"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "list_request": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "cursor": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      },
+      "additionalProperties": false
+    },
+    "list_data": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "agents": {
+          "maxItems": 50,
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "agent_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+                  },
+                  "organization_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+                  },
+                  "connection_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+                  },
+                  "requester_account_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+                  },
+                  "display_name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "template_id": {
+                    "type": "string",
+                    "const": "sourcing-v1"
+                  },
+                  "execution_state": {
+                    "type": "string",
+                    "const": "NOT_STARTED"
+                  },
+                  "simulated": {
+                    "type": "boolean",
+                    "const": true
+                  },
+                  "state": {
+                    "type": "string",
+                    "const": "PENDING"
+                  },
+                  "authority": {
+                    "type": "null"
+                  }
+                },
+                "required": [
+                  "agent_id",
+                  "organization_id",
+                  "connection_id",
+                  "requester_account_id",
+                  "display_name",
+                  "template_id",
+                  "execution_state",
+                  "simulated",
+                  "state",
+                  "authority"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "agent_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+                  },
+                  "organization_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+                  },
+                  "connection_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+                  },
+                  "requester_account_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+                  },
+                  "display_name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "template_id": {
+                    "type": "string",
+                    "const": "sourcing-v1"
+                  },
+                  "execution_state": {
+                    "type": "string",
+                    "enum": [
+                      "NOT_STARTED",
+                      "RUNNING",
+                      "COMPLETED",
+                      "FAILED",
+                      "STOPPED"
+                    ]
+                  },
+                  "simulated": {
+                    "type": "boolean",
+                    "const": true
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "PROVISIONING",
+                      "READY"
+                    ]
+                  },
+                  "authority": {
+                    "type": "object",
+                    "properties": {
+                      "principal_id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+                      },
+                      "grant_id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+                      },
+                      "scope": {
+                        "type": "object",
+                        "properties": {
+                          "actions": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "supplier.quote.request",
+                                "supplier.purchase.execute",
+                                "supplier.margin.read"
+                              ]
+                            }
+                          },
+                          "supplier_ids": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "sku_ids": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "max_per_action_cents": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "total_budget_cents": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "expires_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                          },
+                          "max_delegation_depth": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": [
+                          "actions",
+                          "supplier_ids",
+                          "sku_ids",
+                          "max_per_action_cents",
+                          "total_budget_cents",
+                          "expires_at",
+                          "max_delegation_depth"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "principal_id",
+                      "grant_id",
+                      "scope"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "agent_id",
+                  "organization_id",
+                  "connection_id",
+                  "requester_account_id",
+                  "display_name",
+                  "template_id",
+                  "execution_state",
+                  "simulated",
+                  "state",
+                  "authority"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "agent_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+                  },
+                  "organization_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+                  },
+                  "connection_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+                  },
+                  "requester_account_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+                  },
+                  "display_name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  "template_id": {
+                    "type": "string",
+                    "const": "sourcing-v1"
+                  },
+                  "execution_state": {
+                    "type": "string",
+                    "enum": [
+                      "NOT_STARTED",
+                      "RUNNING",
+                      "COMPLETED",
+                      "FAILED",
+                      "STOPPED"
+                    ]
+                  },
+                  "simulated": {
+                    "type": "boolean",
+                    "const": true
+                  },
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "FAILED",
+                      "REVOKED"
+                    ]
+                  },
+                  "authority": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "principal_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+                          },
+                          "grant_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 128,
+                            "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+                          },
+                          "scope": {
+                            "type": "object",
+                            "properties": {
+                              "actions": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "enum": [
+                                    "supplier.quote.request",
+                                    "supplier.purchase.execute",
+                                    "supplier.margin.read"
+                                  ]
+                                }
+                              },
+                              "supplier_ids": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "sku_ids": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "max_per_action_cents": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "total_budget_cents": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              },
+                              "expires_at": {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                              },
+                              "max_delegation_depth": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 9007199254740991
+                              }
+                            },
+                            "required": [
+                              "actions",
+                              "supplier_ids",
+                              "sku_ids",
+                              "max_per_action_cents",
+                              "total_budget_cents",
+                              "expires_at",
+                              "max_delegation_depth"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "principal_id",
+                          "grant_id",
+                          "scope"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "agent_id",
+                  "organization_id",
+                  "connection_id",
+                  "requester_account_id",
+                  "display_name",
+                  "template_id",
+                  "execution_state",
+                  "simulated",
+                  "state",
+                  "authority"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "next_cursor": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "agents",
+        "next_cursor"
+      ],
+      "additionalProperties": false
+    },
+    "get_request": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "agent_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+        }
+      },
+      "required": [
+        "agent_id"
+      ],
+      "additionalProperties": false
+    },
+    "revoke_agent_request": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "agent_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+        }
+      },
+      "required": [
+        "idempotency_key",
+        "reason",
+        "agent_id"
+      ],
+      "additionalProperties": false
+    },
+    "revoke_connection_request": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      },
+      "required": [
+        "idempotency_key",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "revoke_connection_data": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "connection_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+        },
+        "state": {
+          "type": "string",
+          "const": "REVOKED"
+        }
+      },
+      "required": [
+        "connection_id",
+        "state"
+      ],
+      "additionalProperties": false
+    },
+    "runner_claim_request": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+        }
+      },
+      "required": [
+        "idempotency_key"
+      ],
+      "additionalProperties": false
+    },
+    "runner_claim_data": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "job": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "job_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+                },
+                "agent_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+                },
+                "claim_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+                },
+                "launch_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+                },
+                "template_id": {
+                  "type": "string",
+                  "const": "sourcing-v1"
+                },
+                "task": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 4000
+                },
+                "grant_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+                },
+                "lease_expires_at": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                }
+              },
+              "required": [
+                "job_id",
+                "agent_id",
+                "claim_id",
+                "launch_id",
+                "template_id",
+                "task",
+                "grant_id",
+                "lease_expires_at"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "job"
+      ],
+      "additionalProperties": false
+    },
+    "runner_credential_request": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "claim_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+        }
+      },
+      "required": [
+        "claim_id"
+      ],
+      "additionalProperties": false
+    },
+    "runner_credential_data": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "credential": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{43}$"
+        },
+        "mcp_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+        }
+      },
+      "required": [
+        "credential",
+        "mcp_url",
+        "expires_at"
+      ],
+      "additionalProperties": false
+    },
+    "runner_heartbeat_request": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "claim_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+        }
+      },
+      "required": [
+        "claim_id"
+      ],
+      "additionalProperties": false
+    },
+    "runner_heartbeat_data": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "stop": {
+          "type": "boolean"
+        },
+        "lease_expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+        }
+      },
+      "required": [
+        "stop",
+        "lease_expires_at"
+      ],
+      "additionalProperties": false
+    },
+    "child_ready_request": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "claim_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+        }
+      },
+      "required": [
+        "claim_id"
+      ],
+      "additionalProperties": false
+    },
+    "runner_result_request": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "claim_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9:_-]*$"
+        },
+        "outcome": {
+          "type": "string",
+          "enum": [
+            "COMPLETED",
+            "FAILED"
+          ]
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "claim_id",
+        "outcome",
+        "summary"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

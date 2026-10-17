@@ -52,7 +52,7 @@ The original checklist above is historical and is not a current completion repor
 Use [the detailed A plan](docs/17-SELF-SERVICE-ONBOARDING-PLAN.md) for baseline
 evidence, scope, ownership, acceptance tests and cutoffs. All items below are planned.
 
-- [ ] **A9:** agree additive contracts, provider/secret-store choices and A/B runner boundary.
+- [ ] **A9:** [A-side decisions, schemas and fixtures prepared](docs/18-A9-ONBOARDING-CONTRACTS.md); B agreement on additive contracts/runner boundary pending.
 - [ ] **A10:** additive migrations; verified accounts, personal workspaces, memberships and connections.
 - [ ] **A11:** OAuth ingress with durable connection binding; preserve service bearer clients.
 - [ ] **A12:** trusted consent and bounded connection authority; no automatic purchase budget/reset.
