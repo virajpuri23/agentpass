@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import type Database from 'better-sqlite3';
 
 export interface AuthorityStore {
+  exec(sql: string): Promise<void>;
   prepare(sql: string): {
     get(...params: any[]): Promise<any>;
     all(...params: any[]): Promise<any[]>;
@@ -25,6 +26,7 @@ export function sqliteStore(db: Database.Database): AuthorityStore {
     return result;
   }
   return {
+    exec: sql => exclusive(async () => { db.exec(sql); }),
     prepare(sql) {
       const statement = db.prepare(sql);
       return {
