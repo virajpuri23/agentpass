@@ -6,4 +6,4 @@ import { serveBuyer } from './agent.js';
 const link = new IpcChildTransport('buyer-agent');
 const ctx = await agentFromEnv('buyer-agent', link);
 ctx.note('Buyer agent online');
-serveBuyer(ctx);
+serveBuyer(ctx, { rootGrantId: process.env.ROOT_GRANT_ID || undefined });

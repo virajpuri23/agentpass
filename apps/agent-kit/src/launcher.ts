@@ -14,6 +14,8 @@ export type LaunchConnection = { authorityUrl: string } | { mcpUrl: string };
 export interface LaunchOptions {
   connection: LaunchConnection;
   keys: { 'buyer-agent': string; 'sourcing-agent': string };
+  /** Root grant the buyer acts under (default grant-root-buyer). */
+  rootGrantId?: string;
   onTrace?: (event: TraceEvent) => void;
   onProcess?: (event: { agent: string; pid: number; kind: 'started' | 'exited'; code?: number | null }) => void;
   cwd?: string;
@@ -33,6 +35,7 @@ export async function launchAgents(opts: LaunchOptions) {
     const env: NodeJS.ProcessEnv = {
       PATH: process.env.PATH,
       AGENT_API_KEY: opts.keys[agent], // this agent's key only
+      ...(agent === 'buyer-agent' && opts.rootGrantId ? { ROOT_GRANT_ID: opts.rootGrantId } : {}),
       ...('mcpUrl' in opts.connection ? { AGENTPASS_MCP_URL: opts.connection.mcpUrl } : { AUTHORITY_URL: opts.connection.authorityUrl }),
     };
     const child = fork(ENTRY[agent]!, [], {
