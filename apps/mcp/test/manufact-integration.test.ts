@@ -1,5 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import { pathToFileURL } from 'node:url';
+import { readFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
 import express from 'express';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { describe, expect, it } from 'vitest';
@@ -113,3 +115,61 @@ for (const backend of ['sqlite','postgres'] as const) describe(`Manufact HTTP MC
     }
   },30000);
 });
+
+it.skipIf(!process.env.AGENTPASS_TEST_DATABASE_URL)('runs the embedded production architecture with Developer B supplier and durable PostgreSQL', async () => {
+  const connection = process.env.AGENTPASS_TEST_DATABASE_URL!;
+  const target = new URL(connection);
+  if (!['localhost','127.0.0.1','[::1]'].includes(target.hostname) || !target.pathname.endsWith('_test')) throw new Error('A disposable local test database is required.');
+  const pg = postgresStore(connection);
+  await pg.migrate();
+  await pg.store.prepare('TRUNCATE organizations,principals,principal_keys,grants,authority_requests,purchases,ledger_entries,audit_events CASCADE').run();
+  await seedPostgres(pg, keys);
+  // Plain local PostgreSQL has no Supabase API roles; retain the PUBLIC revocations.
+  await pg.store.prepare(readFileSync('supabase/migrations/20261017213000_supplier_schema.sql','utf8').replaceAll('PUBLIC, anon, authenticated','PUBLIC')).run();
+  await pg.store.prepare('TRUNCATE supplier.orders,supplier.quotes; UPDATE supplier.catalog SET stock_quantity=1000').run();
+  const env: NodeJS.ProcessEnv = {...process.env, DATABASE_URL:connection, SUPPLIER_DATABASE_URL:connection, SUPPLIER_SERVICE_KEY:'embedded-test-service-key'};
+  delete env.AUTHORITY_URL; delete env.SUPPLIER_URL;
+  const script = `import {createServer} from 'node:http';
+    import server from './apps/mcp/agentpass-manufact/.mcp-use/build/index.js';
+    import {toNodeHandler} from './apps/mcp/agentpass-manufact/node_modules/mcp-use/dist/node-bridge.js';
+    const http=createServer(toNodeHandler(server));
+    http.listen(0,'127.0.0.1',()=>console.log('MCP_URL=http://127.0.0.1:'+http.address().port+'/mcp'));
+    process.once('SIGTERM',()=>http.close());`;
+  const child=spawn(process.execPath,['--input-type=module','-e',script],{env,stdio:['ignore','pipe','pipe']});
+  const clients:Client[]=[];
+  try {
+    const url=await new Promise<string>((resolve,reject) => {
+      let output='';
+      child.stdout.on('data',chunk => {output+=String(chunk);const match=output.match(/MCP_URL=(\S+)/);if(match)resolve(match[1]);});
+      child.once('exit',code => reject(new Error(`Embedded MCP exited before readiness: ${code}`)));
+      child.once('error',reject);
+    });
+    expect((await fetch(new URL('/health',url))).status).toBe(200);
+    expect((await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:'{"jsonrpc":"2.0","id":1,"method":"tools/list"}'})).status).toBe(401);
+    async function connect(key:string) {const c=new Client({name:'embedded-real-supplier-test',version:'1'});await c.connect(new StreamableHTTPClientTransport(new URL(url),{requestInit:{headers:{authorization:`Bearer ${key}`}}}));clients.push(c);return c;}
+    const buyer=await connect(keys['buyer-agent']), sourcing=await connect(keys['sourcing-agent']);
+    async function call(c:Client,name:string,args:Record<string,unknown>={}) {return (await c.callTool({name,arguments:args})).structuredContent as any;}
+    async function ok(c:Client,name:string,args:Record<string,unknown>={}) {const r=await call(c,name,args);expect(r.status,JSON.stringify(r)).toBe('OK');return r.data;}
+    expect((await buyer.listTools()).tools.map(t=>t.name).sort()).toEqual([...tools].sort());
+    const quoteGrant=await ok(buyer,'delegate_authority',{parent_grant_id:'grant-root-buyer',recipient_principal_id:'sourcing-agent',scope:scope(0,['supplier.quote.request'])});
+    const quote=await ok(sourcing,'execute_action',{grant_id:quoteGrant.id,action:'supplier.quote.request',supplier_id:'supplier-co',sku_id:'PACK-500',quantity:500,idempotency_key:'real-quote'});
+    expect(quote.total_cents).toBe(85000);
+    expect(await call(sourcing,'execute_action',purchase(quoteGrant.id,'blocked',quote.quote_id))).toMatchObject({status:'AUTHORITY_REQUIRED',next_action:'request_authority',required_scope:{total_budget_cents:85000}});
+    const request=await ok(sourcing,'request_authority',{parent_grant_id:'grant-root-buyer',requested_scope:scope(120000),reason:'Real supplier purchase'});
+    await ok(buyer,'respond_authority_request',{request_id:request.request_id,decision:'COUNTEROFFER',offered_scope:scope(90000)});
+    const grant=await ok(sourcing,'accept_authority_offer',{request_id:request.request_id,idempotency_key:'real-accept'});
+    const receipt=await ok(sourcing,'execute_action',purchase(grant.id,'real-purchase',quote.quote_id));
+    expect(receipt.amount_cents).toBe(85000);
+    expect(await ok(sourcing,'execute_action',purchase(grant.id,'real-purchase',quote.quote_id))).toEqual(receipt);
+    expect((await pg.store.prepare('SELECT COUNT(*)::int AS n FROM supplier.orders').get()).n).toBe(1);
+    expect((await pg.store.prepare("SELECT COUNT(*)::int AS n FROM ledger_entries WHERE state='COMMITTED'").get()).n).toBe(2);
+    await ok(buyer,'revoke_authority',{grant_id:grant.id,reason:'Test complete'});
+    expect(await call(sourcing,'execute_action',purchase(grant.id,'after-revoke',quote.quote_id))).toMatchObject({code:'GRANT_REVOKED'});
+    expect(JSON.stringify([quote,receipt])).not.toMatch(/internal_unit_cost|margin_cents|embedded-test-service-key/);
+  } finally {
+    await Promise.all(clients.map(c=>c.close()));
+    child.kill('SIGTERM');
+    await new Promise<void>(resolve=>{if(child.exitCode!==null)resolve();else child.once('exit',()=>resolve());});
+    await pg.close();
+  }
+},30000);

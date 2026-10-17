@@ -79,7 +79,7 @@ Read [`docs/12-IMPLEMENTATION-QUICKSTART.md`](docs/12-IMPLEMENTATION-QUICKSTART.
 
 ## Manufact MCP App v2
 
-**Current verification:** all 49 local tests pass, including supplier-fixture MCP integration; Manufact CLI authentication is verified; the AgentPass Supabase connection is verified over TLS and its private schema/demo seed are initialized. The selected project is `ebkcaqaybuklllefvuyv` (`https://ebkcaqaybuklllefvuyv.supabase.co`). The existing hosted server below still runs the older HTTP entry with ephemeral SQLite. Its next deployment is configured for v2 and Supabase, but is blocked on Developer B's reachable HTTPS supplier service. Local fixture success is not hosted supplier integration proof.
+**Current verification:** all 69 local tests pass, including the embedded MCP → authority → Developer B supplier workflow with durable PostgreSQL. Both private schemas are initialized in Supabase project `ebkcaqaybuklllefvuyv` (`https://ebkcaqaybuklllefvuyv.supabase.co`). Manufact is configured for the v2 rollout with both services using Supabase. Hosted verification is performed separately from the local tests.
 
 - MCP URL: https://fast-steel-94x84.run.mcp-use.com/mcp
 - Dashboard: https://manufact.com/cloud/org-ab91b9e3-2lgi6/servers/f01e0537-092c-48c0-b6a6-66132aa93099/overview
@@ -147,7 +147,7 @@ The existing authority engine remains the only authority implementation. Its Pos
 
 For a separately hosted authority service, set `DATABASE_URL`, `SUPPLIER_URL`, `SUPPLIER_SERVICE_KEY`, `AUTHORITY_HOST=0.0.0.0`, and `AUTHORITY_PORT`, then run `npm run dev:authority`. Configure the MCP service's `AUTHORITY_URL` with its reachable HTTPS URL.
 
-For one Manufact service, omit `AUTHORITY_URL` and provide `DATABASE_URL`, `SUPPLIER_URL`, and `SUPPLIER_SERVICE_KEY`. The app starts the same authority HTTP API on a private dynamic loopback port **inside the Manufact container**. All state is in PostgreSQL. `SUPPLIER_URL` must be Developer B's HTTPS service with durable quote/order state and the unchanged frozen supplier endpoints. Neither a laptop localhost URL nor an ephemeral supplier SQLite file satisfies hosted verification.
+For one Manufact service, omit `AUTHORITY_URL` and provide `DATABASE_URL` and `SUPPLIER_SERVICE_KEY`. The app starts the same authority HTTP API on a private dynamic loopback port **inside the Manufact container**. Supply either an external HTTPS `SUPPLIER_URL`, or `SUPPLIER_DATABASE_URL` with no `SUPPLIER_URL` to start Developer B's unchanged supplier HTTP app on another private loopback port in the same container. Both services use PostgreSQL; supplier data stays in the separate private `supplier` schema. Apply Developer B's `supabase/migrations/20261017213000_supplier_schema.sql` once before startup. Laptop localhost URLs and ephemeral SQLite do not satisfy hosted verification.
 
 ### Manufact-managed deployment
 
@@ -161,7 +161,7 @@ npx -y mcp-use@latest whoami
 
 An expired or absent code is a login blocker. Do not infer authentication from an attempted command.
 
-Create a private, untracked `.env.manufact` containing **only** `NODE_ENV=production`, `DATABASE_URL`, optional `DATABASE_CA_CERT`, `SUPPLIER_URL`, and `SUPPLIER_SERVICE_KEY`. Agent bearer keys are held by the clients and stored hashed in PostgreSQL; do not configure a shared `AGENT_API_KEY` on the HTTP MCP service. An external-authority deployment instead needs `NODE_ENV=production` and `AUTHORITY_URL`. Manufact login credentials belong in its user-level credential store.
+Create a private, untracked `.env.manufact` containing **only** `NODE_ENV=production`, `DATABASE_URL`, optional `DATABASE_CA_CERT`, `SUPPLIER_DATABASE_URL` (or external `SUPPLIER_URL`), and `SUPPLIER_SERVICE_KEY`. Agent bearer keys are held by the clients and stored hashed in PostgreSQL; do not configure a shared `AGENT_API_KEY` on the HTTP MCP service. An external-authority deployment instead needs `NODE_ENV=production` and `AUTHORITY_URL`. Manufact login credentials belong in its user-level credential store.
 
 From the nested app directory, upload this existing monorepo to the Manufact-managed repository; no new GitHub repository is needed:
 
@@ -175,7 +175,7 @@ npx mcp-use deploy --no-github -y --org org-152932fd-jx9ra \
 
 The build uses a placeholder authority URL only to validate tool/view registrations. Runtime secrets come from Manufact's environment-variable system. The app exposes a minimal `/health` liveness route for Manufact's health check; MCP calls still require agent authentication. Before upload, inspect the source archive scope and preserve unrelated Developer B work. Generated skill folders and build/auth state are ignored. Never upload real customer data or supplier-private databases.
 
-The user approved reusing the existing GitHub-backed server in `org-ab91b9e3-2lgi6` instead of creating a second managed server in the originally requested organization. The Manufact GitHub App already receives pushes from `virajpuri23/agentpass`. `DATABASE_URL` and `DATABASE_CA_CERT` are stored as write-only production secrets; `NODE_ENV=production` is configured. Once Developer B provides `SUPPLIER_URL`, configure it and its matching `SUPPLIER_SERVICE_KEY` privately, then restart deployment `694c46ac-0767-4795-827e-17ea65be2504` with `--branch feat/authority-core`. Do not deploy with a fixture URL. Pushing this production branch triggers deployment automatically, so keep documentation-only updates local while the supplier dependency remains unavailable.
+The user approved reusing the existing GitHub-backed server in `org-ab91b9e3-2lgi6` instead of creating a second managed server in the originally requested organization. The Manufact GitHub App already receives pushes from `virajpuri23/agentpass`. `DATABASE_URL`, `DATABASE_CA_CERT`, `SUPPLIER_DATABASE_URL`, and `SUPPLIER_SERVICE_KEY` are stored as write-only production secrets; `NODE_ENV=production` is configured. Production targets `feat/authority-core`. Pushing that branch deploys automatically; alternatively restart the active deployment with `--branch feat/authority-core`. Do not deploy with a fixture URL.
 
 Read the returned IDs and dashboard URL, then follow actual deployment status/build logs:
 
