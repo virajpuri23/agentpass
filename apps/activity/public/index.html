@@ -18,6 +18,13 @@
         <label><input type="radio" name="where" value="local" checked> This laptop</label>
         <label><input type="radio" name="where" value="hosted" id="where-hosted"> Manufact (live)</label>
       </div>
+      <label class="check">Speed
+        <select id="speed" aria-label="Animation speed">
+          <option value="3">Slower</option>
+          <option value="2" selected>Slow</option>
+          <option value="1">Fast</option>
+        </select>
+      </label>
       <label class="check"><input type="checkbox" id="stepmode"> Step through</label>
       <button id="next" class="secondary" hidden>Next ▸</button>
       <button id="run">Run demo</button>
