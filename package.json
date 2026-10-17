@@ -14,7 +14,7 @@
     "typecheck": "tsc --noEmit",
     "start": "tsx apps/remote/src/server.ts",
     "setup:postgres": "tsx db/setup-postgres.ts",
-    "pretest": "AUTHORITY_URL=http://127.0.0.1:4100 npm --prefix apps/mcp/agentpass-manufact run build"
+    "pretest": "AUTHORITY_URL=https://authority.invalid npm --prefix apps/mcp/agentpass-manufact run build"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "^2.3.1",

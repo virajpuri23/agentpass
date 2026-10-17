@@ -79,13 +79,13 @@ Read [`docs/12-IMPLEMENTATION-QUICKSTART.md`](docs/12-IMPLEMENTATION-QUICKSTART.
 
 ## Manufact MCP App v2
 
-**Current verification:** all 69 local tests pass, including the embedded MCP → authority → Developer B supplier workflow with durable PostgreSQL. Both private schemas are initialized in Supabase project `ebkcaqaybuklllefvuyv` (`https://ebkcaqaybuklllefvuyv.supabase.co`). Manufact is configured for the v2 rollout with both services using Supabase. Hosted verification is performed separately from the local tests.
+**Current verification:** all 69 local tests pass, including the embedded MCP → authority → Developer B supplier workflow with durable PostgreSQL. The v2 app is deployed and the complete workflow passes through independent hosted MCP clients: trusted $850 quote, actionable authority denial, $1200 → $900 negotiation, $850 purchase/replay, revocation, expiry, caller isolation, and concurrent ancestor-budget enforcement. Both private schemas use Supabase project `ebkcaqaybuklllefvuyv` (`https://ebkcaqaybuklllefvuyv.supabase.co`). See [hosted verification evidence](docs/14-MANUFACT-VERIFICATION.md).
 
 - MCP URL: https://fast-steel-94x84.run.mcp-use.com/mcp
 - Dashboard: https://manufact.com/cloud/org-ab91b9e3-2lgi6/servers/f01e0537-092c-48c0-b6a6-66132aa93099/overview
 - Server ID: `f01e0537-092c-48c0-b6a6-66132aa93099`
-- Active legacy deployment: `694c46ac-0767-4795-827e-17ea65be2504` at `c63015fa67f2fd20fa7573e9ac572305db375f1a`
-- The failed v2 preview `7236c64a-319e-4405-9d5e-9e7beab68cd2` was blocked before building by the free plan's preview restriction. With user approval, production now targets `feat/authority-core` and root `apps/mcp/agentpass-manufact`; the active instance has not been restarted. New Supabase agent keys are not valid on that older instance.
+- First verified v2 deployment: `0600457a-b145-4c48-9ede-896997b13fdd` at `49739cba5296b5fff3afe304eb08becd674a5407`. Later commits may create new deployments; consult the dashboard for the active ID.
+- The failed v2 preview `7236c64a-319e-4405-9d5e-9e7beab68cd2` was blocked before building by the free plan's preview restriction. With user approval, production now targets `feat/authority-core`. The build context must be the repository root because the MCP adapter imports shared authority and supplier modules; the start command selects the nested MCP App.
 
 Use Node **22.22.2+** for the MCP App (Node 24 recommended). If dependencies were installed under a different Node major, run `npm rebuild better-sqlite3` after switching. The existing stdio adapter remains available for headless per-agent processes. The nested app was generated with the required official `mcp-apps` template and pins published `mcp-use@2.8.2`.
 
@@ -163,14 +163,13 @@ An expired or absent code is a login blocker. Do not infer authentication from a
 
 Create a private, untracked `.env.manufact` containing **only** `NODE_ENV=production`, `DATABASE_URL`, optional `DATABASE_CA_CERT`, `SUPPLIER_DATABASE_URL` (or external `SUPPLIER_URL`), and `SUPPLIER_SERVICE_KEY`. Agent bearer keys are held by the clients and stored hashed in PostgreSQL; do not configure a shared `AGENT_API_KEY` on the HTTP MCP service. An external-authority deployment instead needs `NODE_ENV=production` and `AUTHORITY_URL`. Manufact login credentials belong in its user-level credential store.
 
-From the nested app directory, upload this existing monorepo to the Manufact-managed repository; no new GitHub repository is needed:
+For a new Manufact-managed deployment, run from the repository root so the uploaded source includes the shared authority and supplier modules; no new GitHub repository is needed:
 
 ```sh
 npx mcp-use deploy --no-github -y --org org-152932fd-jx9ra \
-  --root-dir apps/mcp/agentpass-manufact \
-  --build-command 'cd ../../.. && npm ci && npm --prefix apps/mcp/agentpass-manufact ci && env -u DATABASE_URL -u DATABASE_CA_CERT AUTHORITY_URL=http://127.0.0.1:4100 npm --prefix apps/mcp/agentpass-manufact run build' \
-  --start-command 'npm start' \
-  --env-file ../../../.env.manufact
+  --build-command 'npm ci && npm --prefix apps/mcp/agentpass-manufact ci && env -u DATABASE_URL -u DATABASE_CA_CERT AUTHORITY_URL=https://authority.invalid npm --prefix apps/mcp/agentpass-manufact run build' \
+  --start-command 'npm --prefix apps/mcp/agentpass-manufact start' \
+  --env-file .env.manufact
 ```
 
 The build uses a placeholder authority URL only to validate tool/view registrations. Runtime secrets come from Manufact's environment-variable system. The app exposes a minimal `/health` liveness route for Manufact's health check; MCP calls still require agent authentication. Before upload, inspect the source archive scope and preserve unrelated Developer B work. Generated skill folders and build/auth state are ignored. Never upload real customer data or supplier-private databases.
@@ -194,3 +193,5 @@ Through distinct buyer/sourcing clients, run the frozen sequence in `docs/02-API
 Also verify another principal cannot read the request, a child cannot approve itself or act as buyer, expired grants fail, margin access reveals no private fields, and concurrent sibling purchases cannot overspend their parent. The local MCP suite performs all of these over real HTTP MCP and authority calls with an independent HTTP supplier fixture. PostgreSQL tests additionally use separate authority instances and reconnect to persisted completed receipts.
 
 For hosted completion, repeat those calls against the exact deployed URL and Developer B's real simulated supplier service, correlate the real authority audit events in the private database with Manufact runtime logs, and inspect outputs for credentials/private margins. The local fixture suite and build success do not satisfy this final gate. Notify Developer B with the URL, bearer-header instructions, seeded root ID and exact tested commit only after that gate passes.
+
+The hosted verification has run and persisted its simulated transactions. The $850 golden-path purchase plus the $98.60 concurrent-test winner leave **$51.40** on the original $1,000 root. Do not expect another $850 purchase to succeed under that same spent root. Preserve the receipts/audit evidence; an owner must provision a fresh demo allocation before another full purchase demonstration.
