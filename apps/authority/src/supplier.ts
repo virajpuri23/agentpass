@@ -1,6 +1,8 @@
 import type { Principal, AgentAction, SupplierQuote, SupplierQuoteRequest, SupplierFulfillRequest } from '../../../packages/contracts/src/index.js';
 import { quoteSchema, id } from './validation.js';
 import { z } from 'zod';
+export class SupplierPolicyDenial extends Error {}
+const policyDenialSchema = z.object({status:z.literal('DENIED'),code:z.literal('SELLER_POLICY_DENIED'),reason:z.string().min(1).max(2000)});
 export interface SupplierService {
   policy(principal: Principal, action: AgentAction, resource: { supplier_id: string; sku_id: string }): Promise<boolean>;
   quote(input: SupplierQuoteRequest): Promise<SupplierQuote>;
@@ -19,8 +21,9 @@ export class HttpSupplierService implements SupplierService {
       headers: { 'X-Service-Key': this.key, 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(5000)
     });
-    if (!response.ok) throw new Error('Supplier unavailable');
     const value = await response.json();
+    if ((response.status === 403 || response.ok) && policyDenialSchema.safeParse(value).success) throw new SupplierPolicyDenial('Supplier policy denied operation');
+    if (!response.ok) throw new Error('Supplier unavailable');
     if (value?.status && value.status !== 'OK') throw new Error('Supplier rejected operation');
     return value?.status === 'OK' ? value.data : value;
   }
