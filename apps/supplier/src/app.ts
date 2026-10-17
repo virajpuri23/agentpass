@@ -42,6 +42,22 @@ export function createSupplierApp({ service, serviceKey, healthCheck, mcp }: {
   if (!serviceKey) throw new Error('SUPPLIER_SERVICE_KEY is required');
   const app = express();
   app.disable('x-powered-by');
+  // One JSON line per request for runtime logs: no bodies, headers or keys.
+  app.use((req, res, next) => {
+    const started = Date.now();
+    const path = req.path; // capture before mounted routers rewrite it
+    const presented = req.header('x-service-key');
+    const serviceKeyStatus = !path.startsWith('/internal') ? undefined
+      : sameSecret(presented, serviceKey) ? 'valid' : presented ? 'invalid' : 'missing';
+    res.on('finish', () => {
+      if (path === '/health') return;
+      console.log(JSON.stringify({
+        service: 'supplier', method: req.method, path: path.replace(/\/internal\/quotes\/.+/, '/internal/quotes/:id'),
+        status: res.statusCode, ms: Date.now() - started, service_key: serviceKeyStatus,
+      }));
+    });
+    next();
+  });
   app.use(express.json({ limit: '16kb' }));
 
   app.get('/health', async (_req, res) => {

@@ -31,6 +31,7 @@ export async function runDemo(opts: { stack: DemoStack; print?: (line: string) =
   const agents = await launchAgents({
     connection: opts.stack.connection,
     keys: { 'buyer-agent': opts.stack.keys.buyer, 'sourcing-agent': opts.stack.keys.sourcing },
+    rootGrantId: opts.stack.rootGrantId,
     onTrace: (e) => { trace.push(e); print(formatEvent(e)); },
     onProcess: (p) => print(c(90, `${clock()}  ${'platform'.padEnd(15)} ${p.kind === 'started' ? 'started' : 'exited'} ${p.agent} (pid ${p.pid})`)),
   });
@@ -47,10 +48,11 @@ export async function runDemo(opts: { stack: DemoStack; print?: (line: string) =
     print(c(90, `${clock()}  ${'runner'.padEnd(15)} asks sourcing-agent to list its own grants`));
     const childGrants = await agents.probe('my_grants');
     const buyerGrants = find('buyer-agent', 'get_my_grants', (x) => x.status === 'OK');
-    const buyerSeesRoot = JSON.stringify(buyerGrants?.data ?? '').includes('grant-root-buyer');
+    const root = opts.stack.rootGrantId;
+    const buyerSeesRoot = JSON.stringify(buyerGrants?.data ?? '').includes(root);
     const childIds = ((childGrants.data as any)?.grants ?? []).map((g: any) => g.id) as string[];
-    check(1, 'Root grant visible only to buyer', buyerSeesRoot && childGrants.status === 'OK' && !childIds.includes('grant-root-buyer'),
-      `buyer holds grant-root-buyer; child holds [${childIds.map(short).join(', ')}]`);
+    check(1, 'Root grant visible only to buyer', buyerSeesRoot && childGrants.status === 'OK' && !childIds.includes(root),
+      `buyer holds ${root}; child holds [${childIds.map(short).join(', ')}]`);
 
     const delegate = find('buyer-agent', 'delegate_authority', (x) => x.status === 'OK');
     const delegated = delegate?.data as any;
@@ -83,7 +85,7 @@ export async function runDemo(opts: { stack: DemoStack; print?: (line: string) =
     print(c(90, `${clock()}  ${'runner'.padEnd(15)} asks sourcing-agent to try reading supplier margins`));
     const margin = await agents.probe('margin_read', { grant_id: s.purchase_grant_id, quote_id: s.quote?.quote_id });
     const leak = /internal_unit_cost|margin_cents|"cost/i.test(JSON.stringify(trace)) || /"internal|cost_cents/.test(JSON.stringify(margin));
-    check(7, 'Margin read denied; no private cost data anywhere', margin.status !== 'OK' && !leak, `${margin.status} ${margin.code ?? ''}; trace scanned for private fields: ${leak ? 'LEAK' : 'clean'}`);
+    check(7, 'Margin read denied; no private cost data anywhere', margin.code === 'SELLER_POLICY_DENIED' && !leak, `${margin.status} ${margin.code ?? ''}; trace scanned for private fields: ${leak ? 'LEAK' : 'clean'}`);
 
     // Step 8: overspend / widening / self-approval / forged identity.
     print(c(90, `${clock()}  ${'runner'.padEnd(15)} asks sourcing-agent to overspend, widen scope, self-approve, forge identity`));
@@ -91,7 +93,9 @@ export async function runDemo(opts: { stack: DemoStack; print?: (line: string) =
     const widen = await agents.probe('widen_scope', { grant_id: s.purchase_grant_id });
     const selfApprove = await agents.probe('self_approve', { request_id: s.request_id });
     const forged = await agents.probe('forged_identity', { grant_id: s.quote_only_grant_id });
-    const denied = [overspend, widen, selfApprove, forged].every((r) => r.status !== 'OK');
+    // Each must fail for the right reason, not just fail.
+    const denied = overspend.code === 'BUDGET_EXCEEDED' && widen.code === 'OUTSIDE_PARENT_SCOPE'
+      && selfApprove.code === 'INVALID_CALLER' && forged.code === 'INVALID_REQUEST';
     check(8, 'Overspend, wider grant, self-approval, forged identity all denied', denied,
       `overspend ${overspend.code}; widen ${widen.code}; self-approve ${selfApprove.code}; forged ${forged.code}`);
 
@@ -135,7 +139,7 @@ async function main() {
   out(c(1, '\nAgentPass demo: cross-company agent authority'));
   const backends = { isolated: 'fresh local services (temp DBs)', services: 'running services from .env', hosted: 'hosted deployment' }[stack.mode];
   const mcp = 'mcpUrl' in stack.connection ? `HTTP ${stack.connection.mcpUrl}` : 'stdio';
-  out(c(90, `backends: ${backends} | authority ${stack.authorityUrl} | supplier ${stack.supplierUrl}`));
+  out(c(90, `backends: ${backends} | authority ${stack.authorityUrl} | supplier ${stack.supplierUrl} | root ${stack.rootGrantId}`));
   out(c(90, `agents: separate OS processes, own keys, real MCP (${mcp}) | decisions: deterministic (no LLM) | purchases: simulated\n`));
 
   const { trace, checks, passed } = await runDemo({ stack, print: out });

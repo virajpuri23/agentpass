@@ -32,6 +32,8 @@ export interface DemoStack {
   authorityUrl: string;
   supplierUrl: string;
   keys: { owner: string; buyer: string; sourcing: string };
+  /** Root grant held by buyer-agent for this run. */
+  rootGrantId: string;
   stop(): Promise<void>;
 }
 
@@ -58,6 +60,7 @@ export async function isolatedStack(): Promise<DemoStack> {
     authorityUrl: urlOf(authority),
     supplierUrl: urlOf(supplier),
     keys: { owner: keys.owner, buyer: keys.buyer, sourcing: keys.sourcing },
+    rootGrantId: 'grant-root-buyer',
     async stop() {
       await Promise.all([authority, supplier].map((s) => new Promise((r) => s.close(r))));
       db.close();
@@ -85,6 +88,7 @@ export async function servicesStack(): Promise<DemoStack> {
     authorityUrl,
     supplierUrl,
     keys: { owner: need('OWNER_API_KEY'), buyer: need('BUYER_API_KEY'), sourcing: need('SOURCING_API_KEY') },
+    rootGrantId: process.env.ROOT_GRANT_ID || 'grant-root-buyer',
     async stop() {},
   };
 }
@@ -102,6 +106,8 @@ export function hostedStack(): DemoStack {
     authorityUrl: '(inside hosted deployment)',
     supplierUrl: '(configured on hosted deployment)',
     keys: { owner: process.env.HOSTED_OWNER_API_KEY ?? '', buyer: need('HOSTED_BUYER_API_KEY'), sourcing: need('HOSTED_SOURCING_API_KEY') },
+    // Each hosted $850 run needs a root with budget left; the owner issues a fresh one per run.
+    rootGrantId: process.env.HOSTED_ROOT_GRANT_ID || 'grant-root-buyer',
     async stop() {},
   };
 }
