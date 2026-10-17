@@ -45,12 +45,15 @@ export function createSupplierApp({ service, serviceKey, healthCheck, mcp }: {
   // One JSON line per request for runtime logs: no bodies, headers or keys.
   app.use((req, res, next) => {
     const started = Date.now();
+    const path = req.path; // capture before mounted routers rewrite it
+    const presented = req.header('x-service-key');
+    const serviceKeyStatus = !path.startsWith('/internal') ? undefined
+      : sameSecret(presented, serviceKey) ? 'valid' : presented ? 'invalid' : 'missing';
     res.on('finish', () => {
-      if (req.path === '/health') return;
+      if (path === '/health') return;
       console.log(JSON.stringify({
-        service: 'supplier', method: req.method, path: req.path.replace(/\/internal\/quotes\/.+/, '/internal/quotes/:id'),
-        status: res.statusCode, ms: Date.now() - started,
-        service_key: req.path.startsWith('/internal') ? (sameSecret(req.header('x-service-key'), serviceKey) ? 'valid' : req.header('x-service-key') ? 'invalid' : 'missing') : undefined,
+        service: 'supplier', method: req.method, path: path.replace(/\/internal\/quotes\/.+/, '/internal/quotes/:id'),
+        status: res.statusCode, ms: Date.now() - started, service_key: serviceKeyStatus,
       }));
     });
     next();
