@@ -5,5 +5,5 @@
     "skipLibCheck": true, "noEmit": true, "types": ["node"]
   },
   "include": ["apps/authority/**/*.ts", "apps/mcp/**/*.ts", "db/**/*.ts", "packages/contracts/**/*.ts",
-    "apps/supplier/**/*.ts", "apps/buyer-agent/**/*.ts", "apps/sourcing-agent/**/*.ts", "apps/remote/**/*.ts", "scripts/**/*.ts"]
+    "apps/supplier/**/*.ts", "apps/buyer-agent/**/*.ts", "apps/sourcing-agent/**/*.ts", "apps/remote/**/*.ts", "apps/agent-kit/**/*.ts", "scripts/**/*.ts"]
 }
