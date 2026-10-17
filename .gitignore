@@ -12,3 +12,6 @@ coverage/
 skills-lock.json
 .mcp-use/
 .codex/
+
+# Supabase database CA certificate (download from the dashboard; never commit)
+supabase-ca.crt
