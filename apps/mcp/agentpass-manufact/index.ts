@@ -17,6 +17,8 @@ const server = new MCPServer({
   instructions: 'Start with get_my_grants. On AUTHORITY_REQUIRED, use request_authority, poll get_authority_request, then accept_authority_offer. All purchases are simulated.',
 });
 
+server.get('/health', (c) => c.json({ status: 'OK' }));
+
 function caller(request: Request) {
   const header = request.headers.get('authorization');
   return header?.match(/^Bearer ([^\s]+)$/)?.[1];

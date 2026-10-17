@@ -173,7 +173,7 @@ npx mcp-use deploy --no-github -y --org org-152932fd-jx9ra \
   --env-file ../../../.env.manufact
 ```
 
-The build uses a placeholder authority URL only to validate tool/view registrations. Runtime secrets come from Manufact's environment-variable system. Before upload, inspect the source archive scope and preserve unrelated Developer B work. Generated skill folders and build/auth state are ignored. Never upload real customer data or supplier-private databases.
+The build uses a placeholder authority URL only to validate tool/view registrations. Runtime secrets come from Manufact's environment-variable system. The app exposes a minimal `/health` liveness route for Manufact's health check; MCP calls still require agent authentication. Before upload, inspect the source archive scope and preserve unrelated Developer B work. Generated skill folders and build/auth state are ignored. Never upload real customer data or supplier-private databases.
 
 The user approved reusing the existing GitHub-backed server in `org-ab91b9e3-2lgi6` instead of creating a second managed server in the originally requested organization. The Manufact GitHub App already receives pushes from `virajpuri23/agentpass`. `DATABASE_URL` and `DATABASE_CA_CERT` are stored as write-only production secrets; `NODE_ENV=production` is configured. Once Developer B provides `SUPPLIER_URL`, configure it and its matching `SUPPLIER_SERVICE_KEY` privately, then restart deployment `694c46ac-0767-4795-827e-17ea65be2504` with `--branch feat/authority-core`. Do not deploy with a fixture URL. Pushing this production branch triggers deployment automatically, so keep documentation-only updates local while the supplier dependency remains unavailable.
 

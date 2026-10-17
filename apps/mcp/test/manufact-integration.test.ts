@@ -54,6 +54,7 @@ for (const backend of ['sqlite','postgres'] as const) describe(`Manufact HTTP MC
       const {default:adapter}=await import(`${moduleUrl}?backend=${backend}`);
       const {toNodeHandler}=await import('../agentpass-manufact/node_modules/mcp-use/dist/node-bridge.js');
       const http=createServer(toNodeHandler(adapter,{onerror:error=>console.error(error.message)}));servers.push(http);const mcpUrl=`${await listen(http)}/mcp`;
+      const health=await fetch(new URL('/health',mcpUrl));expect(health.status).toBe(200);expect(await health.json()).toEqual({status:'OK'});
       for(const token of [undefined,'unknown-agent']) {
         const denied=await fetch(mcpUrl,{method:'POST',headers:{'content-type':'application/json',...(token?{authorization:`Bearer ${token}`}:{})},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list'})});
         expect(denied.status,await denied.text()).toBe(401);
