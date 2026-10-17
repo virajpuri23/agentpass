@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isolatedStack } from './demo-stack.js';
+import { isolatedStack, viaHttpMcp } from './demo-stack.js';
 import { runDemo } from './run-e2e.js';
 
 describe('demo runner', () => {
@@ -14,4 +14,15 @@ describe('demo runner', () => {
       await stack.stop();
     }
   }, 60_000);
+
+  it('passes all 9 checks with agents on Developer A\'s HTTP MCP app (bearer keys)', async () => {
+    const stack = await viaHttpMcp(await isolatedStack());
+    try {
+      const { checks, passed } = await runDemo({ stack });
+      expect(checks.filter((c) => !c.pass), JSON.stringify(checks, null, 2)).toEqual([]);
+      expect(passed).toBe(true);
+    } finally {
+      await stack.stop();
+    }
+  }, 90_000);
 });
