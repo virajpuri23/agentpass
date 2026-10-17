@@ -2,6 +2,7 @@ import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { createSupplierApp } from '../src/app.js';
 import { createSupplierService } from '../src/service.js';
+import { supplierMcpHandler } from '../src/mcp.js';
 import { postgresStore, sqliteStore, type SupplierStore } from '../src/store.js';
 
 export const SERVICE_KEY = 'test-service-key-1234567890';
@@ -25,7 +26,7 @@ export const backends: { name: string; make: () => SupplierStore }[] = [
 export async function startSupplier(store: SupplierStore, opts: { now?: () => Date } = {}) {
   await store.reset();
   const service = createSupplierService({ store, now: opts.now });
-  const app = createSupplierApp({ service, serviceKey: SERVICE_KEY });
+  const app = createSupplierApp({ service, serviceKey: SERVICE_KEY, mcp: supplierMcpHandler(store) });
   const server: Server = await new Promise((resolve) => {
     const s = app.listen(0, '127.0.0.1', () => resolve(s));
   });
