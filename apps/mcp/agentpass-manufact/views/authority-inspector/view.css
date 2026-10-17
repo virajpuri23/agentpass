@@ -1,0 +1,14 @@
+:root { font-family: ui-sans-serif, system-ui, sans-serif; color-scheme: light dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: transparent; }
+.inspector { --bg:#f7f8fb; --panel:#fff; --text:#172033; --muted:#637086; --border:#dfe4ed; --danger:#ba2c3b; min-height:100%; padding:22px; color:var(--text); background:var(--bg); }
+.panel,.grant { margin:0 0 14px; padding:15px; border:1px solid var(--border); border-radius:12px; background:var(--panel); }
+.panel--error { border-color:var(--danger); background:#fff0f2; }
+.inspector-header, .grant header { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom:14px; }
+h1,h2,h3,p { margin:0; } h1 { font-size:1.6rem; letter-spacing:-.03em; } h2 { font-size:1rem; } h3 { margin-top:3px; font-size:.9rem; } p { line-height:1.45; } .muted { color:var(--muted); font-size:.82rem; }
+.eyebrow { display:block; margin-bottom:4px; color:#2855d9; font-size:.65rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; }
+dl { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px 14px; margin:12px 0 0; } dt { color:var(--muted); font-size:.68rem; } dd { margin:2px 0 0; font-size:.78rem; line-height:1.4; overflow-wrap:anywhere; }
+.relationship { margin:-6px 0 11px; color:var(--muted); font-size:.73rem; } .state { flex:none; padding:4px 8px; border-radius:999px; font-size:.66rem; } .state--active { color:#18734a; background:#daf5e8; } .state--expired,.state--revoked { color:var(--danger); background:#ffe3e7; } .state--unavailable,.state--read { color:var(--muted); background:#e9edf3; }
+.section-title { margin:20px 0 8px; } .section-title h2 { display:inline; } .grant-list { display:grid; gap:10px; } .skeleton { width:52%; height:28px; margin-bottom:10px; border-radius:7px; background:#dfe4ed; } .skeleton--wide { width:82%; height:13px; } .skeleton--card { width:100%; height:210px; }
+@media (max-width:560px) { .inspector { padding:15px; } dl { grid-template-columns:1fr; } .inspector-header { flex-direction:column; } }
+@media (prefers-color-scheme:dark) { .inspector { --bg:#11151d; --panel:#1a202b; --text:#eef2f8; --muted:#a5b0c2; --border:#303a4b; } .panel--error { background:#3b2028; } .state--read { background:#303847; } }
