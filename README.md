@@ -79,7 +79,13 @@ Read [`docs/12-IMPLEMENTATION-QUICKSTART.md`](docs/12-IMPLEMENTATION-QUICKSTART.
 
 ## Manufact MCP App v2
 
-**Current verification:** local implementation and supplier-fixture tests pass; Manufact CLI authentication is verified; the AgentPass Supabase connection is verified over TLS and its private schema/demo seed are initialized. Hosted deployment is pending Developer B's reachable supplier service. The selected project is `ebkcaqaybuklllefvuyv` (`https://ebkcaqaybuklllefvuyv.supabase.co`). No live MCP URL, dashboard server ID, or deployment ID has been issued. Local fixture success is not hosted supplier integration proof.
+**Current verification:** all 49 local tests pass, including supplier-fixture MCP integration; Manufact CLI authentication is verified; the AgentPass Supabase connection is verified over TLS and its private schema/demo seed are initialized. The selected project is `ebkcaqaybuklllefvuyv` (`https://ebkcaqaybuklllefvuyv.supabase.co`). The existing hosted server below still runs the older HTTP entry with ephemeral SQLite. Its next deployment is configured for v2 and Supabase, but is blocked on Developer B's reachable HTTPS supplier service. Local fixture success is not hosted supplier integration proof.
+
+- MCP URL: https://fast-steel-94x84.run.mcp-use.com/mcp
+- Dashboard: https://manufact.com/cloud/org-ab91b9e3-2lgi6/servers/f01e0537-092c-48c0-b6a6-66132aa93099/overview
+- Server ID: `f01e0537-092c-48c0-b6a6-66132aa93099`
+- Active legacy deployment: `694c46ac-0767-4795-827e-17ea65be2504` at `c63015fa67f2fd20fa7573e9ac572305db375f1a`
+- The failed v2 preview `7236c64a-319e-4405-9d5e-9e7beab68cd2` was blocked before building by the free plan's preview restriction. With user approval, production now targets `feat/authority-core` and root `apps/mcp/agentpass-manufact`; the active instance has not been restarted. New Supabase agent keys are not valid on that older instance.
 
 Use Node **22.22.2+** for the MCP App (Node 24 recommended). If dependencies were installed under a different Node major, run `npm rebuild better-sqlite3` after switching. The existing stdio adapter remains available for headless per-agent processes. The nested app was generated with the required official `mcp-apps` template and pins published `mcp-use@2.8.2`.
 
@@ -162,12 +168,14 @@ From the nested app directory, upload this existing monorepo to the Manufact-man
 ```sh
 npx mcp-use deploy --no-github -y --org org-152932fd-jx9ra \
   --root-dir apps/mcp/agentpass-manufact \
-  --build-command 'cd ../../.. && npm ci && npm --prefix apps/mcp/agentpass-manufact ci && AUTHORITY_URL=http://127.0.0.1:4100 npm --prefix apps/mcp/agentpass-manufact run build' \
+  --build-command 'cd ../../.. && npm ci && npm --prefix apps/mcp/agentpass-manufact ci && env -u DATABASE_URL -u DATABASE_CA_CERT AUTHORITY_URL=http://127.0.0.1:4100 npm --prefix apps/mcp/agentpass-manufact run build' \
   --start-command 'npm start' \
   --env-file ../../../.env.manufact
 ```
 
 The build uses a placeholder authority URL only to validate tool/view registrations. Runtime secrets come from Manufact's environment-variable system. Before upload, inspect the source archive scope and preserve unrelated Developer B work. Generated skill folders and build/auth state are ignored. Never upload real customer data or supplier-private databases.
+
+The user approved reusing the existing GitHub-backed server in `org-ab91b9e3-2lgi6` instead of creating a second managed server in the originally requested organization. The Manufact GitHub App already receives pushes from `virajpuri23/agentpass`. `DATABASE_URL` and `DATABASE_CA_CERT` are stored as write-only production secrets; `NODE_ENV=production` is configured. Once Developer B provides `SUPPLIER_URL`, configure it and its matching `SUPPLIER_SERVICE_KEY` privately, then restart deployment `694c46ac-0767-4795-827e-17ea65be2504` with `--branch feat/authority-core`. Do not deploy with a fixture URL. Pushing this production branch triggers deployment automatically, so keep documentation-only updates local while the supplier dependency remains unavailable.
 
 Read the returned IDs and dashboard URL, then follow actual deployment status/build logs:
 
