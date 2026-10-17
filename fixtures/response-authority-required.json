@@ -1,0 +1,15 @@
+{
+  "status": "AUTHORITY_REQUIRED",
+  "code": "INSUFFICIENT_SCOPE",
+  "reason": "Current grant allows quote requests but not purchases",
+  "required_scope": {
+    "actions": ["supplier.purchase.execute"],
+    "supplier_ids": ["supplier-co"],
+    "sku_ids": ["PACK-500"],
+    "max_per_action_cents": 85000,
+    "total_budget_cents": 85000,
+    "expires_at": "2026-10-18T17:30:00Z",
+    "max_delegation_depth": 0
+  },
+  "next_action": "request_authority"
+}

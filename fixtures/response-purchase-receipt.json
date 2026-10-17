@@ -1,0 +1,16 @@
+{
+  "status": "OK",
+  "data": {
+    "receipt_id": "rec-001",
+    "request_id": "purchase-001",
+    "order_id": "order-001",
+    "supplier_id": "supplier-co",
+    "sku_id": "PACK-500",
+    "quantity": 500,
+    "amount_cents": 85000,
+    "currency": "USD",
+    "grant_id": "grant-sourcing-purchase",
+    "outcome": "COMPLETED",
+    "simulated": true
+  }
+}

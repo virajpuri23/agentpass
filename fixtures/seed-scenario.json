@@ -1,0 +1,51 @@
+{
+  "scenario": "yc2026-packaging-cross-company",
+  "organizations": [
+    { "id": "buyer-co", "name": "Acme Retail" },
+    { "id": "supplier-co", "name": "Packaging Supply Inc." }
+  ],
+  "principals": [
+    { "id": "owner-1", "organization_id": "buyer-co", "kind": "HUMAN", "role": "OWNER" },
+    { "id": "buyer-agent", "organization_id": "buyer-co", "kind": "AGENT", "role": "BUYER" },
+    { "id": "sourcing-agent", "organization_id": "buyer-co", "kind": "AGENT", "role": "SOURCING" },
+    { "id": "supplier-agent", "organization_id": "supplier-co", "kind": "AGENT", "role": "SUPPLIER" }
+  ],
+  "product": {
+    "sku_id": "PACK-500",
+    "name": "Packaging units",
+    "stock_quantity": 1000,
+    "public_unit_price_cents": 170,
+    "private_internal_unit_cost_cents": 100,
+    "requested_quantity": 500,
+    "expected_total_cents": 85000
+  },
+  "root_grant": {
+    "id": "grant-root-buyer",
+    "issuer_principal_id": "owner-1",
+    "subject_principal_id": "buyer-agent",
+    "organization_id": "buyer-co",
+    "parent_grant_id": null,
+    "scope": {
+      "actions": ["supplier.quote.request", "supplier.purchase.execute"],
+      "supplier_ids": ["supplier-co"],
+      "sku_ids": ["PACK-500"],
+      "max_per_action_cents": 100000,
+      "total_budget_cents": 100000,
+      "expires_after_seconds": 86400,
+      "max_delegation_depth": 2
+    }
+  },
+  "child_quote_only_scope": {
+    "actions": ["supplier.quote.request"],
+    "supplier_ids": ["supplier-co"],
+    "sku_ids": ["PACK-500"],
+    "max_per_action_cents": 0,
+    "total_budget_cents": 0,
+    "expires_after_seconds": 600,
+    "max_delegation_depth": 0
+  },
+  "purchase_authority_request_cents": 120000,
+  "counteroffer_purchase_cents": 90000,
+  "expected_spend_cents": 85000,
+  "notes": "Resolve expires_after_seconds into ISO datetime when seeding. Private_internal_unit_cost_cents must stay supplier-side and never appear in buyer-facing responses."
+}

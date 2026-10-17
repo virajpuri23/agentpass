@@ -1,0 +1,268 @@
+openapi: 3.1.0
+info:
+  title: AgentPass Authority API
+  version: 0.1.0-hackathon
+  description: >-
+    Frozen hackathon HTTP contract. Agent identity is derived from bearer token;
+    a grant ID or principal ID in the request is not authentication.
+servers:
+  - url: http://localhost:4100
+    description: Local development authority service
+security:
+  - AgentBearer: []
+paths:
+  /health:
+    get:
+      security: []
+      operationId: health
+      responses:
+        '200':
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, const: OK }
+                required: [status]
+  /v1/me:
+    get:
+      operationId: getCaller
+      responses:
+        '200':
+          description: Authenticated principal
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PrincipalResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /v1/authority/requests:
+    post:
+      operationId: requestAuthority
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AuthorityRequestInput' }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '403': { $ref: '#/components/responses/Denied' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /v1/authority/requests/{requestId}:
+    get:
+      operationId: getAuthorityRequest
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '403': { $ref: '#/components/responses/Denied' }
+  /v1/authority/requests/{requestId}/respond:
+    post:
+      operationId: respondAuthorityRequest
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AuthorityResponseInput' }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '403': { $ref: '#/components/responses/Denied' }
+  /v1/authority/requests/{requestId}/accept:
+    post:
+      operationId: acceptAuthorityOffer
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [idempotency_key]
+              properties:
+                idempotency_key: { type: string, minLength: 1 }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '403': { $ref: '#/components/responses/Denied' }
+  /v1/grants/{grantId}/delegate:
+    post:
+      operationId: delegateAuthority
+      parameters:
+        - $ref: '#/components/parameters/GrantId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [recipient_principal_id, scope]
+              properties:
+                recipient_principal_id: { type: string }
+                scope: { $ref: '#/components/schemas/AuthorityScope' }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '403': { $ref: '#/components/responses/Denied' }
+  /v1/grants/{grantId}/revoke:
+    post:
+      operationId: revokeAuthority
+      parameters:
+        - $ref: '#/components/parameters/GrantId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '403': { $ref: '#/components/responses/Denied' }
+  /v1/actions/execute:
+    post:
+      operationId: executeAction
+      description: >-
+        Broker a supplier action. Prices loaded from supplier quote, never
+        taken from the agent; purchase debits must be idempotent.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ExecuteActionInput' }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '403': { $ref: '#/components/responses/Denied' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /v1/audit:
+    get:
+      operationId: getAudit
+      description: Restricted to authenticated administrative principal.
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '403': { $ref: '#/components/responses/Denied' }
+components:
+  securitySchemes:
+    AgentBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque-agent-key
+  parameters:
+    RequestId:
+      name: requestId
+      in: path
+      required: true
+      schema: { type: string }
+    GrantId:
+      name: grantId
+      in: path
+      required: true
+      schema: { type: string }
+  schemas:
+    AgentAction:
+      type: string
+      enum: [supplier.quote.request, supplier.purchase.execute, supplier.margin.read]
+    AuthorityScope:
+      type: object
+      additionalProperties: false
+      required:
+        - actions
+        - supplier_ids
+        - sku_ids
+        - max_per_action_cents
+        - total_budget_cents
+        - expires_at
+        - max_delegation_depth
+      properties:
+        actions: { type: array, items: { $ref: '#/components/schemas/AgentAction' }, uniqueItems: true }
+        supplier_ids: { type: array, items: { type: string }, uniqueItems: true }
+        sku_ids: { type: array, items: { type: string }, uniqueItems: true }
+        max_per_action_cents: { type: integer, minimum: 0 }
+        total_budget_cents: { type: integer, minimum: 0 }
+        expires_at: { type: string, format: date-time }
+        max_delegation_depth: { type: integer, minimum: 0 }
+    AuthorityRequestInput:
+      type: object
+      additionalProperties: false
+      required: [parent_grant_id, requested_scope, reason]
+      properties:
+        parent_grant_id: { type: string }
+        requested_scope: { $ref: '#/components/schemas/AuthorityScope' }
+        reason: { type: string, minLength: 1 }
+    AuthorityResponseInput:
+      type: object
+      additionalProperties: false
+      required: [decision]
+      properties:
+        decision: { type: string, enum: [COUNTEROFFER, REJECT] }
+        offered_scope: { $ref: '#/components/schemas/AuthorityScope' }
+    ExecuteActionInput:
+      type: object
+      additionalProperties: false
+      required: [grant_id, action, supplier_id, sku_id, idempotency_key]
+      properties:
+        grant_id: { type: string }
+        action: { $ref: '#/components/schemas/AgentAction' }
+        supplier_id: { type: string }
+        sku_id: { type: string }
+        quantity: { type: integer, minimum: 1 }
+        quote_id: { type: string }
+        idempotency_key: { type: string, minLength: 1 }
+    PrincipalResponse:
+      type: object
+      additionalProperties: false
+      required: [status, data]
+      properties:
+        status: { type: string, const: OK }
+        data:
+          type: object
+          required: [principal_id, organization_id, role]
+          properties:
+            principal_id: { type: string }
+            organization_id: { type: string }
+            role: { type: string }
+    Success:
+      type: object
+      required: [status, data]
+      properties:
+        status: { type: string, const: OK }
+        data: { type: object, additionalProperties: true }
+    Error:
+      type: object
+      required: [status, code, reason]
+      properties:
+        status: { type: string, enum: [AUTHORITY_REQUIRED, DENIED, ERROR] }
+        code:
+          type: string
+          enum:
+            - INSUFFICIENT_SCOPE
+            - OUTSIDE_PARENT_SCOPE
+            - SELLER_POLICY_DENIED
+            - GRANT_REVOKED
+            - GRANT_EXPIRED
+            - BUDGET_EXCEEDED
+            - QUOTE_EXPIRED
+            - INVALID_CALLER
+            - INVALID_REQUEST
+            - ALREADY_EXECUTED
+            - SERVICE_UNAVAILABLE
+        reason: { type: string }
+        next_action: { type: string, enum: [request_authority, retry, contact_owner] }
+        required_scope: { $ref: '#/components/schemas/AuthorityScope' }
+  responses:
+    Success:
+      description: Success response (operation-dependent data).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Success' }
+    Denied:
+      description: Machine-readable denial, potentially recoverable.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Missing/invalid authenticated caller.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
