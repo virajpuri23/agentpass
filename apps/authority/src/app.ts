@@ -40,6 +40,11 @@ export function createAuthorityApp(options: { db: Database.Database | AuthorityS
     setAuditContext({action:'grant.delegate',grantId:id.parse(req.params.id)});
     return engine.delegate(p,String(req.params.id),body.recipient_principal_id,body.scope);
   }));
+  app.post('/v1/grants/:id/provision-child',route((p,req) => {
+    const body = z.object({scope:scopeSchema,credential_hash:z.string().regex(/^[a-f0-9]{64}$/),idempotency_key:id}).strict().parse(req.body);
+    setAuditContext({action:'principal.provision',grantId:id.parse(req.params.id)});
+    return engine.provisionChild(p,String(req.params.id),body.scope,body.credential_hash,body.idempotency_key);
+  }));
   app.post('/v1/grants/:id/revoke',route((p,req) => {
     z.object({reason:z.string().min(1).max(2000)}).strict().parse(req.body);
     setAuditContext({action:'grant.revoke',grantId:id.parse(req.params.id)});

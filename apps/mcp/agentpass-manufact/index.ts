@@ -15,7 +15,7 @@ const server = new MCPServer({
   title: 'AgentPass Authority Inspector',
   version: '2.0.0',
   description: 'Scoped authority negotiation and simulated supplier purchases.',
-  instructions: 'Agent onboarding requires no browser. Authenticate using your own credential provisioned by a trusted owner or orchestrator; never borrow a parent credential or self-assign identity. Call describe_authority, then get_my_grants. With no grants, obtain initial delegation from a trusted parent. The UI is optional inspection. On AUTHORITY_REQUIRED, use request_authority, poll get_authority_request, then accept_authority_offer. All purchases are simulated.',
+  instructions: 'Agent onboarding requires no browser. Authenticate using your own credential provisioned by a trusted owner or orchestrator; never borrow a parent credential or self-assign identity. Call describe_authority, then get_my_grants. A parent may use provision_child with a runtime-generated credential verifier and bounded scope. With no grants, obtain initial delegation from a trusted parent. The UI is optional inspection. On AUTHORITY_REQUIRED, use request_authority, poll get_authority_request, then accept_authority_offer. All purchases are simulated.',
 });
 
 server.get('/health', (c) => c.json({ status: 'OK' }));
@@ -91,6 +91,12 @@ export const acceptAuthorityOffer = server.tool({
   name: 'accept_authority_offer', description: 'Accept the narrowed offer as its requesting child.',
   inputSchema: z.object({ request_id: id, idempotency_key: id }).strict(), outputSchema: envelopeSchema, annotations: write,
 }, async ({ request_id, ...body }, ctx) => toolResult(await authority(ctx)('POST', `v1/authority/requests/${encodeURIComponent(request_id)}/accept`, body)));
+
+export const provisionChild = server.tool({
+  name:'provision_child',description:'Provision a new AGENT/SERVICE child in the authenticated parent organization and delegate a subset of its live grant. The trusted runtime must generate the child secret locally; submit only its SHA-256 verifier, never a bearer credential. Reuse the same idempotency key and input on retry.',
+  inputSchema:z.object({parent_grant_id:id,scope:scopeSchema,credential_hash:z.string().regex(/^[a-f0-9]{64}$/),idempotency_key:id}).strict(),
+  outputSchema:envelopeSchema,annotations:write,
+},async ({parent_grant_id,...body},ctx) => toolResult(await authority(ctx)('POST',`v1/grants/${encodeURIComponent(parent_grant_id)}/provision-child`,body)));
 
 export const delegateAuthority = server.tool({
   name: 'delegate_authority', description: 'Delegate a strict subset of a live parent grant.',

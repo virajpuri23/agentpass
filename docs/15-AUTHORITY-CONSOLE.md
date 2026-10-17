@@ -141,7 +141,7 @@ visibility and limits recent activity/receipts. It is not a complete audit expor
 
 The primary interface is MCP. The browser console is an optional human inspection
 surface, not a prerequisite for connection, negotiation, execution or revocation.
-The existing nine tools support a fully headless child and parent agent workflow.
+The existing tools support a fully headless child and parent agent workflow.
 
 For an agent runtime or CI process, inject its **own** provisioned `AGENT_API_KEY`
 through its secret environment, then run from the repository root with Node 24:
@@ -180,11 +180,11 @@ accept a suitable counteroffer using `accept_authority_offer`. The authenticated
 parent agent uses `respond_authority_request`. Retry execution only after the grant
 is issued; the service checks authority again on every operation.
 
-Initial identity and authority provisioning is a trust boundary. This release has
-no public self-registration or credential-minting tool. A trusted owner or automated
-orchestrator provisions principals/keys and initial authority through the existing
-administrative setup. Once provisioned, agents can operate without a human or UI;
-a child never needs its parent’s credential. OAuth is a separate optional human
+Initial identity and authority provisioning is a trust boundary. A parent holding
+a live delegable grant can now automate new child provisioning through
+`agent:provision` / `provision_child`; see [the provisioning protocol](16-CHILD-PROVISIONING.md).
+There is no unauthenticated self-registration or owner-role minting. The child
+never receives its parent’s credential. OAuth remains a separate optional human
 connection path, not a dependency for service-agent onboarding.
 
 CLI verification launches real subprocesses against both SQLite and local PostgreSQL MCP servers: buyer onboarding, authenticated sourcing with no grants, invalid credential rejection, credential-free output, zero created requests/purchases and unchanged root budget. A separate live CLI run also inspected the disposable console demo without opening a browser.

@@ -80,6 +80,7 @@ Supplier **does not** offer an external endpoint that returns internal costs or 
 
 | MCP tool | Arguments | Semantics |
 |---|---|---|
+| `provision_child` | `{ parent_grant_id, scope, credential_hash, idempotency_key }` | Authenticated grant holder creates a new AGENT/SERVICE child and a subset grant; verifier only, never a bearer secret |
 | `describe_authority` | `{}` | List actions, limits vocabulary, and repair actions |
 | `get_my_grants` | `{}` | Authenticated caller's grants only |
 | `request_authority` | `{ parent_grant_id, requested_scope, reason }` | Starts scope negotiation |
@@ -175,3 +176,40 @@ limited to existing create-request/respond/accept/revoke endpoints under
 caller, or forward arbitrary URLs. Existing service schemas and permission checks
 remain authoritative. Query parameters are rejected; request bodies are bounded to
 32 KiB. Errors retain machine-readable status/code/reason.
+
+
+## Trusted provisioning extension (existing shared contract types unchanged)
+
+`POST /v1/grants/:id/provision-child` authenticates the existing parent bearer key.
+The strict JSON input is `{scope: AuthorityScope, credential_hash: string,
+idempotency_key: string}`. `credential_hash` is a lowercase SHA-256 hex verifier
+of a 256-bit secret generated and retained by the trusted child runtime. A raw
+secret, claimed principal ID, organization, kind, or role is never an input.
+
+The server verifies the parent owns a live grant/ancestor chain, requires subset
+scope and decremented delegation depth, and bounds the new per-action/total limits
+by the effective remaining ancestor budget including reservations. It creates a
+random child principal ID in that organization with fixed `kind:AGENT` and
+`role:SERVICE`, registers the verifier, issues through the canonical grant engine,
+and records the idempotency binding and audit events in one transaction.
+
+The response is `{status:"OK",data:{principal:Principal,grant:Grant}}`. No raw
+credential, credential verifier, or private provisioning record is returned.
+Failures use existing machine-readable errors (`INVALID_CALLER`,
+`OUTSIDE_PARENT_SCOPE`, `BUDGET_EXCEEDED`, `GRANT_EXPIRED`, `GRANT_REVOKED`,
+`ALREADY_EXECUTED`, `INVALID_REQUEST`, or `SERVICE_UNAVAILABLE`).
+
+Idempotency is scoped to authenticated parent principal plus key and bound to
+parent grant, exact validated scope, and verifier. Identical retries return the
+same child/grant only while authority and credential remain live. Changed input
+returns `ALREADY_EXECUTED` without creating another identity. An already registered
+verifier cannot be rebound to another child. Creating grants does not create an
+independent budget pool; executions still debit the shared ancestor ledger.
+
+The child key is bound to the initially issued grant in private
+`child_provisionings`. Every authentication rechecks that complete chain.
+Direct/ancestor revocation, expiry, inactive principals, or invalid authority make
+the key return `INVALID_CALLER`; database errors fail closed. Later accepted grants
+do not extend the original credential lifetime. Seeded existing keys keep their
+existing behavior. The console proxy does not expose provisioning; agents use the
+MCP tool or the authenticated service API.

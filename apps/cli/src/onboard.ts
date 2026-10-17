@@ -1,3 +1,4 @@
+import { readChildCredential } from './child-credential.js';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -52,8 +53,14 @@ export async function onboardAgent(endpoint: string | undefined, credential: str
 
 export async function runOnboarding(args:string[],env:NodeJS.ProcessEnv) {
   try {
-    const {values}=parseArgs({args,options:{url:{type:'string'},help:{type:'boolean'}},strict:true,allowPositionals:false});
-    if(values.help)return {status:'OK' as const,code:'HELP',reason:'Use: npm run --silent agent:onboard -- --url <MCP_URL>. Supply AGENT_API_KEY via the runtime secret environment. MCP_PUBLIC_URL may supply the endpoint. This command performs read-only MCP calls; no browser, credential storage, grant issuance or purchase.',next_action:'configure_endpoint'};
+    const {values}=parseArgs({args,options:{url:{type:'string'},help:{type:'boolean'},'credential-file':{type:'string'}},strict:true,allowPositionals:false});
+    if(values.help)return {status:'OK' as const,code:'HELP',reason:'Use: npm run --silent agent:onboard -- --url <MCP_URL>. Supply AGENT_API_KEY via the runtime secret environment. MCP_PUBLIC_URL may supply the endpoint. A child runtime may instead use --credential-file <private child file>, which never falls back to the parent environment credential. This command performs read-only MCP calls; no browser, credential storage, grant issuance or purchase.',next_action:'configure_endpoint'};
+    if(values['credential-file']) {
+      let state;
+      try {state=readChildCredential(values['credential-file']);}catch{return failure('INVALID_CREDENTIAL_FILE','Child credential file is missing, unsafe or invalid.','check_local_files');}
+      if(values.url&&values.url!==state.endpoint)return failure('INVALID_ENDPOINT','Child credentials may only be sent to their recorded MCP endpoint.','configure_endpoint');
+      return onboardAgent(state.endpoint,state.credential);
+    }
     return onboardAgent(values.url??env.MCP_PUBLIC_URL,env.AGENT_API_KEY);
   } catch {return failure('INVALID_ARGUMENTS','Use --url <MCP_URL> or --help. Credentials must be supplied through AGENT_API_KEY, never arguments.','configure_endpoint');}
 }
