@@ -3,26 +3,28 @@ import { randomUUID } from 'node:crypto';
 import { auditContext, setAuditContext } from './audit.js';
 import { SupplierPolicyDenial } from './supplier.js';
 import type Database from 'better-sqlite3';
+import { sqliteStore, type AuthorityStore } from '../../../db/store.js';
 import { z } from 'zod';
 import type { Principal } from '../../../packages/contracts/src/index.js';
 import type { SupplierService } from './supplier.js';
 import { AuthorityEngine, Denial, deny } from './engine.js';
 import { id, scopeSchema, executeSchema } from './validation.js';
 
-export function createAuthorityApp(options: { db: Database.Database; supplier: SupplierService; now?: () => Date }) {
+export function createAuthorityApp(options: { db: Database.Database | AuthorityStore; supplier: SupplierService; now?: () => Date }) {
   const app = express();
-  const engine = new AuthorityEngine(options.db,options.supplier,options.now);
+  const db = 'pragma' in options.db ? sqliteStore(options.db) : options.db;
+  const engine = new AuthorityEngine(db,options.supplier,options.now);
   app.disable('x-powered-by');
   app.use((_req,_res,next) => {
     auditContext.run({traceId:randomUUID(),requestId:randomUUID(),action:'http.request'},next);
   });
   app.use(express.json({limit:'32kb'}));
-  app.get('/health',(_req,res) => { options.db.prepare('SELECT 1').get(); res.json({status:'OK'}); });
-  app.use('/v1',(req,res,next) => {
+  app.get('/health',async (_req,res) => { await db.prepare('SELECT 1').get(); res.json({status:'OK'}); });
+  app.use('/v1',async (req,res,next) => {
     try {
       const header = req.headers.authorization;
       if (!header?.startsWith('Bearer ') || !header.slice(7)) deny('INVALID_CALLER','Valid bearer credentials required',401);
-      res.locals.principal = engine.authenticate(header.slice(7));
+      res.locals.principal = await engine.authenticate(header.slice(7));
       next();
     } catch (error) { next(error); }
   });
@@ -30,7 +32,7 @@ export function createAuthorityApp(options: { db: Database.Database; supplier: S
     try { res.json({status:'OK',data:await fn(res.locals.principal,req)}); }
     catch (error) { next(error); }
   };
-  app.get('/v1/me',route(p => ({principal_id:p.id,organization_id:p.organization_id,role:p.role,grants:engine.grants(p)})));
+  app.get('/v1/me',route(async p => ({principal_id:p.id,organization_id:p.organization_id,role:p.role,grants:await engine.grants(p),inspector:await engine.inspect(p)})));
   app.post('/v1/grants/:id/delegate',route((p,req) => {
     const body = z.object({recipient_principal_id:id,scope:scopeSchema}).strict().parse(req.body);
     setAuditContext({action:'grant.delegate',grantId:id.parse(req.params.id)});
@@ -62,12 +64,12 @@ export function createAuthorityApp(options: { db: Database.Database; supplier: S
     setAuditContext({action:input.action,grantId:input.grant_id});
     return engine.execute(p,input);
   }));
-  app.get('/v1/audit',route(p => {
+  app.get('/v1/audit',route(async p => {
     if (p.role !== 'OWNER') deny('INVALID_CALLER','Audit requires organization owner');
-    return options.db.prepare('SELECT e.event_id,e.timestamp,e.principal_id,e.grant_id,e.action,e.decision,e.reason_code,e.request_id,e.trace_id FROM audit_events e JOIN principals p ON p.id = e.principal_id WHERE p.organization_id = ? ORDER BY e.timestamp,e.rowid').all(p.organization_id);
+    return db.prepare('SELECT e.event_id,e.timestamp,e.principal_id,e.grant_id,e.action,e.decision,e.reason_code,e.request_id,e.trace_id FROM audit_events e JOIN principals p ON p.id = e.principal_id WHERE p.organization_id = ? ORDER BY e.timestamp,e.rowid').all(p.organization_id);
   }));
   app.use((_req,_res,next) => { next(new Denial({status:'DENIED',code:'INVALID_REQUEST',reason:'Unknown endpoint'},404)); });
-  app.use((error: unknown,req: express.Request,res: express.Response,_next: express.NextFunction) => {
+  app.use(async (error: unknown,req: express.Request,res: express.Response,_next: express.NextFunction) => {
     let result; let status;
     if (error instanceof SupplierPolicyDenial) { result={status:'DENIED',code:'SELLER_POLICY_DENIED',reason:'Supplier policy denied operation',next_action:'contact_owner'}; status=403; }
     else if (error instanceof Denial) { result=error.result; status=error.http; }
@@ -75,7 +77,7 @@ export function createAuthorityApp(options: { db: Database.Database; supplier: S
       result={status:'DENIED',code:'INVALID_REQUEST',reason:'Request does not match the API contract'}; status=400;
     } else { result={status:'ERROR',code:'SERVICE_UNAVAILABLE',reason:'Operation unavailable; retry the same idempotency key',next_action:'retry'}; status=503; }
     if (res.locals.principal) {
-      try { engine.audit(res.locals.principal,auditContext.getStore()?.action ?? 'http.request','DENY',undefined,result.code as any); }
+      try { await engine.audit(res.locals.principal,auditContext.getStore()?.action ?? 'http.request','DENY',undefined,result.code as any); }
       catch { result={status:'ERROR',code:'SERVICE_UNAVAILABLE',reason:'Persistence unavailable',next_action:'retry'}; status=503; }
     }
     res.status(status).json(result);

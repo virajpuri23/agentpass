@@ -76,3 +76,122 @@ agentpass/
 ## Implementation quickstart
 
 Read [`docs/12-IMPLEMENTATION-QUICKSTART.md`](docs/12-IMPLEMENTATION-QUICKSTART.md) for first commands, API mock strategies, and MVP service startup scripts **to implement**. Machine-readable REST contract: [`contracts/agentpass.openapi.yaml`](contracts/agentpass.openapi.yaml).
+
+## Manufact MCP App v2
+
+**Current verification:** all 69 local tests pass, including the embedded MCP → authority → Developer B supplier workflow with durable PostgreSQL. The v2 app is deployed and the complete workflow passes through independent hosted MCP clients: trusted $850 quote, actionable authority denial, $1200 → $900 negotiation, $850 purchase/replay, revocation, expiry, caller isolation, and concurrent ancestor-budget enforcement. Both private schemas use Supabase project `ebkcaqaybuklllefvuyv` (`https://ebkcaqaybuklllefvuyv.supabase.co`). See [hosted verification evidence](docs/14-MANUFACT-VERIFICATION.md).
+
+- MCP URL: https://fast-steel-94x84.run.mcp-use.com/mcp
+- Dashboard: https://manufact.com/cloud/org-ab91b9e3-2lgi6/servers/f01e0537-092c-48c0-b6a6-66132aa93099/overview
+- Server ID: `f01e0537-092c-48c0-b6a6-66132aa93099`
+- First verified v2 deployment: `0600457a-b145-4c48-9ede-896997b13fdd` at `49739cba5296b5fff3afe304eb08becd674a5407`. Later commits may create new deployments; consult the dashboard for the active ID.
+- The failed v2 preview `7236c64a-319e-4405-9d5e-9e7beab68cd2` was blocked before building by the free plan's preview restriction. With user approval, production now targets `feat/authority-core`. The build context must be the repository root because the MCP adapter imports shared authority and supplier modules; the start command selects the nested MCP App.
+
+Use Node **22.22.2+** for the MCP App (Node 24 recommended). If dependencies were installed under a different Node major, run `npm rebuild better-sqlite3` after switching. The existing stdio adapter remains available for headless per-agent processes. The nested app was generated with the required official `mcp-apps` template and pins published `mcp-use@2.8.2`.
+
+```sh
+npm ci
+npm --prefix apps/mcp/agentpass-manufact ci
+npm run typecheck
+AUTHORITY_URL=http://127.0.0.1:4100 npm --prefix apps/mcp/agentpass-manufact run typecheck
+npm test
+```
+
+`npm test` builds the MCP App before running the suites. The PostgreSQL suite runs when `AGENTPASS_TEST_DATABASE_URL` identifies a **disposable local database whose name ends in `_test`**; it truncates that database's AgentPass tables. It refuses hosted database targets. Example:
+
+```sh
+AGENTPASS_TEST_DATABASE_URL=postgresql://LOCAL_USER@localhost:5432/agentpass_test npm test
+```
+
+### Authentication and local Inspector
+
+The MCP endpoint uses the frozen contract's distinct opaque agent bearer keys. These are validated online against the authority service on **every request**; credentials and principal identity are never taken from tool arguments or client metadata. Buyer and sourcing clients connect to the same URL with different keys. Hosts must support an explicit `Authorization` header; this demo does not provide an OAuth authorization server for OAuth-only clients.
+
+With the authority and supplier running from the existing local setup:
+
+```sh
+cd apps/mcp/agentpass-manufact
+AUTHORITY_URL=http://127.0.0.1:4100 npm run dev
+```
+
+Open the printed Inspector URL. Its initial automatic connection has no key and is expected to fail. Open that server's **Connection Settings**, add the custom header `Authorization: Bearer <that agent's key>`, save, and open Tools. Execute `get_my_grants` to render the Authority Inspector. The widget displays only that caller's grants, effective remaining budget including ancestors/reservations, expiry/revocation, and the most recent supplier authorization result. Results are snapshots; execute the read-only tool again after an action to refresh.
+
+For the official independent CLI client, from the nested app directory:
+
+```sh
+npx mcp-use client connect buyer "$MCP_URL" --no-oauth -H "Authorization: Bearer $BUYER_API_KEY"
+npx mcp-use client connect sourcing "$MCP_URL" --no-oauth -H "Authorization: Bearer $SOURCING_API_KEY"
+npx mcp-use client buyer tools list
+npx mcp-use client buyer tools call get_my_grants
+npx mcp-use client sourcing tools call get_my_grants
+```
+
+The CLI stores connection headers in its local user configuration; keep that configuration private and outside Git. Supply keys through each client's private configuration, never a model prompt. The sourcing client must never receive the buyer/owner key.
+
+Discovered tools: `describe_authority`, `get_my_grants`, `request_authority`, `get_authority_request`, `respond_authority_request`, `accept_authority_offer`, `delegate_authority`, `execute_action`, `revoke_authority`. All return structured envelopes with text fallbacks; all core workflows work without rendering the view.
+
+### Supabase persistence and hosted authority
+
+Use a dedicated AgentPass Supabase project. Do not reuse the supply/Keel databases. Put the project's PostgreSQL **session-pooler** URI into the untracked root `.env` as `DATABASE_URL`, along with the four provisioned agent keys. Remote connections always use TLS with certificate verification; set `DATABASE_CA_CERT` to the PEM trust root if required. Do not paste database credentials into chat or commit them.
+
+Provision the distinct agent keys using the existing seed command (which preserves existing `.env` values), then initialize the private PostgreSQL schema:
+
+```sh
+npm run seed:authority
+npm run setup:postgres
+```
+
+`setup:postgres` creates the private `agentpass` schema with RLS enabled and no public policies, then seeds only missing organizations, principals, hashed keys, and the $1,000 buyer root. It preserves existing grants, ledger entries, revocation, root expiration and keys. Use the database owner/service connection for this private service; do not expose tables through Supabase's public Data API or use a publishable/anon key for server access. Never put the database connection string into the widget.
+
+The existing authority engine remains the only authority implementation. Its PostgreSQL adapter keeps each reservation, ancestor debit, issuance, acceptance, revocation and receipt update inside a database transaction. A shared transaction advisory lock preserves the local engine's writer ordering across replicas. Uncertain supplier outcomes retain durable reservations and the original fulfillment request ID for idempotent retry. This coarse writer lock is intended for the hackathon workload; it trades throughput for the existing serial execution semantics.
+
+For a separately hosted authority service, set `DATABASE_URL`, `SUPPLIER_URL`, `SUPPLIER_SERVICE_KEY`, `AUTHORITY_HOST=0.0.0.0`, and `AUTHORITY_PORT`, then run `npm run dev:authority`. Configure the MCP service's `AUTHORITY_URL` with its reachable HTTPS URL.
+
+For one Manufact service, omit `AUTHORITY_URL` and provide `DATABASE_URL` and `SUPPLIER_SERVICE_KEY`. The app starts the same authority HTTP API on a private dynamic loopback port **inside the Manufact container**. Supply either an external HTTPS `SUPPLIER_URL`, or `SUPPLIER_DATABASE_URL` with no `SUPPLIER_URL` to start Developer B's unchanged supplier HTTP app on another private loopback port in the same container. Both services use PostgreSQL; supplier data stays in the separate private `supplier` schema. Apply Developer B's `supabase/migrations/20261017213000_supplier_schema.sql` once before startup. Laptop localhost URLs and ephemeral SQLite do not satisfy hosted verification.
+
+### Manufact-managed deployment
+
+Install the requested agent skill, and authenticate with a fresh preapproved device code in your private terminal:
+
+```sh
+npx --yes skills add mcp-use/mcp-use#main --yes --skill mcp-apps-builder -a cursor -a claude-code -a codex
+npx -y mcp-use@latest login --device-code "$MANUFACT_DEVICE_CODE"
+npx -y mcp-use@latest whoami
+```
+
+An expired or absent code is a login blocker. Do not infer authentication from an attempted command.
+
+Create a private, untracked `.env.manufact` containing **only** `NODE_ENV=production`, `DATABASE_URL`, optional `DATABASE_CA_CERT`, `SUPPLIER_DATABASE_URL` (or external `SUPPLIER_URL`), and `SUPPLIER_SERVICE_KEY`. Agent bearer keys are held by the clients and stored hashed in PostgreSQL; do not configure a shared `AGENT_API_KEY` on the HTTP MCP service. An external-authority deployment instead needs `NODE_ENV=production` and `AUTHORITY_URL`. Manufact login credentials belong in its user-level credential store.
+
+For a new Manufact-managed deployment, run from the repository root so the uploaded source includes the shared authority and supplier modules; no new GitHub repository is needed:
+
+```sh
+npx mcp-use deploy --no-github -y --org org-152932fd-jx9ra \
+  --build-command 'npm ci && npm --prefix apps/mcp/agentpass-manufact ci && env -u DATABASE_URL -u DATABASE_CA_CERT AUTHORITY_URL=https://authority.invalid npm --prefix apps/mcp/agentpass-manufact run build' \
+  --start-command 'npm --prefix apps/mcp/agentpass-manufact start' \
+  --env-file .env.manufact
+```
+
+The build uses a placeholder authority URL only to validate tool/view registrations. Runtime secrets come from Manufact's environment-variable system. The app exposes a minimal `/health` liveness route for Manufact's health check; MCP calls still require agent authentication. Before upload, inspect the source archive scope and preserve unrelated Developer B work. Generated skill folders and build/auth state are ignored. Never upload real customer data or supplier-private databases.
+
+The user approved reusing the existing GitHub-backed server in `org-ab91b9e3-2lgi6` instead of creating a second managed server in the originally requested organization. The Manufact GitHub App already receives pushes from `virajpuri23/agentpass`. `DATABASE_URL`, `DATABASE_CA_CERT`, `SUPPLIER_DATABASE_URL`, and `SUPPLIER_SERVICE_KEY` are stored as write-only production secrets; `NODE_ENV=production` is configured. Production targets `feat/authority-core`. Pushing that branch deploys automatically; alternatively restart the active deployment with `--branch feat/authority-core`. Do not deploy with a fixture URL.
+
+Read the returned IDs and dashboard URL, then follow actual deployment status/build logs:
+
+```sh
+npx mcp-use deployments get "$DEPLOYMENT_ID"
+npx mcp-use deployments logs "$DEPLOYMENT_ID" --build --follow
+npx mcp-use deployments logs "$DEPLOYMENT_ID"
+```
+
+Copy the **exact MCP connection URL from the successful deployment/dashboard**. Then connect buyer/sourcing clients using their respective bearer headers as above. Plain unauthenticated `client connect` cannot validate this protected endpoint. Keep the server ID, deployment ID, dashboard URL, and exact Git commit in the handoff; do not guess any URL.
+
+### Demo and live verification
+
+Through distinct buyer/sourcing clients, run the frozen sequence in `docs/02-API-CONTRACTS.md`: inspect the $1,000 buyer root; delegate zero-budget quote-only scope; get the trusted $850 quote; confirm purchase returns `AUTHORITY_REQUIRED` with an $850 `required_scope`; request $1,200; parent counteroffers $900; child accepts; execute $850; replay the identical key and confirm identical receipt/one debit; revoke and confirm a new execution is denied. Reuse an expiration no later than the requested scope when constructing a counteroffer.
+
+Also verify another principal cannot read the request, a child cannot approve itself or act as buyer, expired grants fail, margin access reveals no private fields, and concurrent sibling purchases cannot overspend their parent. The local MCP suite performs all of these over real HTTP MCP and authority calls with an independent HTTP supplier fixture. PostgreSQL tests additionally use separate authority instances and reconnect to persisted completed receipts.
+
+For hosted completion, repeat those calls against the exact deployed URL and Developer B's real simulated supplier service, correlate the real authority audit events in the private database with Manufact runtime logs, and inspect outputs for credentials/private margins. The local fixture suite and build success do not satisfy this final gate. Notify Developer B with the URL, bearer-header instructions, seeded root ID and exact tested commit only after that gate passes.
+
+The hosted verification has run and persisted its simulated transactions. The $850 golden-path purchase plus the $98.60 concurrent-test winner leave **$51.40** on the original $1,000 root. Do not expect another $850 purchase to succeed under that same spent root. Preserve the receipts/audit evidence; an owner must provision a fresh demo allocation before another full purchase demonstration.

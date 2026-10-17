@@ -5,3 +5,10 @@ node_modules/
 *.sqlite
 *.sqlite-*
 coverage/
+
+# Local coding-agent skill installation and framework credentials/build state.
+.agents/skills/mcp-apps-builder/
+.claude/skills/mcp-apps-builder
+skills-lock.json
+.mcp-use/
+.codex/
