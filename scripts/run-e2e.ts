@@ -71,7 +71,7 @@ export async function runDemo(opts: { stack: DemoStack; print?: (line: string) =
     const buyerSeesRoot = JSON.stringify(buyerGrants?.data ?? '').includes(root);
     const childIds = ((childGrants.data as any)?.grants ?? []).map((g: any) => g.id) as string[];
     check(1, 'Root grant visible only to buyer', buyerSeesRoot && childGrants.status === 'OK' && !childIds.includes(root),
-      `buyer holds ${root}; child holds [${childIds.map(short).join(', ')}]`);
+      `buyer holds ${root}; child holds ${childIds.length} grant(s), none of them the root`);
 
     const delegate = find('buyer-agent', 'delegate_authority', (x) => x.status === 'OK');
     const delegated = delegate?.data as any;
