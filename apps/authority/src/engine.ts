@@ -3,6 +3,8 @@ import type Database from 'better-sqlite3';
 import type { Principal, Grant, AuthorityScope, AuthorityRequest, ExecuteActionInput, ApiError, ErrorCode, PurchaseReceipt } from '../../../packages/contracts/src/index.js';
 import type { SupplierService } from './supplier.js';
 import { quoteSchema } from './validation.js';
+import { recordAudit, setAuditContext } from './audit.js';
+import { completePurchase } from './purchases.js';
 
 export class Denial extends Error {
   constructor(public result: ApiError, public http = 403) { super(result.reason); }
@@ -53,7 +55,7 @@ export class AuthorityEngine {
     return chain;
   }
   audit(p: Principal, action: string, decision: string, grantId?: string, code?: ErrorCode, requestId?: string) {
-    this.db.prepare('INSERT INTO audit_events(event_id,timestamp,principal_id,grant_id,action,decision,reason_code,request_id,trace_id) VALUES(?,?,?,?,?,?,?,?,?)').run(randomUUID(), this.time(), p.id, grantId ?? null, action, decision, code ?? null, requestId ?? null, randomUUID());
+    recordAudit(this.db,this.time(),p,action,decision,grantId,code,requestId);
   }
   issue(p: Principal, parentId: string, recipient: string, scope: AuthorityScope): Grant {
     const parent = this.chain(parentId, p)[0];
@@ -79,8 +81,10 @@ export class AuthorityEngine {
   getRequest(p: Principal, id: string): AuthorityRequest {
     const row = this.db.prepare('SELECT * FROM authority_requests WHERE id = ?').get(id) as any;
     if (!row) deny('INVALID_REQUEST', 'Request unavailable', 404);
+    setAuditContext({requestId:id});
     const parent = this.grant(row.parent_grant_id);
     if (parent.organization_id !== p.organization_id || ![row.requester_principal_id, parent.subject_principal_id].includes(p.id)) deny('INVALID_CALLER', 'Request is private to its parties');
+    setAuditContext({grantId:parent.id});
     return { id: row.id, requester_principal_id: row.requester_principal_id, parent_grant_id: row.parent_grant_id, requested_scope: JSON.parse(row.requested_scope_json), offered_scope: row.offered_scope_json ? JSON.parse(row.offered_scope_json) : undefined, reason: row.reason, status: row.status, issued_grant_id: row.issued_grant_id ?? undefined };
   }
   respond(p: Principal, id: string, decision: 'COUNTEROFFER' | 'REJECT', offered?: AuthorityScope) {
@@ -133,13 +137,15 @@ export class AuthorityEngine {
     return chain;
   }
   async execute(p: Principal, input: ExecuteActionInput) {
-    this.chain(input.grant_id,p);
     if (input.action === 'supplier.margin.read') {
+      this.chain(input.grant_id,p);
       await this.supplier.policy(p,input.action,{supplier_id:input.supplier_id,sku_id:input.sku_id});
       deny('SELLER_POLICY_DENIED','Supplier private data is unavailable');
     }
     const fingerprint = JSON.stringify([input.grant_id,input.action,input.supplier_id,input.sku_id,input.quantity ?? null,input.quote_id ?? null]);
     const previous = this.db.prepare('SELECT * FROM purchases WHERE caller_principal_id = ? AND idempotency_key = ?').get(p.id,input.idempotency_key) as any;
+    if (previous?.request_json === fingerprint) setAuditContext({requestId:previous.id});
+    this.chain(input.grant_id,p);
     if (previous && previous.request_json !== fingerprint) deny('ALREADY_EXECUTED','Idempotency key is bound to another action',409);
     if (previous?.status === 'COMPLETED') return JSON.parse(previous.receipt_json) as PurchaseReceipt;
     const resource = {supplier_id:input.supplier_id,sku_id:input.sku_id};
@@ -147,7 +153,9 @@ export class AuthorityEngine {
       this.authorize(p,input,0);
       if (!await this.supplier.policy(p,input.action,resource)) deny('SELLER_POLICY_DENIED','Supplier policy denied quote');
       this.authorize(p,input,0);
-      const q = quoteSchema.parse(await this.supplier.quote({buyer_principal_id:p.id,...resource,quantity:input.quantity!,request_id:randomUUID()}));
+      const quoteRequestId = randomUUID();
+      setAuditContext({requestId:quoteRequestId});
+      const q = quoteSchema.parse(await this.supplier.quote({buyer_principal_id:p.id,...resource,quantity:input.quantity!,request_id:quoteRequestId}));
       this.authorize(p,input,0);
       if (q.supplier_id !== input.supplier_id || q.sku_id !== input.sku_id || q.quantity !== input.quantity) deny('INVALID_REQUEST','Supplier quote does not match request');
       this.audit(p,input.action,'ALLOW',input.grant_id);
@@ -173,21 +181,15 @@ export class AuthorityEngine {
       const purchaseId = randomUUID();
       this.db.prepare("INSERT INTO purchases(id,caller_principal_id,grant_id,quote_id,idempotency_key,amount_cents,status,created_at,updated_at,request_json) VALUES(?,?,?,?,?,?,'PENDING',?,?,?)").run(purchaseId,p.id,input.grant_id,quote.quote_id,input.idempotency_key,quote.total_cents,this.time(),this.time(),fingerprint);
       for (const g of chain) this.db.prepare("INSERT INTO ledger_entries(id,purchase_id,grant_id,amount_cents,state,created_at) VALUES(?,?,?,?,'RESERVED',?)").run(randomUUID(),purchaseId,g.id,quote.total_cents,this.time());
+      setAuditContext({requestId:purchaseId});
       this.audit(p,input.action,'RESERVED',input.grant_id,undefined,purchaseId);
       return {id:purchaseId,status:'PENDING'};
     }).immediate();
+    setAuditContext({requestId:purchase.id});
     if (purchase.status === 'COMPLETED') return JSON.parse(purchase.receipt_json) as PurchaseReceipt;
     // Uncertain supplier outcomes retain reservations; retry reconciles the same request ID.
     const order = await this.supplier.fulfill({quote_id:quote.quote_id,buyer_principal_id:p.id,request_id:purchase.id});
     if (!order.order_id || typeof order.order_id !== 'string') throw new Error('Invalid supplier fulfillment');
-    return this.db.transaction(() => {
-      const existing = this.db.prepare('SELECT receipt_json FROM purchases WHERE id = ?').get(purchase.id) as any;
-      if (existing.receipt_json) return JSON.parse(existing.receipt_json) as PurchaseReceipt;
-      const receipt: PurchaseReceipt = {receipt_id:randomUUID(),request_id:purchase.id,order_id:order.order_id,...resource,quantity:quote.quantity,amount_cents:quote.total_cents,currency:'USD',grant_id:input.grant_id,outcome:'COMPLETED',simulated:true};
-      this.db.prepare("UPDATE purchases SET status = 'COMPLETED',supplier_order_id = ?,receipt_json = ?,updated_at = ? WHERE id = ?").run(order.order_id,JSON.stringify(receipt),this.time(),purchase.id);
-      this.db.prepare("UPDATE ledger_entries SET state = 'COMMITTED' WHERE purchase_id = ? AND state = 'RESERVED'").run(purchase.id);
-      this.audit(p,input.action,'COMPLETED',input.grant_id,undefined,purchase.id);
-      return receipt;
-    }).immediate();
+    return completePurchase(this.db,purchase.id,quote,order.order_id,p,this.time());
   }
 }
