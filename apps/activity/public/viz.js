@@ -6,6 +6,9 @@ const $ = (s) => document.querySelector(s);
 const SVG = 'http://www.w3.org/2000/svg';
 const usd = (c) => `$${Math.round(c / 100).toLocaleString('en-US')}`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// Pace multiplier from the Speed control: Slow (default) = 2x the original timing.
+const pace = () => Number(document.querySelector('#speed')?.value || 2);
+const wait = (ms) => sleep(ms * pace());
 
 const STEPS = [
   'The owner gives the buyer agent a $1,000 budget',
@@ -76,7 +79,7 @@ function setBadge(id, text) {
 function pulse(id) {
   const n = document.getElementById(id);
   n.classList.add('pulse');
-  setTimeout(() => n.classList.remove('pulse'), 600);
+  setTimeout(() => n.classList.remove('pulse'), 600 * pace());
 }
 
 /** Animates a labeled message along a polyline. kind: good | warn | bad. */
@@ -104,7 +107,7 @@ async function send(points, kind, label, opts = {}) {
     const len = Math.hypot(x2 - x1, y2 - y1);
     segs.push({ x1, y1, x2, y2, len }); total += len;
   }
-  const duration = Math.max(650, Math.min(1300, total * 2.4));
+  const duration = Math.max(650, Math.min(1300, total * 2.4)) * pace();
   const start = performance.now();
   await new Promise((resolve) => {
     function frame(now) {
@@ -126,9 +129,9 @@ async function send(points, kind, label, opts = {}) {
     b.setAttribute('class', 'burst'); b.setAttribute('x', String(opts.burstAt[0] - 9)); b.setAttribute('y', String(opts.burstAt[1] + 9));
     b.textContent = '✕';
     $('#flows').append(b);
-    setTimeout(() => b.remove(), 900);
+    setTimeout(() => b.remove(), 900 * pace());
   }
-  await sleep(opts.hold ?? 450);
+  await wait(opts.hold ?? 450);
   g.style.transition = 'opacity .35s'; g.style.opacity = '0';
   setTimeout(() => g.remove(), 400);
 }
@@ -190,7 +193,7 @@ function onCall(e) {
     st.accepted = true;
     const cap = d.scope?.total_budget_cents;
     beat(5, `Accepted: a new ${usd(cap)} purchase pass, nothing more`, async () => {
-      setBadge('b-helper', `purchase · ${usd(cap)}`); pulse('n-helper'); await sleep(500);
+      setBadge('b-helper', `purchase · ${usd(cap)}`); pulse('n-helper'); await wait(500);
     });
   } else if (helper && e.tool === 'execute_action' && a.action === 'supplier.purchase.execute' && ok && d.amount_cents) {
     st.bought = true;
@@ -237,7 +240,7 @@ function onProcess(ev) {
   beat(2, 'The helper runs as its own program with its own identity, not the buyer’s keys', async () => {
     $('#n-helper').classList.remove('dim');
     $('#helper-sub').textContent = `own process · pid ${pid}`;
-    pulse('n-helper'); await sleep(500);
+    pulse('n-helper'); await wait(500);
   });
 }
 
@@ -255,7 +258,7 @@ async function play() {
     }
     setStep(b.step, b.detail);
     await b.run();
-    await sleep($('#stepmode').checked ? 0 : 350);
+    await wait($('#stepmode').checked ? 0 : 450);
   }
   playing = false;
   if (runDone) finishRun();
