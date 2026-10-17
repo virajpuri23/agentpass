@@ -1,20 +1,9 @@
 {
   "compilerOptions": {
-    "target": "ES2023",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "resolveJsonModule": true,
-    "allowImportingTsExtensions": true,
-    "noEmit": true,
-    "types": ["node"],
-    "paths": {
-      "@agentpass/contracts": ["./packages/contracts/src/index.ts"]
-    }
+    "target": "ES2022", "module": "NodeNext", "moduleResolution": "NodeNext",
+    "strict": true, "esModuleInterop": true, "resolveJsonModule": true,
+    "skipLibCheck": true, "noEmit": true, "types": ["node"]
   },
-  "include": ["apps/**/*.ts", "packages/**/*.ts", "scripts/**/*.ts", "vitest.config.ts"],
-  "exclude": ["node_modules", "data"]
+  "include": ["apps/authority/**/*.ts", "apps/mcp/**/*.ts", "db/**/*.ts", "packages/contracts/**/*.ts",
+    "apps/supplier/**/*.ts", "apps/buyer-agent/**/*.ts", "apps/sourcing-agent/**/*.ts", "scripts/**/*.ts"]
 }

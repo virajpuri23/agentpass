@@ -3,26 +3,29 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": {
-    "node": ">=22.5"
-  },
-  "workspaces": [
-    "apps/*"
-  ],
   "scripts": {
-    "keys": "tsx scripts/gen-keys.ts",
-    "dev:authority": "tsx apps/authority/src/server.ts",
-    "dev:supplier": "tsx --env-file-if-exists=.env apps/supplier/src/server.ts",
-    "dev:mcp": "tsx apps/mcp/src/server.ts",
-    "demo:reset": "tsx --env-file-if-exists=.env scripts/seed-demo.ts",
-    "demo:run": "tsx --env-file-if-exists=.env scripts/run-e2e.ts",
+    "dev:authority": "tsx --env-file=.env apps/authority/src/server.ts",
+    "dev:mcp": "tsx --env-file=.env apps/mcp/src/server.ts",
+    "seed:authority": "tsx db/seed.ts",
+    "dev:supplier": "tsx --env-file=.env apps/supplier/src/server.ts",
+    "demo:reset": "tsx --env-file=.env scripts/seed-demo.ts",
+    "demo:run": "tsx --env-file=.env scripts/run-e2e.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@modelcontextprotocol/client": "^2.3.1",
+    "@modelcontextprotocol/server": "^2.3.1",
+    "better-sqlite3": "^12.11.1",
+    "express": "^5.3.0",
+    "zod": "^4.6.5"
+  },
   "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/express": "^5.0.6",
     "@types/node": "^26.6.5",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.5"
+    "vitest": "^4.1.11"
   }
 }
