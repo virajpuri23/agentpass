@@ -10,13 +10,35 @@
 import type { ChildProcess } from 'node:child_process';
 import type { AuthorityScope } from '../../../packages/contracts/src/index.js';
 
+export interface PurchaseTask {
+  supplier_id: string;
+  sku_id: string;
+  quantity: number;
+  /** Budget the child will ask for if it hits AUTHORITY_REQUIRED (demo: $1,200). */
+  requested_budget_cents: number;
+}
+
 export type AgentMessage =
-  | { type: 'TASK_ASSIGNED'; grant_id: string; supplier_id: string; sku_id: string; quantity: number; requested_budget_cents: number }
+  // launcher <-> buyer
+  | { type: 'START'; task: PurchaseTask }
+  | { type: 'SPAWN_REQUESTED'; agent: 'sourcing-agent' }
+  | { type: 'SPAWNED'; agent: string; pid: number }
+  | { type: 'REVOKE_REQUESTED'; grant_id: string; reason: string }
+  | { type: 'SHUTDOWN' }
+  // buyer <-> sourcing
+  | ({ type: 'TASK_ASSIGNED'; grant_id: string } & PurchaseTask)
   | { type: 'AUTHORITY_REQUESTED'; request_id: string; parent_grant_id: string; requested_scope: AuthorityScope }
   | { type: 'AUTHORITY_RESPONDED'; request_id: string; decision: 'COUNTEROFFER' | 'REJECT' }
   | { type: 'TASK_RESULT'; ok: boolean; summary: Record<string, unknown> }
-  | { type: 'GRANT_REVOKED'; grant_id: string }
+  | { type: 'GRANT_REVOKED'; grant_id: string; ok: boolean; code?: string }
+  // any agent -> launcher (observability only)
+  | { type: 'TRACE'; event: TraceEvent }
   | { type: 'ACK' };
+
+/** One line of the demo trace: a real tool call or an agent decision. */
+export type TraceEvent =
+  | { kind: 'call'; at: string; agent: string; tool: string; args: Record<string, unknown>; status: string; code?: string; data?: unknown; ms: number }
+  | { kind: 'note'; at: string; agent: string; text: string; decider?: 'deterministic' | 'llm' };
 
 export interface Envelope {
   from: string;
