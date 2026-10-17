@@ -46,6 +46,26 @@
 
 These are checkpoints; adapt as needed without compromising mandatory gates.
 
+## Planned follow-on — self-service MCP onboarding
+
+The original checklist above is historical and is not a current completion report.
+Use [the detailed A plan](docs/17-SELF-SERVICE-ONBOARDING-PLAN.md) for baseline
+evidence, scope, ownership, acceptance tests and cutoffs. All items below are planned.
+
+- [ ] **A9:** agree additive contracts, provider/secret-store choices and A/B runner boundary.
+- [ ] **A10:** additive migrations; verified accounts, personal workspaces, memberships and connections.
+- [ ] **A11:** OAuth ingress with durable connection binding; preserve service bearer clients.
+- [ ] **A12:** trusted consent and bounded connection authority; no automatic purchase budget/reset.
+- [ ] **A13:** conversational onboarding/provision/list/get/revoke MCP tools.
+- [ ] **A14:** private credential delivery, durable jobs/outbox, runner leases and recovery.
+- [ ] **A15:** requester/agent audit provenance, inherited revocation and real B-worker integration.
+- [ ] **A16:** real ChatGPT and Claude staging journeys, evidence and schema-first rollout.
+
+**B dependency:** fixed-template worker execution/sandbox and optional dashboard
+integration. A owns its authenticated control contract and may verify it with a
+labeled fixture until B supplies the actual runtime. Shared contract changes need
+both developers' agreement; production rollout remains a separate coordinated gate.
+
 ## Merge protocol
 
 - Branches: `feat/authority-core` (A), `feat/agent-demo` (B).

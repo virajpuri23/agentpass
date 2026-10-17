@@ -2,6 +2,11 @@
 
 **Freeze this document before coding in parallel.** TS types: `packages/contracts/src/index.ts`. Examples: `fixtures/`. Do not rename fields or endpoints without both developers agreeing.
 
+Self-service OAuth/workspace/agent-control interfaces are currently proposals in
+[the Developer A plan](17-SELF-SERVICE-ONBOARDING-PLAN.md#5-proposed-interface-and-worker-boundary).
+They are not implemented or part of this frozen contract. A9 requires both
+developers to agree and update this document/types/fixtures before new handlers.
+
 ## Authentication, principals and errors
 
 - Every agent HTTP request: `Authorization: Bearer <unique demo agent API key>`; server maps key to actual `principal_id` and `organization_id`. No `agent_id` request field establishes caller identity.

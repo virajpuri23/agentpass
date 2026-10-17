@@ -74,6 +74,11 @@ changed for console verification. These new routes are **not hosted-verified**.
 
 ## Client compatibility and OAuth dependency
 
+The section below describes current implementation limitations and the earlier
+manual-mapping approach. Automatic personal-workspace onboarding and bounded
+assistant connections are a planned extension in [the Developer A plan](17-SELF-SERVICE-ONBOARDING-PLAN.md);
+that plan does not make OAuth or public self-service available today.
+
 The connect page offers manual Inspector setup, the official CLI bearer-header
 flow, and VS Code's masked input configuration. It does not claim one-click
 compatibility. VS Code's current documentation says input variables are not

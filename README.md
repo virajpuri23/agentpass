@@ -23,6 +23,12 @@ All purchases are **simulated**. No live inventory or payment is touched.
 
 `AGENTS.md` has repository instructions for Codex/other coding agents. `contracts/` provides wire examples; `packages/contracts/src/index.ts` defines stable shared types. `db/schema.sql` is a SQLite-oriented starting schema, **not a production-ready migration**.
 
+**Next planned Developer A work:** [self-service MCP onboarding plan](docs/17-SELF-SERVICE-ONBOARDING-PLAN.md)
+covers verified human sign-in, automatic personal workspaces, consented assistant
+connections, private child credential delivery and the Developer B worker handoff.
+It records the implemented baseline, file ownership, proposed contracts, tests and
+rollout gates. These self-service capabilities are planned, not shipped.
+
 ## Scope promise
 
 **P0: demo a real agent-to-agent, cross-organization authorization flow** with authenticated agent identities, parent-child grants, merchant-side independent policy, safe simulated execution, and structured failures.

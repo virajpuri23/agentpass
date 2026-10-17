@@ -3,6 +3,17 @@
 **You own:** `apps/authority/**`, `apps/mcp/**`, `db/**` (unless otherwise agreed).  
 **You do not own:** agent prompts, supplier catalog logic, public demo visualization.
 
+## Planned follow-on: self-service onboarding
+
+Follow [the Developer A implementation plan](17-SELF-SERVICE-ONBOARDING-PLAN.md)
+for A9–A16: additive contract agreement, identity/membership persistence, OAuth,
+personal workspace consent, conversational MCP tools, private delivery/runner
+control, provenance/revocation, and real host verification. The plan distinguishes
+the existing tested authority/provisioning core from missing self-service work.
+Worker execution and dashboard changes remain Developer B's responsibility.
+Do not change shared types without both developers' agreement or treat fixture
+OAuth/runner tests as a completed hosted journey.
+
 ## Your mission
 
 Build a reliable authority engine for distinct principals that can request, counteroffer, delegate, execute within, and revoke scoped permissions. Make it callable through MCP. Your API must be executable independently of Developer B using the fixture responses.
