@@ -205,3 +205,18 @@ negotiates through the existing request lifecycle, shows persisted activity, and
 reviews revocation impact. See [startup, verification and OAuth handoff](docs/15-AUTHORITY-CONSOLE.md).
 OAuth and hosted console deployment remain unverified; no production settings are
 changed by the local demo.
+
+### Headless agent onboarding
+
+MCP is the primary interface; the UI is optional inspection. An agent with its own
+provisioned `AGENT_API_KEY` can verify identity, grants, remaining budgets and tools
+without opening a browser:
+
+```sh
+npm run --silent agent:onboard -- --url "$MCP_PUBLIC_URL"
+```
+
+The command returns JSON and performs only read-only MCP calls. It does not create
+identity or authority. Initial provisioning comes from a trusted owner/orchestrator;
+parent and child agents then negotiate through the existing MCP lifecycle. See the
+[agent-first workflow](docs/15-AUTHORITY-CONSOLE.md#agent-first-onboarding-no-ui-required).

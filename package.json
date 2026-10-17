@@ -16,7 +16,8 @@
     "setup:postgres": "tsx db/setup-postgres.ts",
     "pretest": "AUTHORITY_URL=https://authority.invalid npm --prefix apps/mcp/agentpass-manufact run build",
     "dev:dashboard": "tsx apps/dashboard/src/server.ts",
-    "demo:console": "tsx apps/dashboard/src/demo.ts"
+    "demo:console": "tsx apps/dashboard/src/demo.ts",
+    "agent:onboard": "tsx apps/cli/src/onboard.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "^2.3.1",

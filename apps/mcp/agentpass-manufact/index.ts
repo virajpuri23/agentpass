@@ -15,7 +15,7 @@ const server = new MCPServer({
   title: 'AgentPass Authority Inspector',
   version: '2.0.0',
   description: 'Scoped authority negotiation and simulated supplier purchases.',
-  instructions: 'Start with get_my_grants. On AUTHORITY_REQUIRED, use request_authority, poll get_authority_request, then accept_authority_offer. All purchases are simulated.',
+  instructions: 'Agent onboarding requires no browser. Authenticate using your own credential provisioned by a trusted owner or orchestrator; never borrow a parent credential or self-assign identity. Call describe_authority, then get_my_grants. With no grants, obtain initial delegation from a trusted parent. The UI is optional inspection. On AUTHORITY_REQUIRED, use request_authority, poll get_authority_request, then accept_authority_offer. All purchases are simulated.',
 });
 
 server.get('/health', (c) => c.json({ status: 'OK' }));
