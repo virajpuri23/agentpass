@@ -1,7 +1,8 @@
 import { createServer, type Server } from 'node:http';
 import { pathToFileURL } from 'node:url';
 import { readFileSync } from 'node:fs';
-import { spawn } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import express from 'express';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { describe, expect, it } from 'vitest';
@@ -72,6 +73,17 @@ for (const backend of ['sqlite','postgres'] as const) describe(`Manufact HTTP MC
       const description=await ok(buyer,'describe_authority');expect(description.actions).toContain('supplier.purchase.execute');
       expect((await ok(buyer,'get_my_grants')).grants[0].scope.total_budget_cents).toBe(100000);
       expect((await ok(sourcing,'get_my_grants')).grants).toEqual([]);
+      const runCli=promisify(execFile);
+      for(const [token,expected,principal] of [[keys['buyer-agent'],'ONBOARDED','buyer-agent'],[keys['sourcing-agent'],'AUTHENTICATED_NO_GRANTS','sourcing-agent']] as const){
+        const {stdout,stderr}=await runCli(process.execPath,['--import','tsx','apps/cli/src/onboard.ts','--url',mcpUrl],{env:{...process.env,AGENT_API_KEY:token}});
+        const onboarding=JSON.parse(stdout);expect(onboarding).toMatchObject({status:'OK',code:expected,data:{principal_id:principal,organization_id:'buyer-co',requires_browser:false,side_effects:false}});
+        expect(onboarding.data.tools.sort()).toEqual([...tools].sort());expect(stdout+stderr).not.toContain(token);
+      }
+      try {await runCli(process.execPath,['--import','tsx','apps/cli/src/onboard.ts','--url',mcpUrl],{env:{...process.env,AGENT_API_KEY:'invalid-cli-fixture'}});throw new Error('Invalid credential unexpectedly succeeded');}
+      catch(error){expect(error).toMatchObject({code:1});expect(JSON.parse((error as any).stdout)).toMatchObject({status:'ERROR',code:'INVALID_CREDENTIAL'});expect((error as any).stdout+(error as any).stderr).not.toContain('invalid-cli-fixture');}
+      expect(Number((await db.prepare('SELECT COUNT(*) AS n FROM authority_requests').get() as any).n)).toBe(0);
+      expect(Number((await db.prepare('SELECT COUNT(*) AS n FROM purchases').get() as any).n)).toBe(0);
+      expect((await call(buyer,'get_my_grants'))._meta).toMatchObject({inspector:{budgets:[{grant_id:'grant-root-buyer',remaining_budget_cents:100000}]}});
       const child=await ok(buyer,'delegate_authority',{parent_grant_id:'grant-root-buyer',recipient_principal_id:'sourcing-agent',scope:scope(0,['supplier.quote.request'])});
       expect((await ok(sourcing,'get_my_grants')).grants.map((g:any)=>g.id)).toEqual([child.id]);
       const issuedQuote=await ok(sourcing,'execute_action',{grant_id:child.id,action:'supplier.quote.request',supplier_id:'supplier-co',sku_id:'PACK-500',quantity:500,idempotency_key:'quote'});expect(issuedQuote.total_cents).toBe(85000);expect(JSON.stringify(issuedQuote)).not.toContain('internal_unit');

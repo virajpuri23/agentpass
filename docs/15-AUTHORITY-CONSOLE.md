@@ -118,7 +118,7 @@ visitors demonstrate isolated scopes through real calls.
 
 - Root TypeScript, nested MCP typecheck, production MCP build: passed.
 - All existing plus console tests passed with SQLite and a fresh local PostgreSQL
-  database ending in `_test`: **79 passed, none skipped**.
+  database ending in `_test`: **83 passed, none skipped**.
 - Console integration tests use real HTTP MCP `get_my_grants`, canonical authority
   and disposable data. Supplier responses in this suite are labeled fixtures.
 - The browser demo uses the unchanged real simulated supplier, not fixture HTTP
@@ -136,3 +136,55 @@ visitors demonstrate isolated scopes through real calls.
 
 The console uses manual refresh, reports snapshot time, labels partial graph
 visibility and limits recent activity/receipts. It is not a complete audit export.
+
+## Agent-first onboarding (no UI required)
+
+The primary interface is MCP. The browser console is an optional human inspection
+surface, not a prerequisite for connection, negotiation, execution or revocation.
+The existing nine tools support a fully headless child and parent agent workflow.
+
+For an agent runtime or CI process, inject its **own** provisioned `AGENT_API_KEY`
+through its secret environment, then run from the repository root with Node 24:
+
+```sh
+npm run --silent agent:onboard -- --url "$MCP_PUBLIC_URL"
+```
+
+`MCP_PUBLIC_URL` can also supply the endpoint without `--url`. `--help` describes
+the command in JSON. Credentials are never accepted as arguments, loaded from a
+shared `.env`, printed, or saved by this command. It uses an ephemeral MCP client
+and performs only `tools/list`, `describe_authority`, and `get_my_grants` after the
+normal protocol handshake. It returns one JSON object and exits 0 on a successful
+authenticated read, or 1 on failure. It never purchases, requests, accepts, delegates
+or creates a principal automatically.
+
+The JSON includes verified principal/organization from the server result metadata,
+caller grants, canonical ancestor budgets, discovered tool names, and the recovery
+workflow. `ONBOARDED` means connection and grant inspection succeeded, not that an
+arbitrary operation is authorized. `AUTHENTICATED_NO_GRANTS` is a valid connection
+with `next_action:contact_owner`; a trusted parent/orchestrator must delegate an
+initial grant before this principal can request more authority. Missing/invalid
+credentials, invalid endpoints and unavailable services have distinct codes.
+
+An MCP-native agent can skip the CLI and make the same read calls directly. No
+browser session cookie or console endpoint is involved. Agent SDKs can inspect the
+`get_my_grants` result's `_meta.principal_id`, `_meta.organization_id` and
+`_meta.inspector` for authenticated caller context; the model-visible result still
+contains only the existing grant response. Identity always comes from ingress
+credentials, never a claimed tool argument.
+
+After onboarding: inspect scope and effective remaining budget; use `execute_action`
+for the intended operation. On `AUTHORITY_REQUIRED`, use the returned
+`required_scope` to call `request_authority`, poll `get_authority_request`, and
+accept a suitable counteroffer using `accept_authority_offer`. The authenticated
+parent agent uses `respond_authority_request`. Retry execution only after the grant
+is issued; the service checks authority again on every operation.
+
+Initial identity and authority provisioning is a trust boundary. This release has
+no public self-registration or credential-minting tool. A trusted owner or automated
+orchestrator provisions principals/keys and initial authority through the existing
+administrative setup. Once provisioned, agents can operate without a human or UI;
+a child never needs its parent’s credential. OAuth is a separate optional human
+connection path, not a dependency for service-agent onboarding.
+
+CLI verification launches real subprocesses against both SQLite and local PostgreSQL MCP servers: buyer onboarding, authenticated sourcing with no grants, invalid credential rejection, credential-free output, zero created requests/purchases and unchanged root budget. A separate live CLI run also inspected the disposable console demo without opening a browser.
