@@ -47,7 +47,7 @@ async function collect(timeoutMs: number) {
 describe('activity server', () => {
   it('serves the page and assets without exposing other files', async () => {
     expect((await fetch(base)).status).toBe(200);
-    expect((await fetch(`${base}/app.js`)).headers.get('content-type')).toContain('javascript');
+    expect((await fetch(`${base}/simple.js`)).headers.get('content-type')).toContain('javascript');
     expect((await fetch(`${base}/../../.env`)).status).toBe(404);
     expect((await fetch(`${base}/server.ts`)).status).toBe(404);
   });
