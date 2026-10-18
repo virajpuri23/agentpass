@@ -76,6 +76,36 @@ and exits nonzero on denial/error. `--help` describes usage. The read API is
 They preserve the console's organization/held-or-issued/parties-only/caller-only
 visibility rules. Unknown and inaccessible run IDs return the same denial.
 
+## Embedded MCP App run inspector
+
+`get_run` now renders the read-only **Run Inspector** in MCP Apps-capable hosts.
+It uses the same authenticated result as the CLI and console. The app shows the
+visible grant chain, party-private scope negotiation, chronological audit events,
+and simulated receipts; it labels current budgets and request states separately
+from historical events. `list_runs` remains a text/JSON discovery tool.
+
+Inside the app, **Choose a run** calls `list_runs`, selecting a run calls `get_run`,
+and **Refresh run** reads that exact run again. All calls go through the host's
+MCP bridge and current authenticated connection. The View never accepts, stores,
+or sends bearer credentials, never fetches the authority API directly, and never
+approves or executes an action. Hosts without server-tool bridge support show the
+same snapshot and instructions to rerun the tools. Pending reads hide stale data;
+failed/denied reads show an error and no previous run details.
+
+Verify locally with the existing console's printed authority URL:
+
+```sh
+cd apps/mcp/agentpass-manufact
+AUTHORITY_URL=http://127.0.0.1:<authority-port> npm run dev -- --port 3115 --no-open
+```
+
+Open the printed Inspector URL, connect using this disposable caller's own fixture
+bearer header, then call `get_run` with a `list_runs` result. The automatic unauthenticated
+connection may fail; create an authenticated connection in Inspector settings.
+No new plugin identity or connection configuration is required: the existing
+AgentPass MCP App advertises `ui://views/run-inspector.html` on `get_run`.
+This repository change does not deploy the paused hosted service.
+
 ## Developer B integration boundary
 
 Generate one opaque ID matching `run-[a-zA-Z0-9_-]{1,80}` per workflow. Attach

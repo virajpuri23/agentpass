@@ -116,6 +116,7 @@ export const listRuns = server.tool({
 export const getRun = server.tool({
   name:'get_run',description:'Inspect a persisted run: caller-visible events, related grants, private-to-parties requests and simulated receipts. Grant budgets and request states are current snapshots; events are historical. Missing or inaccessible runs return the same error.',
   inputSchema:z.object({run_id:z.string().regex(/^run-[a-zA-Z0-9_-]{1,80}$/)}).strict(),outputSchema:envelopeSchema,annotations:readOnly,
+  view:{name:'run-inspector',description:'Read-only run grants, negotiation, historical decisions and simulated receipts.'},
 },async({run_id},ctx)=>toolResult(await authority(ctx)('GET',`v1/runs/${encodeURIComponent(run_id)}`)));
 
 export const getMyGrants = server.tool({
