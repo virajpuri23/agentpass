@@ -97,4 +97,20 @@ describe('authenticated console → HTTP MCP → canonical authority',()=>{
     const g=await childGrant();const child=await login(keys['sourcing-agent']);const s=scope(0);s.expires_at=new Date(Date.now()-1000).toISOString();s.actions=['supplier.quote.request'];db.prepare('UPDATE grants SET scope_json=? WHERE id=?').run(JSON.stringify(s),g.id);
     const state=(await (await call('snapshot',undefined,child)).json()).data;expect(state.budgets[0]).toMatchObject({authority_code:'GRANT_EXPIRED',remaining_budget_cents:null});expect((await direct('/v1/actions/execute',{grant_id:g.id,action:'supplier.quote.request',supplier_id:'supplier-co',sku_id:'PACK-500',quantity:500,idempotency_key:'expired'},keys['sourcing-agent'])).code).toBe('GRANT_EXPIRED');
   });
+  it('hands off a single-use scoped read-only dashboard session without exposing the bearer',async()=>{
+    const grant=await childGrant();
+    const link=await handle.createWorkflowLink(keys['buyer-agent'],'grant-root-buyer');expect(link).toBeTruthy();
+    expect(await handle.createWorkflowLink(keys['supplier-agent'],'grant-root-buyer')).toBeUndefined();
+    const opened=await handle(new Request(link!));expect(opened.status).toBe(303);expect(opened.headers.get('location')).toBe('/console#workflow=grant-root-buyer');
+    const cookie=opened.headers.get('set-cookie')!.split(';')[0];expect(cookie).not.toContain(keys['buyer-agent']);
+    expect((await handle(new Request(link!))).status).toBe(404);
+    const snapshot=await (await call('snapshot',undefined,cookie)).json();expect(snapshot.data.root_grant_id).toBe('grant-root-buyer');expect(JSON.stringify(snapshot)).not.toContain(keys['buyer-agent']);
+    expect((await call('workflows/grant-root-buyer',undefined,cookie)).status).toBe(200);
+    expect((await call('workflows/'+grant.id,undefined,cookie)).status).toBe(403);
+    expect((await call('v1/grants/'+grant.id+'/revoke',{reason:'browser write blocked'},cookie)).status).toBe(403);
+    expect((await direct('/v1/console')).data.grants.find((g:any)=>g.id===grant.id).revoked_at).toBeNull();
+    const expired=await handle.createWorkflowLink(keys['buyer-agent'],'grant-root-buyer');clock+=60001;expect((await handle(new Request(expired!))).status).toBe(404);
+    db.prepare("UPDATE principal_keys SET revoked_at=? WHERE principal_id='buyer-agent'").run(new Date().toISOString());expect((await call('snapshot',undefined,cookie)).status).toBe(401);
+  });
+
 });

@@ -17,7 +17,7 @@ import { seedPostgres } from '../../../db/seed-postgres.js';
 import { createAuthorityApp } from '../../authority/src/app.js';
 import { HttpSupplierService } from '../../authority/src/supplier.js';
 
-const tools = ['provision_child','describe_authority','get_my_grants','get_onboarding_context','provision_agent','list_agents','get_agent','revoke_agent','revoke_connection','request_authority','get_authority_request','respond_authority_request','accept_authority_offer','delegate_authority','execute_action','revoke_authority'];
+const tools = ['get_workflow','provision_child','describe_authority','get_my_grants','get_onboarding_context','provision_agent','list_agents','get_agent','revoke_agent','revoke_connection','request_authority','get_authority_request','respond_authority_request','accept_authority_offer','delegate_authority','execute_action','revoke_authority'];
 const keys = {'owner-1':'manufact-fixture-owner','buyer-agent':'manufact-fixture-buyer','sourcing-agent':'manufact-fixture-sourcing','supplier-agent':'manufact-fixture-supplier'};
 async function listen(server: Server) {
   server.listen(0,'127.0.0.1');
@@ -79,6 +79,8 @@ for (const backend of ['sqlite','postgres'] as const) describe(`Manufact HTTP MC
       const description=await ok(buyer,'describe_authority');expect(description.actions).toContain('supplier.purchase.execute');
       expect((await ok(buyer,'get_my_grants')).grants[0].scope.total_budget_cents).toBe(100000);
       expect((await ok(sourcing,'get_my_grants')).grants).toEqual([]);
+      expect((await ok(buyer,'get_workflow',{root_grant_id:'grant-root-buyer'})).root_grant_id).toBe('grant-root-buyer');
+      expect((await call(stranger,'get_workflow',{root_grant_id:'grant-root-buyer'})).structuredContent).toMatchObject({status:'DENIED',code:'INVALID_REQUEST'});
       const runCli=promisify(execFile);
       for(const [token,expected,principal] of [[keys['buyer-agent'],'ONBOARDED','buyer-agent'],[keys['sourcing-agent'],'AUTHENTICATED_NO_GRANTS','sourcing-agent']] as const){
         const {stdout,stderr}=await runCli(process.execPath,['--import','tsx','apps/cli/src/onboard.ts','--url',mcpUrl],{env:{...process.env,AGENT_API_KEY:token}});
@@ -104,6 +106,7 @@ for (const backend of ['sqlite','postgres'] as const) describe(`Manufact HTTP MC
       const grant=await ok(sourcing,'accept_authority_offer',{request_id:request.request_id,idempotency_key:'accept'});
       const receipt=await ok(sourcing,'execute_action',purchase(grant.id,'purchase'));expect(receipt).toMatchObject({amount_cents:85000,simulated:true,outcome:'COMPLETED'});
       expect(await ok(sourcing,'execute_action',purchase(grant.id,'purchase'))).toEqual(receipt);expect(orders.size).toBe(1);
+      expect((await ok(buyer,'get_workflow',{root_grant_id:'grant-root-buyer'})).receipts).toEqual([receipt]);
       const inspected=await call(sourcing,'get_my_grants');expect((inspected._meta as any).principal_id).toBe('sourcing-agent');expect((inspected._meta as any).inspector.budgets).toContainEqual({grant_id:grant.id,remaining_budget_cents:5000,authority_code:'ACTIVE'});
       expect((await call(sourcing,'execute_action',{...purchase(grant.id,'margin'),action:'supplier.margin.read'})).structuredContent).toMatchObject({code:'SELLER_POLICY_DENIED'});
       const first=await ok(buyer,'delegate_authority',{parent_grant_id:'grant-root-buyer',recipient_principal_id:'sourcing-agent',scope:scope(15000)});
