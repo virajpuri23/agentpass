@@ -4,7 +4,7 @@ The official `mcp-apps` scaffold, adapted to the existing AgentPass authority AP
 
 This adapter uses published `mcp-use@2.8.2`. The scaffold generated on October 17 pinned an unpublished `2.10.1`; npm's `latest` tag pointed to an accidental `3.0.0-canary` release. The app deliberately pins a published v2 release.
 
-`index.ts` default-exports `MCPServer` and exports all nine static tool references. `get_my_grants` binds the read-only `views/authority-inspector` view. Every request validates its own AgentPass bearer key against `/v1/me`, and each operation forwards that same credential to the authority API. No shared buyer key, tool-selected identity, or authority implementation exists here.
+`index.ts` default-exports `MCPServer` and exports every statically declared tool reference. `get_my_grants` binds the read-only `views/authority-inspector` view. Every request validates its own AgentPass bearer key against `/v1/me`, and each operation forwards that same credential to the authority API. No shared buyer key, tool-selected identity, or authority implementation exists here.
 
 Two backend modes:
 

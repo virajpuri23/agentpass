@@ -158,7 +158,7 @@ npx mcp-use client sourcing tools call get_my_grants
 
 The CLI stores connection headers in its local user configuration; keep that configuration private and outside Git. Supply keys through each client's private configuration, never a model prompt. The sourcing client must never receive the buyer/owner key.
 
-Discovered tools: `provision_child`, `describe_authority`, `get_my_grants`, `request_authority`, `get_authority_request`, `respond_authority_request`, `accept_authority_offer`, `delegate_authority`, `execute_action`, `revoke_authority`. All return structured envelopes with text fallbacks; all core workflows work without rendering the view.
+Discovered tools: `provision_child`, `describe_authority`, `get_my_grants`, `request_authority`, `get_authority_request`, `respond_authority_request`, `accept_authority_offer`, `delegate_authority`, `execute_action`, `verify_authority`, `revoke_authority`. The remote Manufact adapter also retains its six human onboarding tools. The additive [workforce contract](docs/11-WORKFORCE-CONTRACT.md) covers generic resources, protected gateways and recovery. All return structured envelopes with text fallbacks; all core workflows work without rendering the view.
 
 ### Supabase persistence and hosted authority
 
