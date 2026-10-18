@@ -27,21 +27,132 @@
   </header>
 
   <main>
-    <ul class="team" id="team" aria-label="The team">
-      <li data-agent="lead-agent"><b>🧑‍💻 Manager</b><span class="state">idle</span></li>
-      <li data-agent="design-agent"><b>🎨 Design</b><span class="state">not started</span></li>
-      <li data-agent="security-agent" class="external"><b>🔍 Security reviewer</b><small>outside company</small><span class="state">not started</span></li>
-      <li data-agent="hosting-agent"><b>🚀 Publishing</b><span class="state">not started</span></li>
-      <li data-agent="analytics-agent"><b>📊 Numbers</b><span class="state">not started</span></li>
-    </ul>
+    <section class="stage" aria-label="Animated diagram">
+      <div class="intro">
+        <div class="intro-text">The <b>manager</b> gets one master pass and gives each <b>helper</b> a smaller one. <b>AgentPass</b> checks every request before anything in the <b>project</b> is touched.</div>
+        <ul class="legend" aria-label="Legend">
+          <li><span class="chip good">✓</span> allowed</li>
+          <li><span class="chip bad">✕</span> blocked</li>
+          <li><span class="chip warn">!</span> asking</li>
+          <li><span class="chip lock">🔒</span> no pass opens it</li>
+        </ul>
+      </div>
 
-    <section class="card">
-      <h2>What happens</h2>
-      <ol class="story" id="story"><li class="empty">Press “Run demo”.</li></ol>
-      <p class="result" id="result"></p>
+      <svg id="diagram" viewBox="0 0 1000 470" role="img" aria-labelledby="diagram-title">
+        <title id="diagram-title">The manager AI and its helpers reach the project only through AgentPass; an outside security firm may look but not touch</title>
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrowhead"/></marker>
+        </defs>
+
+        <!-- company boundaries -->
+        <rect class="org" x="16" y="16" width="440" height="438" rx="18"/>
+        <text class="org-label" x="36" y="46">Acme</text><text class="org-sub" x="36" y="64">the company doing the work</text>
+        <rect class="org" x="672" y="16" width="312" height="330" rx="18"/>
+        <text class="org-label" x="692" y="46">The project</text><text class="org-sub" x="692" y="64">everything here sits behind AgentPass</text>
+        <rect class="org ext" x="672" y="362" width="312" height="92" rx="18"/>
+        <text class="org-label" x="692" y="386">Sentinel Sec</text><text class="org-sub" x="692" y="404">an outside security firm</text>
+
+        <!-- static links -->
+        <path class="wire" d="M200 118 L200 150" marker-end="url(#arrow)"/>
+        <path class="wire faint" d="M200 236 L101 300"/>
+        <path class="wire faint" d="M200 236 L241 300"/>
+        <path class="wire faint" d="M200 236 L381 300"/>
+        <path class="wire faint" d="M296 193 L500 235"/>
+        <path class="wire faint" d="M628 235 L690 78"/>
+        <path class="wire faint" d="M628 235 L690 174"/>
+        <path class="wire faint" d="M628 235 L690 270"/>
+        <path class="wire faint" d="M628 290 L690 417"/>
+
+        <!-- Acme nodes -->
+        <g class="node" id="n-owner" transform="translate(110 70)">
+          <rect width="180" height="48" rx="12"/>
+          <text x="16" y="21" class="n-title">👤 Owner</text>
+          <text x="16" y="38" class="n-sub">a person · gives the master pass</text>
+        </g>
+        <g class="node" id="n-lead" transform="translate(104 150)">
+          <rect width="192" height="86" rx="14"/>
+          <text x="16" y="26" class="n-title">🧑‍💻 Manager AI</text>
+          <text x="16" y="45" class="n-sub" id="s-lead">directs the helpers</text>
+          <g class="badge" id="b-lead" transform="translate(16 56)"><rect width="0" height="20" rx="10"/><text x="8" y="14"></text></g>
+        </g>
+        <g class="node dim" id="n-design" transform="translate(36 300)">
+          <rect width="130" height="112" rx="14"/>
+          <text x="12" y="24" class="n-title">🎨 Design</text>
+          <text x="12" y="42" class="n-sub" id="s-design">not started</text>
+          <g class="badge" id="b-design" transform="translate(12 56)"><rect width="0" height="20" rx="10"/><text x="8" y="14"></text></g>
+          <text id="l-design" x="104" y="26" class="lock" opacity="0">🔒</text>
+        </g>
+        <g class="node dim" id="n-hosting" transform="translate(176 300)">
+          <rect width="130" height="112" rx="14"/>
+          <text x="12" y="24" class="n-title">🚀 Publishing</text>
+          <text x="12" y="42" class="n-sub" id="s-hosting">not started</text>
+          <g class="badge" id="b-hosting" transform="translate(12 56)"><rect width="0" height="20" rx="10"/><text x="8" y="14"></text></g>
+          <text id="l-hosting" x="104" y="26" class="lock" opacity="0">🔒</text>
+        </g>
+        <g class="node dim" id="n-analytics" transform="translate(316 300)">
+          <rect width="130" height="112" rx="14"/>
+          <text x="12" y="24" class="n-title">📊 Numbers</text>
+          <text x="12" y="42" class="n-sub" id="s-analytics">not started</text>
+          <g class="badge" id="b-analytics" transform="translate(12 56)"><rect width="0" height="20" rx="10"/><text x="8" y="14"></text></g>
+          <text id="l-analytics" x="104" y="26" class="lock" opacity="0">🔒</text>
+        </g>
+
+        <!-- the gate -->
+        <g class="node gate" id="n-gate" transform="translate(500 150)">
+          <rect width="128" height="170" rx="20"/>
+          <text x="64" y="44" class="n-title c">🛡️</text>
+          <text x="64" y="74" class="n-title c">AgentPass</text>
+          <text x="64" y="94" class="n-sub c">checks every</text>
+          <text x="64" y="110" class="n-sub c">request</text>
+        </g>
+
+        <!-- project resources -->
+        <g class="node res" id="r-repo" transform="translate(690 56)">
+          <rect width="280" height="44" rx="12"/>
+          <text x="14" y="20" class="n-title">📁 The page’s files</text>
+          <text x="14" y="36" class="n-sub">read or edit, with the right pass</text>
+        </g>
+        <g transform="translate(690 108)"><g class="vault-g" id="r-env"><rect width="280" height="36" rx="10" class="vault"/><text x="12" y="23" class="vault-text">🔒 The secrets file: no pass opens it</text></g></g>
+        <g class="node res" id="r-preview" transform="translate(690 152)">
+          <rect width="280" height="44" rx="12"/>
+          <text x="14" y="20" class="n-title">🧪 Test copy of the site</text>
+          <text x="14" y="36" class="n-sub">safe to publish here, with a pass</text>
+        </g>
+        <g transform="translate(690 204)"><g class="vault-g" id="r-prod"><rect width="280" height="36" rx="10" class="vault"/><text x="12" y="23" class="vault-text">🔒 The live site: nobody here may publish</text></g></g>
+        <g class="node res" id="r-agg" transform="translate(690 248)">
+          <rect width="280" height="44" rx="12"/>
+          <text x="14" y="20" class="n-title">📈 Visitor totals</text>
+          <text x="14" y="36" class="n-sub">visits and signups, no names</text>
+        </g>
+        <g transform="translate(690 300)"><g class="vault-g" id="r-raw"><rect width="280" height="36" rx="10" class="vault"/><text x="12" y="23" class="vault-text">🔒 People’s records: stay private</text></g></g>
+
+        <!-- external security company -->
+        <g class="node dim external" id="n-security" transform="translate(690 392)">
+          <rect width="280" height="50" rx="14"/>
+          <text x="14" y="22" class="n-title">🔍 Security reviewer</text>
+          <text x="14" y="40" class="n-sub" id="s-security">not called in yet · may look, never edit</text>
+          <g class="badge" id="b-security" transform="translate(190 8)"><rect width="0" height="20" rx="10"/><text x="8" y="14"></text></g>
+        </g>
+
+        <g id="flows"></g>
+      </svg>
+
+      <div class="caption" aria-live="polite">
+        <div class="step-no" id="step-no">Ready</div>
+        <div class="step-title" id="story">Press “Run demo”.</div>
+        <div class="step-detail" id="story-detail"></div>
+        <div class="step-state" id="story-state"></div>
+      </div>
+      <ol class="dots" id="dots" aria-label="Progress"></ol>
     </section>
 
-    <div class="two">
+    <aside class="side">
+      <section class="card">
+        <h2>The 12 checks</h2>
+        <ol class="story" id="checks"></ol>
+        <p class="result" id="result"></p>
+      </section>
+
       <section class="card">
         <h2>Results</h2>
         <dl class="results">
@@ -51,17 +162,13 @@
           <dt>Visitor numbers</dt><dd id="metrics">—</dd>
         </dl>
       </section>
-      <section class="card">
-        <h2>The 12 checks</h2>
-        <ol class="checks" id="checks"></ol>
-      </section>
-    </div>
 
-    <details class="card">
-      <summary>Technical log <span id="count" class="muted"></span></summary>
-      <ol id="timeline"><li class="empty">Press “Run demo”.</li></ol>
-    </details>
+      <details class="card">
+        <summary>Technical log <span id="count" class="muted"></span></summary>
+        <ol id="timeline"><li class="empty">Press “Run demo”.</li></ol>
+      </details>
+    </aside>
   </main>
-  <p class="foot">Every yes and no is a real AgentPass decision, slowed down so you can follow. The test copy runs on this computer; no real website is touched. <a href="/">Other demos</a></p>
+  <p class="foot">Every ✓ and ✕ is a real AgentPass decision, slowed down so you can follow. The test copy runs on this computer; no real website is touched. <a href="/">Other demos</a></p>
 </body>
 </html>
