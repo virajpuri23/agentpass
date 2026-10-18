@@ -26,8 +26,37 @@ readiness. Its `get_my_grants` tool provides the existing read-only inspector.
 Some hosts may not support API-key connections; do not switch to unauthenticated
 access to accommodate them.
 
+For a local Codex connection, a provisioned child can use the existing private
+credential file directly through `http_headers_helper`, without copying its token
+into configuration or a shell environment:
+
+```toml
+[mcp_servers.agentpass]
+url = "https://fast-steel-94x84.run.mcp-use.com/mcp"
+http_headers_helper = "/absolute/path/to/node --import /absolute/path/to/tsx/dist/loader.mjs /absolute/path/to/agentpass/apps/mcp/src/codex-headers.ts /private/runtime/codex.json https://fast-steel-94x84.run.mcp-use.com/mcp"
+```
+
+Use the installed Node 24 and tsx paths and a Codex runtime that supports
+`http_headers_helper` (the desktop's bundled runtime supports it; the locally
+installed Terminal CLI 0.145.0 does not). Remove any previous
+`bearer_token_env_var` for this connection so it cannot override the child header.
+The helper rejects expired credentials and endpoint mismatches. Its stdout is
+secret transport for Codex only: never run it in a chat-visible terminal. Restart
+the host connection after configuration; this does not verify the cloud plugin.
+
 ## Verification on October 17, 2026 (Pacific)
 
+- A separately provisioned, zero-budget quote-only child authenticated through the
+  private-file helper. The desktop's bundled Codex runtime discovered all 16 tools;
+  `describe_authority` and `get_my_grants` succeeded through the helper. Three
+  helper integration tests and the root typecheck passed. Rendering the inspector
+  inside the desktop chat remains unverified.
+- Human signup was deferred in favor of this agent-first connection. An optional
+  OAuth deployment failed before promotion because the build omitted
+  `migrations/postgres`; the previous bearer deployment remains active. OAuth
+  environment additions were removed, Supabase OAuth and its hook were disabled,
+  and the previous Site URL was restored. Prepared client registrations, exact
+  audience bindings and private configuration were retained for a future rollout.
 - Hosted `/health` returned HTTP 200.
 - The configured authenticated MCP client discovered 16 deployed tools and
   `get_my_grants` returned the authenticated principal's grants and inspector data.
