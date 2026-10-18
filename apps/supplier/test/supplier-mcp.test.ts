@@ -16,11 +16,14 @@ describe('supplier public MCP', () => {
 
     const result = await client.callTool({ name: 'describe_supplier', arguments: {} });
     const text = JSON.stringify(result);
-    expect(result.structuredContent).toMatchObject({
-      status: 'OK',
-      data: { supplier_id: 'supplier-co', catalog: [{ sku_id: 'PACK-500', list_unit_price_cents: 170 }] },
-    });
-    expect(text).not.toMatch(/internal_unit_cost|stock_quantity|"cost_|margin_cents|\b100\b|\b1000\b/);
+    const data = (result.structuredContent as any).data;
+    expect(data.supplier_id).toBe('supplier-co');
+    expect(data.catalog.map((c: any) => [c.sku_id, c.list_unit_price_cents])).toEqual([
+      ['DESIGN-PACK', 18000], ['PACK-500', 170], ['QA-MINUTES', 100], ['SEC-SCAN', 12000],
+    ]);
+    for (const item of data.catalog) expect(Object.keys(item).sort()).toEqual(['currency', 'list_unit_price_cents', 'name', 'sku_id']);
+    // private costs (100 for PACK-500 is also QA's public price, so check the others) and stock never appear
+    expect(text).not.toMatch(/internal_unit_cost|stock_quantity|"cost_|margin_cents|\b7000\b|\b9000\b|\b55\b/);
     await client.close();
   });
 });
