@@ -38,6 +38,8 @@ describe('public MCP self-service lifecycle (FIXTURE OAuth, consent and worker)'
       expect(await call(parent,'provision_agent',request)).toMatchObject({status:'DENIED',code:'INSUFFICIENT_SCOPE'});
       // Trusted consent is a fixture here; the browser/CSRF journey is independently tested.
       const consent=new ConsentService(new AuthorityEngine(store,supplier),()=>scope),intent=await consent.request(context.account_id,context.connection.id,scope);await consent.approve(context.account_id,intent.id);organizations.push(context.organization.id);
+      const activeContext=await ok(parent,'get_onboarding_context');
+      const legacy=await call(parent,'provision_child',{parent_grant_id:activeContext.connection.grant_id,scope:{...scope,max_delegation_depth:1},credential_hash:createHash('sha256').update(randomBytes(32).toString('base64url')).digest('hex'),idempotency_key:'human-legacy-provision'});expect(legacy).toMatchObject({status:'DENIED',code:'INVALID_REQUEST',next_action:'contact_owner'});expect(legacy.reason).toContain('provision_agent');
       const agent=await ok(parent,'provision_agent',request);expect(agent.state).toBe('PROVISIONING');
       expect((await ok(parent,'provision_agent',request)).agent_id).toBe(agent.agent_id);
       expect(await call(parent,'provision_agent',{...request,task:'changed'})).toMatchObject({status:'DENIED',code:'ALREADY_EXECUTED'});

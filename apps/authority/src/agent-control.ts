@@ -240,14 +240,27 @@ export class AgentControl {
   async result(runner:RunnerAdmission,id:string,input:unknown){
     const result=schemas.runner_result_request.parse(input),fingerprint=hash(JSON.stringify(result));
     return this.transition(async()=>{
+      const recorded=await this.db.prepare('SELECT * FROM agent_jobs WHERE id=?').get(id) as JobRow|undefined;
+      if(recorded?.outcome==='FAILED'){
+        if(recorded.runner_id!==runner.id||recorded.claim_id!==result.claim_id)deny('INVALID_CALLER','Job unavailable',404);
+        const row=await this.admitted(runner,recorded);
+        if(row.state==='REVOKED')deny('INVALID_CALLER','Claim is no longer live',403);
+        const leaseExpiresAt=Date.parse(recorded.lease_expires_at??'');
+        if(!Number.isFinite(leaseExpiresAt)||leaseExpiresAt<=this.engine.now().getTime())deny('INVALID_CALLER','Claim is no longer live',403);
+        if(recorded.result_fingerprint!==fingerprint)deny('ALREADY_EXECUTED','Result already recorded',409);
+        if(row.state!=='FAILED')deny('INVALID_CALLER','Claim is no longer live',403);
+        await this.connection(await this.engine.principal(row.parent_principal_id));
+        return this.output(row);
+      }
       const {job,row}=await this.active(runner,id,result.claim_id,true);
       if(job.result_fingerprint){if(job.result_fingerprint!==fingerprint)deny('ALREADY_EXECUTED','Result already recorded',409);return this.output(row);}
       if(result.outcome==='COMPLETED'&&row.state!=='READY')deny('INVALID_REQUEST','Child readiness is required before completion');
+      const child=await this.engine.principal(row.child_principal_id!);
       await this.db.prepare('UPDATE agent_jobs SET outcome=?,result_fingerprint=? WHERE id=?').run(result.outcome,fingerprint,id);
       if(result.outcome==='FAILED')await this.stop(row,'FAILED');
       else await this.db.prepare("UPDATE managed_agents SET execution_state='COMPLETED',updated_at=? WHERE id=?").run(this.engine.time(),row.id);
       // Raw runner summaries are untrusted and may contain provider credentials; persist only outcome/hash.
-      await this.engine.audit(await this.engine.principal(row.child_principal_id!),'agent.result',result.outcome,row.child_grant_id!,undefined,row.id);
+      await this.engine.audit(child,'agent.result',result.outcome,row.child_grant_id!,undefined,row.id);
       return this.output((await this.row(row.id))!);
     });
   }
