@@ -50,16 +50,17 @@ These are checkpoints; adapt as needed without compromising mandatory gates.
 
 The original checklist above is historical and is not a current completion report.
 Use [the detailed A plan](docs/17-SELF-SERVICE-ONBOARDING-PLAN.md) for baseline
-evidence, scope, ownership, acceptance tests and cutoffs. All items below are planned.
+evidence, scope, ownership, acceptance tests and cutoffs. Current proof and remaining
+external gates are in [the rollout runbook](docs/21-SELF-SERVICE-ROLLOUT.md).
 
-- [ ] **A9:** [A-side decisions, schemas and fixtures prepared](docs/18-A9-ONBOARDING-CONTRACTS.md); B agreement on additive contracts/runner boundary pending.
-- [ ] **A10:** additive migrations; verified accounts, personal workspaces, memberships and connections.
-- [ ] **A11:** OAuth ingress with durable connection binding; preserve service bearer clients.
-- [ ] **A12:** trusted consent and bounded connection authority; no automatic purchase budget/reset.
-- [ ] **A13:** conversational onboarding/provision/list/get/revoke MCP tools.
-- [ ] **A14:** private credential delivery, durable jobs/outbox, runner leases and recovery.
-- [ ] **A15:** requester/agent audit provenance, inherited revocation and real B-worker integration.
-- [ ] **A16:** real ChatGPT and Claude staging journeys, evidence and schema-first rollout.
+- [x] **A9:** [Agreed contract](docs/18-A9-ONBOARDING-CONTRACTS.md); B accepted PR #14 via direct user confirmation, shared types/API promoted.
+- [x] **A10:** seed-free additive migrations; accounts, personal workspaces, memberships and connections; SQLite + disposable PostgreSQL verified.
+- [ ] **A11:** OAuth ingress implemented; fixture JWT verification and service bearer compatibility pass. Real provider login/refresh/revocation gate open.
+- [x] **A12:** trusted browser consent and bounded connection authority implemented and fixture HTTP tested; zero default budget, no reset. Hosted login remains A11/A16 gate.
+- [x] **A13:** six conversational MCP tools implemented; official SDK fixture lifecycle passes, including isolation, private delivery, simulated purchase and revocation.
+- [ ] **A14:** private Vault adapter, durable jobs/outbox, runner leases and recovery implemented; SQLite/PG fixture tests pass. Real Vault/delivery gate open.
+- [ ] **A15:** persisted provenance, transactional connection/membership revocation and descendant denial implemented; real B-worker integration open.
+- [ ] **A16:** staging/runbook/readiness support implemented; real ChatGPT/Claude journeys and authorized schema-first rollout open.
 
 **B dependency:** fixed-template worker execution/sandbox and optional dashboard
 integration. A owns its authenticated control contract and may verify it with a

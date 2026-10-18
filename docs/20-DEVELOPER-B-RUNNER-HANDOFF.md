@@ -7,6 +7,23 @@ The additive A9 protocol was accepted by B through the user's confirmation in th
 coordinating chat. Schemas are exported as `onboardingSchemas` from
 `packages/contracts/src/index.ts`; reuse these rather than inventing payloads.
 
+## Existing B baseline
+
+Read-only inventory of `origin/feat/agent-demo` at
+`fb4c1568b08c2175d141f807fa32982ef4bccddc` found separate deterministic buyer and
+sourcing processes, an IPC launcher, distinct preconfigured keys, real MCP
+negotiation and a simulated-purchase demo. The decider exposes an injectable LLM
+interface but has no model client implementation; the demo labels decisions
+deterministic. None of that branch consumes the new claim/lease/delivery/ready/result
+protocol or deduplicates a `launch_id`.
+
+Reuse that authority/MCP behavior. Replace fixed child identity/key assumptions
+with the issued child binding from A's job. The current worker expects a structured
+`PurchaseTask`, while this accepted job has bounded `task:string`; add a validated
+adapter for `sourcing-v1`, keeping task text untrusted. It cannot choose shell
+commands, images, credentials, runner identity or authoritative prices. Do not
+change the wire field to an object without renewed shared-contract agreement.
+
 ## What A supplies
 
 - Connection-bound `provision_agent`, `list_agents`, `get_agent`, `revoke_agent`
@@ -14,7 +31,8 @@ coordinating chat. Schemas are exported as `onboardingSchemas` from
   coordinating A chat.
 - Persisted provisioning intent before secret work, stable private secret name,
   canonical child issuance and one launch job committed in one transaction.
-- Authenticated runner admission by credential hash and explicit organization IDs;
+- Authenticated runner admission by credential hash, explicit organization IDs or
+  a persisted personal-workspace assignment to one configured trusted runner;
   no organization wildcard or model-selected runner identity.
 - Private child-only credential delivery; no parent/owner key, database access or
   secret-store reference is returned. Delivery responses use `Cache-Control:no-store`.
@@ -103,9 +121,11 @@ Relevant private deployment settings:
   enabled in production. Missing storage returns `SERVICE_UNAVAILABLE`.
 - `AGENTPASS_RUNNERS_JSON`: array of `{id,keyHash,organizationIds}` admissions.
   Supply hashes privately; never commit real runner credentials or tenant IDs.
-  A newly created workspace must be explicitly admitted before a runner can claim
-  its jobs. Public automatic runner enrollment is not implemented; without admission
-  provisioning stays PROVISIONING and must not be presented as a running worker.
+  Alternatively set `AGENTPASS_ONBOARDING_RUNNER_ID` to an existing trusted runner
+  ID. The user approved automatic persisted assignment for consented personal
+  workspaces. Only that runner may have an empty explicit organization list;
+  assignment conflicts fail closed. B authenticates normally and receives only
+  admitted jobs. Without a live worker, PROVISIONING must not be presented as running.
 - Apply the ordered account and runner migrations with the seed-free migration
   command before compatible application code. Do not reset demo keys or ledgers.
 - OAuth/consent values and host setup are in `19-A11-OAUTH.md` and the coordinating

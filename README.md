@@ -246,3 +246,13 @@ child file explicitly, even if a parent key remains in the inherited environment
 Retry provisioning with the same files; never regenerate a credential after an
 uncertain response. See [trusted provisioning](docs/16-CHILD-PROVISIONING.md) for
 scope, expiry, revocation, private-file rules, and the required schema rollout.
+
+### Self-service from a conversational host
+
+The additive remote MCP path resolves a verified person to a personal workspace
+and separate client connection, then requires explicit bounded consent before
+provisioning children. The backend handles credentials privately; people do not
+enter organization/principal IDs or copy child keys. The implementation and local
+fixture evidence are in [the rollout runbook](docs/21-SELF-SERVICE-ROLLOUT.md).
+Real Supabase Auth/Vault, B's worker and ChatGPT/Claude staging gates remain open; this is
+not yet a released public onboarding service.

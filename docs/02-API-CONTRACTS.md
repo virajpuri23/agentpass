@@ -2,12 +2,11 @@
 
 **Freeze this document before coding in parallel.** TS types: `packages/contracts/src/index.ts`. Examples: `fixtures/`. Do not rename fields or endpoints without both developers agreeing.
 
-Self-service OAuth/workspace/agent-control interfaces are currently proposals in
-[the Developer A plan](17-SELF-SERVICE-ONBOARDING-PLAN.md#5-proposed-interface-and-worker-boundary).
-They are not implemented or part of this frozen contract. A9 requires both
-developers to agree and update this document/types/fixtures before new handlers.
-The [A9 review pack](18-A9-ONBOARDING-CONTRACTS.md) now supplies exact proposed
-paths and portable schemas; it remains separate until that agreement is recorded.
+The additive self-service contract in [the A9 pack](18-A9-ONBOARDING-CONTRACTS.md)
+was accepted by Developer B, confirmed directly by the user for PR #14 on October
+17, 2026. Its source is `packages/contracts/src/onboarding.ts`, re-exported from
+`index.ts`; portable schemas and fixtures retain their existing proposal filenames.
+Runtime configuration and verification limits are in [the rollout runbook](21-SELF-SERVICE-ROLLOUT.md).
 
 ## Authentication, principals and errors
 
@@ -70,6 +69,54 @@ paths and portable schemas; it remains separate until that agreement is recorded
 `respond(COUNTEROFFER)` must validate offered scope against issuer's **live** authority; `accept` must validate again (time, revocation, remaining scope). This prevents stale counteroffers being used after revocation. Parent `respond` and child `accept` cannot be called by the opposite party.
 
 For P0 root grants are seeded through a **CLI/admin-only routine**. Do not expose a public, unauthenticated root-grant issuance API.
+
+### Additive self-service endpoints
+
+OAuth access tokens are verified for the canonical AgentPass resource at both MCP
+and authority ingress. Persisted `(issuer, subject, verified client)` resolves the
+account, personal workspace and limited connection principal. Neither tool input
+nor token refresh chooses an organization, owner role or allocation.
+
+| Verb/path | Request schema in `onboardingSchemas` | Result/authentication |
+|---|---|---|
+| `GET /v1/onboarding/context` | `context_request` | `context_data`; verified human OAuth connection |
+| `POST /v1/agents` | `provision_request` | `agent_data`; active consented connection |
+| `GET /v1/agents` | `list_request` query (digit-only numeric limit) | `list_data`; own connection only |
+| `GET /v1/agents/:agent_id` | `get_request` path | `agent_data`; own connection only |
+| `POST /v1/agents/:agent_id/revoke` | `revoke_agent_request`, ID in path | `agent_data`; revoke first, private cleanup afterward |
+| `POST /v1/onboarding/connection/revoke` | `revoke_connection_request` | `revoke_connection_data`; derive connection from verified OAuth |
+
+The corresponding six remote MCP tools are `get_onboarding_context`,
+`provision_agent`, `list_agents`, `get_agent`, `revoke_agent`, `revoke_connection`.
+The legacy stdio adapter retains its existing ten service-agent tools. No public
+tool returns child credentials or approves its own root authority.
+
+Trusted first-party browser routes are `GET /onboarding?connection=...`,
+`GET /onboarding/callback`, `GET /onboarding/approve`, and
+`POST /onboarding/approve`. They require independent user login, one-use encrypted
+session state, PKCE and CSRF. The approval form defaults to zero purchase budget.
+There is no model-facing consent-approval API. The MCP app proxies these fixed
+paths to authority at its canonical HTTPS origin without forwarding bearer tokens.
+Supabase's own OAuth authorization UI is mounted at `/onboarding/identity`:
+GET accepts a provider `authorization_id`; POST `/login`, GET/POST `/verify`,
+GET `/review`, and POST `/decision` implement verified email OTP and explicit
+provider-client approval/denial. These routes do not issue AgentPass grants.
+All browser POSTs use exact Origin, one-use sessions and CSRF; prior provider
+consent redirects must match a server-configured callback allowlist.
+
+| Private route | Schema | Authentication |
+|---|---|---|
+| `POST /internal/agent-jobs/claim` | `runner_claim_request` | Trusted runner admission, exact organization list |
+| `POST /internal/agent-jobs/:job_id/credential` | `runner_credential_request` | Same live runner/claim; **secret-bearing private response**, no-store |
+| `POST /internal/agent-jobs/:job_id/heartbeat` | `runner_heartbeat_request` | Same live runner/claim |
+| `POST /v1/agent-runs/:job_id/ready` | `child_ready_request` | Exact issued child credential and delivered live claim |
+| `POST /internal/agent-jobs/:job_id/result` | `runner_result_request` | Same live runner/claim; sanitized outcome/hash only |
+
+The lease is 30 seconds, heartbeat 10 seconds, and the stable launch ID must be
+deduplicated by B. At most three claims are allowed before delivery; losing a
+lease after delivery fails the instance and revokes the child. `PENDING` and
+`PROVISIONING` never mean a model is running; `READY` requires the child identity
+proof. See [the B handoff](20-DEVELOPER-B-RUNNER-HANDOFF.md) for full recovery rules.
 
 ## Supplier HTTP endpoints (Developer B)
 

@@ -109,3 +109,12 @@ Log structured events with fields `event_id`, `timestamp`, `principal_id`, `gran
 ## Handoff message you should send B after A2
 
 > Authority API is running on port 4100. Agent keys are provisioned in shared local `.env` (not committed). Available endpoints: /health, /v1/me, /v1/grants/{id}/delegate. Root fixture ID: grant-root-buyer. JSON contract v1 frozen. Sample curl and tests are in my branch. Next: request/offer flow and ledger.
+
+## Self-service follow-on
+
+Use [the A9–A16 plan](17-SELF-SERVICE-ONBOARDING-PLAN.md),
+[accepted additive contract](18-A9-ONBOARDING-CONTRACTS.md),
+[B runner handoff](20-DEVELOPER-B-RUNNER-HANDOFF.md), and
+[current implementation/rollout status](21-SELF-SERVICE-ROLLOUT.md). The trusted
+consent routes belong to authority; the optional B dashboard is not an onboarding
+dependency. Keep real provider/worker/host gates open until actually verified.

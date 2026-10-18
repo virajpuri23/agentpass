@@ -1,8 +1,12 @@
 # A9 — onboarding decisions and contract review pack
 
-**Status: A-side draft implemented and tested; Developer B agreement pending.**
-No proposed endpoint, OAuth login, migration or worker is implemented by this slice.
-The frozen v1 API and `packages/contracts/src/index.ts` remain unchanged.
+**Status: accepted by Developer B for PR #14, as directly confirmed by the user on October 17, 2026.**
+The accepted additive types are promoted to `packages/contracts/src/onboarding.ts`
+and [the API contract](02-API-CONTRACTS.md). This pack records the original design;
+see [current implementation and rollout evidence](21-SELF-SERVICE-ROLLOUT.md).
+The user subsequently directed the existing Manufact + Supabase stack. Supabase
+Auth replaces the initial Auth0 choice; public tool and authority scope contracts
+remain the accepted shapes. Identity is still verified at both ingress boundaries.
 
 ## Baseline and review artifacts
 
@@ -11,13 +15,13 @@ This work is isolated on `codex/onboarding-contracts`; production is not modifie
 The earlier planning-doc commit was carried onto this branch because it was not
 included in that merge. Reverify deployment provenance before any rollout.
 
-- [Portable JSON Schema draft](../contracts/proposals/onboarding-v1.schema.json):
-  definitions under `$defs`; review-only, not a deployed service contract.
+- [Portable JSON Schema](../contracts/proposals/onboarding-v1.schema.json):
+  definitions under `$defs`; accepted additive contract, retaining its review filename.
 - [Positive lifecycle fixture](../fixtures/onboarding-v1.proposal.json): FIXTURE,
   contains no bearer credential, represents a previously consented test allocation.
   Its $1,000 parent is not a new-user default.
-- [Executable validators](../apps/authority/test/contracts/onboarding-proposal.ts):
-  test-only, not imported by production code. Generated schema must match them.
+- [Executable validators](../packages/contracts/src/onboarding.ts):
+  shared source of truth; the original test module re-exports them. Generated schema must match them.
 - [Contract tests](../apps/authority/test/onboarding-contracts.test.ts): strict
   shape checks and a bridge to the actual existing child issuance/auth/revocation
   engine. They do not prove OAuth or worker execution.
@@ -26,20 +30,20 @@ included in that merge. Reverify deployment provenance before any rollout.
 
 | Decision | A-side selection and reason |
 |---|---|
-| Identity provider | Auth0. Installed `mcp-use@2.8.2` exports `oauthAuth0Provider` from `mcp-use/oauth/auth0`; its verifier is issuer/JWKS/resource bound. No framework upgrade is assumed. Tenant/client setup is missing. |
-| Client registration | Test the installed adapter's advertised DCR flow first, with PKCE S256 and Auth0 Resource Parameter Compatibility Profile. Approve/persist the actual clients; `clientInfo.name` is not identity. Do not invent CIMD support or enable unrestricted production registration as a side effect. |
+| Identity provider | Supabase Auth OAuth 2.1, per the user's stack direction. Installed `mcp-use@2.8.2` exports `oauthSupabaseProvider`; ES256 project JWKS plus an AgentPass-specific audience and approved client ID bind identity. No framework upgrade is assumed. Hosted setup remains unverified. |
+| Client registration | Test Supabase OAuth 2.1 discovery/registration with PKCE S256. Approve/persist actual clients; `clientInfo.name` is not identity. Do not invent CIMD support or enable unrestricted production registration as a side effect. |
 | Canonical resource | One explicit HTTPS `MCP_PUBLIC_URL`, including `/mcp`, is the AgentPass logical OAuth resource/audience. Private authority API is a backend of that resource and independently verifies the same intended-resource token. Do not send it to supplier or runner services. |
-| OAuth caller binding | Verified `(iss, sub)` resolves an account; verified client claim (`azp`, with conflicting client claims rejected) resolves an approved client. First release binds one connection per account/personal workspace/client. Refresh/reconnect returns the existing connection; revoked connections require trusted reauthorization, never automatic reactivation. No arbitrary workspace selection in tools. |
+| OAuth caller binding | Verified `(iss, sub)` resolves an account; verified `client_id` (with conflicting `azp` rejected) resolves an approved client. First release binds one connection per account/personal workspace/client. Refresh/reconnect returns the existing connection; revoked connections require trusted reauthorization, never automatic reactivation. No arbitrary workspace selection in tools. |
 | Human vs machine | OAuth human onboarding rejects machine-to-machine bootstrap. Existing opaque agent bearer credentials remain separate. Provider roles/email/user-editable metadata do not establish AgentPass membership, owner role or grant limits. |
 | Initial authority | Sign-in creates no spending allocation. Trusted consent approves quote-only, zero-budget access to configured explicit resources; consent cannot exceed service policy. A10/A12 enforce unique bootstrap and no allocation reset. |
 | Hosted credential store | Supabase Vault in the existing dedicated AgentPass project, accessed only by the private provisioner/control backend. It stores authenticated ciphertext with a project-managed external key. No runner receives SQL access or a Vault reference. Availability, privileges and real encrypted storage are UNVERIFIED until A14. No plaintext fallback. |
 | Local tests | Isolated in-memory credential delivery fixtures until a real Vault-enabled staging environment is available. Ordinary local PostgreSQL does not establish Vault compatibility. Never place real child secrets in tracked fixtures. |
 | Execution boundary | One B-owned fixed template, `sourcing-v1`. A owns durable intent, issuance, private job delivery, readiness verification and revocation. B owns idempotent process/model launch and sandboxing. |
-| Independent migration command | A10 will add `npm run db:migrate -- --target <sqlite|postgres>` (proposed, does not exist yet), using environment configuration and ordered migration records. It must not seed/demo-reset data, require four demo keys, print a DB URL, or run automatically on application startup. |
+| Independent migration command | A10 implements `npm run db:migrate -- --target <sqlite|postgres>`, using environment configuration and ordered migration records. It does not seed/demo-reset data, require four demo keys, print a DB URL, or run automatically on application startup. |
 
-Auth0 requires its resource parameter compatibility setting for MCP resource
+Supabase requires an AgentPass-specific audience hook for MCP resource
 requests to resolve to the intended API audience; an otherwise valid userinfo
-token must be rejected. See [Auth0 guidance](https://auth0.com/ai/docs/mcp/guides/resource-param-compatibility-profile).
+token must be rejected. See [Supabase token security](https://supabase.com/docs/guides/auth/oauth-server/token-security).
 Vault's decrypted view requires strict SQL access control; encryption does not
 authorize the reader. See [Vault documentation](https://supabase.com/docs/guides/database/vault).
 
@@ -57,9 +61,9 @@ fresh inventory of the hosted secret manager or proof that Vault is enabled.
 
 | Configuration | State / action before real integration |
 |---|---|
-| Auth0 issuer/domain, discovery/JWKS | MISSING locally. Configure `MCP_USE_OAUTH_AUTH0_DOMAIN`; normalize exact issuer and pin the canonical resource. |
+| Supabase issuer, discovery/JWKS | MISSING locally. Configure `MCP_USE_OAUTH_SUPABASE_URL`; issuer is `/auth/v1`, ES256 project JWKS, pinned canonical resource. |
 | Canonical MCP resource | `MCP_PUBLIC_URL` is documented in `.env.example`, but not present in inspected private deployment file. Select the staging URL first; do not infer it from untrusted Host headers. |
-| Audience alias | The installed adapter also understands `MCP_USE_OAUTH_AUTH0_AUDIENCE`; leave it unset when passing the explicit resource, or reject a mismatch. Never allow two independent audiences. |
+| Audience hook | Approved OAuth clients map to the canonical `/mcp` audience through the private access-token hook. Default `authenticated` tokens are rejected. Never accept two independent audiences. |
 | Approved OAuth clients/redirects | MISSING. Record verified ChatGPT/Claude registration identifiers and exact callback requirements through private provider administration. Proposed application allowlist name: `AGENTPASS_OAUTH_CLIENT_IDS`. No client credentials in the draft. |
 | Token/refresh policy | Configure access token lifetime at most 10 minutes and refresh/revocation support. A11 verifies actual claims and rejects longer lifetimes; do not claim host disconnect instantly invalidates tokens without a provider notification. |
 | Consent browser login | MISSING. A12 needs an allowlisted first-party OAuth client/session, HTTPS origin, callback and one-use CSRF-bound consent. A model-provided scope/approval alone cannot approve its own connection. |
@@ -111,7 +115,8 @@ to connection/filter and never an authority token. Proposed first-release servic
 ceilings: connection consent at most 24h, child at most 1h and no later than parent,
 delegation depth at most 2, at most 10 active children, at most 3 pending launches
 and 5 provisioning attempts/minute per connection. Persist quota/rate accounting;
-the canonical ledger still enforces shared spend. These ceilings await B review.
+the canonical ledger still enforces shared spend. B accepted these ceilings;
+the implementation narrows connection consent to one hour and depth two.
 
 `PENDING` has `authority:null`; no credential/grant has been issued yet.
 `PROVISIONING` and `READY` contain `{principal_id,grant_id,scope}` in `authority`.
@@ -131,7 +136,7 @@ child credential's lifetime.
 Dedicated runner authentication plus server-side organization/template admission
 is required. No runner identity is accepted in JSON. Job and claim IDs are handles,
 not bearer credentials; every private call rechecks runner binding, lease and
-grant/connection/membership liveness. Routes are proposals pending B agreement.
+grant/connection/membership liveness. These routes are part of the accepted A9 contract.
 
 | Proposed path | Input / output definition | Required behavior |
 |---|---|---|
@@ -170,17 +175,15 @@ Terminal completion never enlarges authority or means that a credential is renew
 |---|---|
 | A chooses integration targets and inventories local configuration names | PASSED for A9 decision preparation; actual configuration remains missing/unverified. |
 | Portable shapes, positive/negative fixtures, real existing-authority bridge | PASSED locally; see test command below. |
-| B accepts the public shapes, private delivery, lease/launch/stop semantics and fixed template | PENDING; no B agreement was found or inferred from their unrelated branch updates. |
-| Frozen type/API promotion | NOT STARTED; requires recorded A/B agreement. |
-| Auth0 account login, Vault encryption, runner execution, real host compatibility | UNVERIFIED; later A11/A14–A16 gates. |
+| B accepts the public shapes, private delivery, lease/launch/stop semantics and fixed template | PASSED: user directly confirmed B accepts PR #14's proposal on October 17, 2026. |
+| Frozen type/API promotion | PASSED: accepted validators/types exported from shared contracts; paths recorded in API documentation. |
+| Supabase account login, Vault encryption, runner execution, real host compatibility | UNVERIFIED; later A11/A14–A16 gates. |
 
-Review request for B (prepared, not sent): accept or amend the six proposed public
-tools/paths and JSON definitions; confirm `sourcing-v1`, private runner auth and
-credential injection; durable `launch_id` deduplication; 30s lease/10s heartbeat;
-child-key readiness; failure-after-delivery revocation; terminal result semantics;
-and the service ceilings. Record reviewer, revision and decision here before
-promoting the draft to shared types/handlers. No completion claim is inferred
-from a schema test or an agent message without the required agreement.
+Agreement covers PR #14's six public tools/paths and JSON definitions,
+`sourcing-v1`, private runner authentication and credential injection, durable
+`launch_id` deduplication, 30s lease/10s heartbeat, child-key readiness,
+failure-after-delivery revocation, terminal result semantics and service ceilings.
+The human confirmation is the approval evidence; passing tests alone is not.
 
 Run the A9 contract gate:
 
@@ -202,7 +205,6 @@ database. All five new A9 tests passed. Root and nested MCP typechecks, the MCP
 production build, local documentation links and `git diff --check` passed. The
 disposable PostgreSQL database was removed afterward. No hosted evidence is claimed.
 
-Next A-owned independent work is A10's internal persistence and seed-free migration
-foundation. Keep public DTO promotion, endpoint handlers and B's runner integration
-behind the recorded contract agreement. Do not wait for real provider credentials
-to write isolated persistence tests; do not label those tests real OAuth proof.
+Subsequent runtime work and its local/provider verification boundaries are tracked
+in [the rollout runbook](21-SELF-SERVICE-ROLLOUT.md). Do not label fixture tests real
+OAuth or model-worker proof.

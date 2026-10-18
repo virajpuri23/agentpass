@@ -1,6 +1,6 @@
 # Self-service MCP onboarding — Developer A implementation plan
 
-**Status:** implementation requested; A9 review artifacts are in progress. No deployment is authorized by this document.
+**Status:** A9 agreement recorded; A10–A15 local implementation and fixture verification are complete. The selected stack is Manufact + Supabase. Real provider, Vault, B worker and host rollout gates remain open. See [current rollout status](21-SELF-SERVICE-ROLLOUT.md). No deployment is authorized by this document.
 **Planning baseline:** October 17, 2026, commit `4620555` on
 `codex/agent-onboarding`, [PR #11](https://github.com/virajpuri23/agentpass/pull/11).
 **Goal:** a person connects AgentPass from ChatGPT, Claude, or another compatible
@@ -112,9 +112,9 @@ client display metadata alone when organization/connection selection is ambiguou
 
 ## 5. Proposed interface and worker boundary
 
-These are **unimplemented proposals**, not additions to the frozen v1 API. A9 must
-agree exact names, schemas, pagination, error codes and authentication, then update
-[02](02-API-CONTRACTS.md) and contract fixtures before handlers are written.
+These interfaces were accepted for PR #14 by Developer B, as confirmed directly
+by the user on October 17, 2026. The promoted contract is in
+[02](02-API-CONTRACTS.md) and `packages/contracts/src/onboarding.ts`.
 
 | Proposed MCP tool | Inputs | Output/authorization |
 |---|---|---|
@@ -154,8 +154,9 @@ the real provider/host/worker gates.
 ### A9 — Freeze the additive design and fixture contracts
 
 Current decision/contract pack: [A9 onboarding review](18-A9-ONBOARDING-CONTRACTS.md).
-A-side validators/fixtures are implemented; B acceptance and promotion to frozen
-shared contracts are pending. Auth0 and Supabase Vault are selected integration
+A-side validators/fixtures are implemented; B acceptance was confirmed by the
+user and the contract was promoted. The user then selected Manufact + Supabase,
+replacing the initial Auth0 target with Supabase Auth. Supabase Auth and Vault are integration
 targets, not configured or hosted-verified services.
 
 **Reach:** this plan, [02](02-API-CONTRACTS.md), agreed shared types/fixtures,
