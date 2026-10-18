@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import { openDatabase } from '../../../db/database.js';
-import { migrateStore } from '../../../db/migrations.js';
+import { assertMigrationsCurrent, migrateStore } from '../../../db/migrations.js';
 import { sqliteStore } from '../../../db/store.js';
 import { seedDatabase } from '../../../db/seed.js';
 
@@ -63,6 +63,21 @@ describe('seed-free ordered schema migrations', () => {
         audit: (db.prepare('SELECT COUNT(*) AS n FROM audit_events').get() as { n: number }).n,
       }).toEqual(before);
       expect(await migrateStore(sqliteStore(db), 'sqlite')).toEqual([]);
+    } finally { db.close(); }
+  });
+
+  it('checks the recorded migration inventory without writing and rejects a stale checksum', async () => {
+    const db = openDatabase(':memory:');
+    const store = sqliteStore(db);
+    try {
+      await migrateStore(store, 'sqlite');
+      const appliedBefore = db.prepare('SELECT version,applied_at FROM schema_migrations ORDER BY version').all();
+      await expect(assertMigrationsCurrent(store, 'sqlite')).resolves.toBeUndefined();
+      expect(db.prepare('SELECT version,applied_at FROM schema_migrations ORDER BY version').all()).toEqual(appliedBefore);
+
+      db.prepare('UPDATE schema_migrations SET checksum=? WHERE version=?').run('0'.repeat(64), (appliedBefore[0] as { version: string }).version);
+      await expect(assertMigrationsCurrent(store, 'sqlite')).rejects.toThrow(/migrations are missing or changed/);
+      expect((db.prepare('SELECT COUNT(*) AS count FROM schema_migrations').get() as { count: number }).count).toBe(appliedBefore.length);
     } finally { db.close(); }
   });
 

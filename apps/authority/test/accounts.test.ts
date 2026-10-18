@@ -5,15 +5,19 @@ import { migrateStore } from '../../../db/migrations.js';
 import { postgresStore } from '../../../db/postgres.js';
 import { sqliteStore } from '../../../db/store.js';
 import { AccountBootstrapError, AccountService } from '../src/accounts.js';
+import { AuthorityEngine } from '../src/engine.js';
+import type { AuthorityScope } from '../../../packages/contracts/src/index.js';
 
 describe('self-service account persistence', () => {
   let db: ReturnType<typeof openDatabase>;
   let accounts: AccountService;
+  let now: number;
 
   beforeEach(async () => {
+    now = Date.parse('2026-10-17T23:00:00.000Z');
     db = openDatabase(':memory:');
     await migrateStore(sqliteStore(db), 'sqlite');
-    accounts = new AccountService(sqliteStore(db), () => new Date('2026-10-17T23:00:00.000Z'));
+    accounts = new AccountService(sqliteStore(db), () => new Date(now));
   });
 
   afterEach(() => db.close());
@@ -81,6 +85,54 @@ describe('self-service account persistence', () => {
       id: pending.connection.id, state: 'ACTIVE', grant_id: grantId, scope, account_state: 'ACTIVE', membership_state: 'ACTIVE', principal_active: true,
     });
   });
+
+  it('deactivates all membership connections and bound grants while preserving descendant history', async () => {
+    const owner = await accounts.bootstrap({ issuer: 'https://identity.example/', subject: 'deactivated-person', client_id: 'first-client' });
+    const second = await accounts.bootstrap({ issuer: 'https://identity.example/', subject: 'deactivated-person', client_id: 'second-client' });
+    const authority = new AuthorityEngine(sqliteStore(db), {} as any, () => new Date(now));
+    const rootScope: AuthorityScope = {
+      actions: ['supplier.quote.request'], supplier_ids: ['supplier-co'], sku_ids: ['PACK-500'],
+      max_per_action_cents: 100, total_budget_cents: 200, expires_at: '2026-10-18T00:00:00.000Z', max_delegation_depth: 2,
+    };
+    const rootGrantId = `grant-${randomUUID()}`;
+    db.prepare(`INSERT INTO grants(id,organization_id,parent_grant_id,issuer_principal_id,subject_principal_id,scope_json,created_at)
+      VALUES(?,?,NULL,?,?,?,?)`).run(rootGrantId, owner.organization.id, owner.human_principal_id, owner.connection.principal_id, JSON.stringify(rootScope), '2026-10-17T23:00:00.000Z');
+    db.prepare("UPDATE assistant_connections SET state='ACTIVE',grant_id=? WHERE id=?").run(rootGrantId, owner.connection.id);
+    const childPrincipalId = `principal-${randomUUID()}`;
+    db.prepare("INSERT INTO principals(id,organization_id,kind,role,active) VALUES(?,?,'AGENT','SERVICE',1)").run(childPrincipalId, owner.organization.id);
+    const childScope: AuthorityScope = { ...rootScope, total_budget_cents: 100, max_delegation_depth: 1 };
+    const childGrant = await authority.issue(
+      { id: owner.connection.principal_id, organization_id: owner.organization.id, kind: 'AGENT', role: 'SERVICE' },
+      rootGrantId,
+      childPrincipalId,
+      childScope,
+    );
+    const child = { id: childPrincipalId, organization_id: owner.organization.id, kind: 'AGENT' as const, role: 'SERVICE' as const };
+    await expect(authority.chain(childGrant.id, child)).resolves.toHaveLength(2);
+
+    expect(await accounts.deactivateMembership(owner.membership_id)).toEqual({ membership_id: owner.membership_id, state: 'INACTIVE' });
+    const revokedAt = (db.prepare('SELECT revoked_at FROM grants WHERE id=?').get(rootGrantId) as { revoked_at: string }).revoked_at;
+    now = Date.parse('2026-10-17T23:00:05.000Z');
+    expect(await accounts.deactivateMembership(owner.membership_id)).toEqual({ membership_id: owner.membership_id, state: 'INACTIVE' });
+    expect((db.prepare('SELECT revoked_at FROM grants WHERE id=?').get(rootGrantId) as { revoked_at: string }).revoked_at).toBe(revokedAt);
+    expect(db.prepare('SELECT id,state FROM assistant_connections WHERE membership_id=? ORDER BY id').all(owner.membership_id)).toEqual([
+      { id: owner.connection.id, state: 'REVOKED' }, { id: second.connection.id, state: 'REVOKED' },
+    ].sort((a, b) => a.id.localeCompare(b.id)));
+    expect((db.prepare('SELECT active FROM principals WHERE id=?').get(owner.human_principal_id) as { active: number }).active).toBe(0);
+    expect((db.prepare('SELECT active FROM principals WHERE id=?').get(owner.connection.principal_id) as { active: number }).active).toBe(0);
+    expect((db.prepare('SELECT active FROM principals WHERE id=?').get(second.connection.principal_id) as { active: number }).active).toBe(0);
+    expect((db.prepare('SELECT revoked_at FROM grants WHERE id=?').get(rootGrantId) as { revoked_at: string | null }).revoked_at).not.toBeNull();
+    expect((db.prepare('SELECT revoked_at FROM grants WHERE id=?').get(childGrant.id) as { revoked_at: string | null }).revoked_at).toBeNull();
+    await expect(authority.chain(childGrant.id, child)).rejects.toMatchObject({ result: { code: 'INVALID_CALLER' } });
+    await expect(accounts.accountForIdentity({ issuer: 'https://identity.example/', subject: 'deactivated-person' })).rejects.toMatchObject({ code: 'MEMBERSHIP_INACTIVE' });
+  });
+
+  it('fails closed for an unknown membership without mutating a valid workspace', async () => {
+    const owner = await accounts.bootstrap({ issuer: 'https://identity.example/', subject: 'unknown-membership-person', client_id: 'client' });
+    await expect(accounts.deactivateMembership('membership-missing')).rejects.toMatchObject({ code: 'MEMBERSHIP_NOT_FOUND' });
+    expect((db.prepare('SELECT state FROM memberships WHERE id=?').get(owner.membership_id) as { state: string }).state).toBe('ACTIVE');
+    expect((db.prepare('SELECT state FROM assistant_connections WHERE id=?').get(owner.connection.id) as { state: string }).state).toBe('CONSENT_REQUIRED');
+  });
 });
 
 describe.skipIf(!process.env.AGENTPASS_TEST_DATABASE_URL)('self-service account persistence on disposable PostgreSQL', () => {
@@ -98,6 +150,9 @@ describe.skipIf(!process.env.AGENTPASS_TEST_DATABASE_URL)('self-service account 
       connectionId = first.connection.id;
       const retry = await accounts.bootstrap({ ...identity, client_id: 'chatgpt-client' });
       expect(retry).toMatchObject({ account_id: accountId, connection: { id: connectionId, principal_id: first.connection.principal_id, state: 'CONSENT_REQUIRED', grant_id: null } });
+      await expect(accounts.deactivateMembership('membership-does-not-exist')).rejects.toMatchObject({ code: 'MEMBERSHIP_NOT_FOUND' });
+      expect(await accounts.deactivateMembership(first.membership_id)).toEqual({ membership_id: first.membership_id, state: 'INACTIVE' });
+      expect(await accounts.connectionForPrincipal(first.connection.principal_id)).toMatchObject({ state: 'REVOKED', membership_state: 'INACTIVE', principal_active: false });
       const security = await db.store.prepare("SELECT relname,relrowsecurity FROM pg_class WHERE relname=ANY(?) AND relnamespace='agentpass'::regnamespace").all([
         ['accounts','external_identities','memberships','assistant_connections','consent_requests','consent_approvals','consent_sessions','schema_migrations'],
       ]) as Array<{ relname: string; relrowsecurity: boolean }>;

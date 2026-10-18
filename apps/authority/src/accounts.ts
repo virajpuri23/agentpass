@@ -35,7 +35,8 @@ export type AccountErrorCode =
   | 'PRINCIPAL_INACTIVE'
   | 'CONNECTION_REVOKED'
   | 'ACCOUNT_BINDING_INVALID'
-  | 'AMBIGUOUS_ACCOUNT_BINDING';
+  | 'AMBIGUOUS_ACCOUNT_BINDING'
+  | 'MEMBERSHIP_NOT_FOUND';
 
 export class AccountBootstrapError extends Error {
   constructor(public code: AccountErrorCode, message: string) {
@@ -204,5 +205,26 @@ export class AccountService {
       organization: { id: row.organization_id, name: row.organization_name },
       human_principal_id: row.human_principal_id,
     };
+  }
+
+  async deactivateMembership(membershipId: string): Promise<{ membership_id: string; state: 'INACTIVE' }> {
+    if (!inputPart(membershipId)) throw new AccountBootstrapError('MEMBERSHIP_NOT_FOUND', 'Membership is unavailable');
+    return this.db.transaction(async () => {
+      const membership = await this.db.prepare('SELECT id,human_principal_id FROM memberships WHERE id=?').get(membershipId) as {
+        id: string; human_principal_id: string;
+      } | undefined;
+      if (!membership) throw new AccountBootstrapError('MEMBERSHIP_NOT_FOUND', 'Membership is unavailable');
+
+      const revokedAt = this.now().toISOString();
+      await this.db.prepare(`UPDATE grants SET revoked_at=COALESCE(revoked_at,?)
+        WHERE id IN (SELECT grant_id FROM assistant_connections WHERE membership_id=? AND grant_id IS NOT NULL)`).run(revokedAt, membershipId);
+      await this.db.prepare(`UPDATE assistant_connections SET state='REVOKED',revoked_at=COALESCE(revoked_at,?)
+        WHERE membership_id=?`).run(revokedAt, membershipId);
+      await this.db.prepare(`UPDATE principals SET active=0
+        WHERE id IN (SELECT principal_id FROM assistant_connections WHERE membership_id=?) OR id=?`).run(membershipId, membership.human_principal_id);
+      await this.db.prepare("UPDATE memberships SET state='INACTIVE' WHERE id=?").run(membershipId);
+
+      return { membership_id: membershipId, state: 'INACTIVE' as const };
+    }).immediate();
   }
 }
