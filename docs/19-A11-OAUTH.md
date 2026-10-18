@@ -9,8 +9,9 @@ these settings are configured:
 | `MCP_PUBLIC_URL` | Canonical HTTPS MCP resource URL ending in `/mcp`. This existing setting alone does not enable OAuth. |
 | `AGENTPASS_OAUTH_CLIENT_IDS` | Comma-separated list of exact, operator-approved Supabase OAuth client IDs. |
 
-Set all three required values together. Partial or unsafe configuration fails
-startup. When Supabase OAuth and its client allowlist are absent,
+Set all three required values together, along with the trusted consent client,
+session key and `SUPABASE_PUBLISHABLE_KEY` described below. OAuth without that
+complete login/consent path fails startup. When Supabase OAuth and its client allowlist are absent,
 `MCP_PUBLIC_URL` by itself leaves legacy opaque-agent authentication enabled.
 Legacy Auth0 OAuth variables are rejected so a provider change cannot silently
 leave a deployment in bearer-only mode. Never derive the MCP resource from the
@@ -18,7 +19,8 @@ inbound `Host` or forwarded-host headers.
 
 Configure Supabase Auth OAuth 2.1 with the approved MCP clients and exact
 redirect URIs. Configure asymmetric JWT signing with ES256 and a published
-project JWKS; the verifier intentionally never uses the legacy HS256 JWT secret.
+project JWKS; startup rejects `MCP_USE_OAUTH_SUPABASE_JWT_SECRET` because the
+installed provider would otherwise switch to legacy shared-secret verification.
 The installed `mcp-use@2.8.2` `oauthSupabaseProvider` publishes Supabase Auth
 discovery metadata and verifies the signature, issuer, expiration, JWKS key,
 and configured audience. AgentPass additionally requires the `authenticated`
@@ -59,7 +61,7 @@ with only its approved client ID. Do not add it to
 `AGENTPASS_OAUTH_CLIENT_IDS` unless it is also meant to use the public MCP
 connection flow. Configure `AGENTPASS_CONSENT_CLIENT_ID`,
 `AGENTPASS_CONSENT_CLIENT_SECRET`, and a 64-character hex
-`AGENTPASS_CONSENT_SESSION_KEY` together. The consent verifier checks the same
+`AGENTPASS_CONSENT_SESSION_KEY` together with `SUPABASE_PUBLISHABLE_KEY`. The consent verifier checks the same
 issuer, ES256 signature/JWKS, exact MCP audience, scope and token lifetime, with
 its separate client allowlist. Set the bounded policy with
 `AGENTPASS_ONBOARDING_SUPPLIER_IDS`, `AGENTPASS_ONBOARDING_SKU_IDS`,

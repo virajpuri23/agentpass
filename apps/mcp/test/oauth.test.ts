@@ -1,7 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { generateKeyPairSync, sign } from 'node:crypto';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createAgentPassOAuthProvider, createHumanTokenVerifier, createHumanTokenVerifierFromEnv, humanOAuthConfigFromEnv, type HumanOAuthConfig } from '../agentpass-manufact/src/oauth.js';
 
 const resource = 'https://agentpass.example/mcp';
@@ -98,6 +98,14 @@ afterAll(async () => {
 });
 
 describe('Supabase human access-token verification (local ES256/JWKS fixture)', () => {
+  it('refuses a legacy shared JWT secret instead of switching away from ES256/JWKS', () => {
+    vi.stubEnv('MCP_USE_OAUTH_SUPABASE_JWT_SECRET', 'fixture-legacy-secret-that-must-never-be-used');
+    try {
+      expect(() => createHumanTokenVerifier(config())).toThrow('ES256/JWKS');
+      expect(() => createAgentPassOAuthProvider(config(), supabaseUrl)).toThrow('ES256/JWKS');
+    } finally { vi.unstubAllEnvs(); }
+  });
+
   it('accepts a signed token bound to the MCP resource, an allowed client, and the openid scope', async () => {
     const verify = createHumanTokenVerifier(config());
     const accepted = await verify(await token());

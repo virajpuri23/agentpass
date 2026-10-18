@@ -53,14 +53,18 @@ Use [the detailed A plan](docs/17-SELF-SERVICE-ONBOARDING-PLAN.md) for baseline
 evidence, scope, ownership, acceptance tests and cutoffs. Current proof and remaining
 external gates are in [the rollout runbook](docs/21-SELF-SERVICE-ROLLOUT.md).
 
+Current scope is Developer A only. A's implementation is locally verified at
+`7e9af22` with 191 passing tests, both typechecks and the MCP build. Live release
+gates below remain open; B's actual worker is deferred from this task.
+
 - [x] **A9:** [Agreed contract](docs/18-A9-ONBOARDING-CONTRACTS.md); B accepted PR #14 via direct user confirmation, shared types/API promoted.
 - [x] **A10:** seed-free additive migrations; accounts, personal workspaces, memberships and connections; SQLite + disposable PostgreSQL verified.
 - [ ] **A11:** OAuth ingress implemented; fixture JWT verification and service bearer compatibility pass. Real provider login/refresh/revocation gate open.
 - [x] **A12:** trusted browser consent and bounded connection authority implemented and fixture HTTP tested; zero default budget, no reset. Hosted login remains A11/A16 gate.
 - [x] **A13:** six conversational MCP tools implemented; official SDK fixture lifecycle passes, including isolation, private delivery, simulated purchase and revocation.
-- [ ] **A14:** private Vault adapter, durable jobs/outbox, runner leases and recovery implemented; SQLite/PG fixture tests pass. Real Vault/delivery gate open.
+- [ ] **A14:** private Vault adapter, durable jobs/outbox, runner leases and recovery implemented; SQLite/PG fixture tests and hosted Vault encryption/privilege round-trip pass. Real runner delivery gate open.
 - [ ] **A15:** persisted provenance, transactional connection/membership revocation and descendant denial implemented; real B-worker integration open.
-- [ ] **A16:** staging/runbook/readiness support implemented; real ChatGPT/Claude journeys and authorized schema-first rollout open.
+- [ ] **A16:** staging/runbook/readiness support implemented; authorized hosted additive migrations verified. User paused preview rollout after Manufact's plan rejection; real ChatGPT/Claude journeys remain open.
 
 **B dependency:** fixed-template worker execution/sandbox and optional dashboard
 integration. A owns its authenticated control contract and may verify it with a

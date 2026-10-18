@@ -40,19 +40,45 @@ then stays within the approved policy.
 All OAuth configuration and secrets belong in the private deployment environment.
 Never paste secret values into a chat, tool argument, prompt, issue or tracked file.
 The local `.env` inventory contains none of the new OAuth/consent/runner variables.
-No hosted provider or schema was changed during this implementation.
+The authorized hosted Supabase schema rollout has since been applied; OAuth
+provider settings and client bindings remain unconfigured. Current hosted evidence
+and the preview pause are recorded below.
 
-Read-only Manufact inventory confirmed production is still deployment
+Manufact production remains deployment
 `a172a512-c609-42c5-8cff-a4365d5ed4f3`, revision `a808f1690456660ab97c0ff02d98c2689e011d60`,
 at `https://fast-steel-94x84.run.mcp-use.com/mcp`. Its 11 saved/default variable
-names include no new OAuth, consent, Vault-store or runner configuration. Secret
-values were not read. The production branch remains `feat/authority-core` with
-automatic deployments; PR #14 has not changed production.
-The Supabase connector returned permission denied for the existing AgentPass
-project `ebkcaqaybuklllefvuyv`, but the authenticated browser can inspect it.
-Its only branch is labeled main/PRODUCTION and its OAuth Server switch is off.
-No hosted settings have been changed; staging isolation and the corresponding
-project-owner authorization are still required before rollout mutations.
+names still include no new OAuth, consent, Vault-store or runner configuration;
+secret values were not read. The user authorized sharing only `DATABASE_URL`,
+`DATABASE_CA_CERT`, `SUPPLIER_SERVICE_KEY`, `SUPPLIER_URL` and `NODE_ENV` with the
+preview environment. Owner, buyer, sourcing-agent and supplier API keys remain
+production-only. Production stays on `feat/authority-core` with automatic
+deployments; PR #14 has not changed production.
+
+The existing AgentPass Supabase project `ebkcaqaybuklllefvuyv` has only its
+`main` branch, labeled PRODUCTION. With the user's approval, four additive
+migrations were applied and verified there: `20261017233948_onboarding_accounts`,
+`20261017234432_agent_runner_control`, `20261018000216_runner_workspace_assignments`
+and `20261018000712_oauth_resource_binding`. The pre-existing row counts are
+unchanged: organizations 2, principals 4, grants 30, ledger entries 20 and
+purchases 8. All 13 onboarding/control tables have RLS enabled. Vault exists;
+`anon` and `authenticated` cannot select ciphertext or plaintext and cannot execute
+the token hook; `supabase_auth_admin` can execute it. A bounded private Vault
+round-trip passed: ensure, repeat ensure, read, encrypted-at-rest check, remove and
+missing-secret rejection. The random fixture was deleted; no real agent key, grant
+or purchase was created. This verifies the hosted Vault adapter, not runner delivery.
+
+OAuth is not live: no OAuth resource-client mappings were inserted and the custom
+access-token hook has not been enabled. The dashboard's OAuth-server switch was
+only changed in an unsaved form; persisted configuration remains off. No host
+OAuth client, SMTP delivery or browser login has been verified.
+
+Manufact rejected preview deployment
+`66b4a08d-524d-4366-8243-bd2d6005e1d1` before build (`PLAN_LIMIT_PREVIEW_DEPLOYS`,
+null source SHA): preview deployments require the Hobby plan or higher. The user
+chose to keep the current plan and pause hosted preview rollout. The failed record
+has no build or running application. The approved preview environment scopes are
+present, but resuming would connect preview code to the same production database
+and supplier settings; this is not an isolated staging data plane.
 
 See [A11 configuration](19-A11-OAUTH.md) for issuer, client allowlist, audience and
 600-second token requirements. Supabase's default `aud:"authenticated"` is rejected
@@ -123,7 +149,9 @@ automatic runner. There is no wildcard. Real execution still needs B's worker.
 
 ## Schema-first staging procedure
 
-Use Node 24 and a dedicated disposable/staging database. Migration commands load
+Use Node 24 and a dedicated disposable/staging database for any new environment.
+The existing AgentPass production project has already received the four additive
+migrations above under explicit approval; preserve their checksum history. Migration commands load
 the environment already present in the process; they do not implicitly load `.env`.
 They do not seed demo identities, need demo agent keys or log a database URL.
 
@@ -140,9 +168,13 @@ The backend role is privileged and must remain private; RLS is not a substitute
 for canonical account/authority checks. Startup with OAuth enabled checks all
 migration checksums and refuses missing or edited history. It does not migrate.
 
-Apply additive schema before deploying compatible code. Verify the Vault extension,
-dedicated backend privileges, a real encrypted secret round-trip, no public Vault
-access, and private runner-control network access separately. New public MCP tools
+To resume, first resolve the hosting target with the user; the current Manufact
+plan does not permit a preview. Sharing the existing production database and
+supplier settings with preview is already explicitly authorized. Then register
+separate preview OAuth clients, configure the canonical Site URL and identity path,
+populate exact resource bindings, enable the token hook, and set the private
+application configuration above before running the host journeys. Verify
+private runner-control network access separately. New public MCP tools
 never proxy internal job/credential routes. B workers need a private authority URL
 and only their admitted runner key; spawned children receive only their own key.
 
@@ -164,20 +196,33 @@ not a hosted Supabase Auth, model-worker, ChatGPT or Claude success claim.
 PostgreSQL. Full suite/typecheck/build results and exact revision are recorded
 after final integration verification below.
 
-Final local code revision: `3f46288` (documentation-only updates follow). Node 24:
+Final local code revision: `7e9af22` (documentation-only updates follow). Node 24:
 root TypeScript check, nested MCP TypeScript check and production build passed.
-All **186 tests passed, none skipped, across 28 files**, with both disposable
+All **191 tests passed, none skipped, across 28 files**, with both disposable
 PostgreSQL variables enabled and files run serially. This includes the original
 golden path, official SDK MCP lifecycle, ES256 JWT checks, trusted OTP/consent,
 resource hook, assignment restart, revocation, isolation and shared-budget races.
+The A-only readiness follow-up also reproduced and fixed expired-lease access
+without control polling: principal and ancestor checks now reject delivered
+children with expired or invalid leases before any protected action. A bounded
+25-row reconciliation pass runs at startup and every ten seconds in both authority
+entry points, recovers pending issuance and retries private-secret cleanup; shutdown
+waits for an active pass. Tests cover child and descendant denial, startup recovery,
+and cleanup failure/retry. Authorization does not depend on that timer firing.
+
+OAuth startup now requires the complete trusted consent/login configuration.
+Runner/Vault settings without OAuth fail instead of silently enabling legacy mode.
+The old `MCP_USE_OAUTH_SUPABASE_JWT_SECRET` setting is rejected: the installed
+provider would otherwise select shared-secret verification rather than ES256/JWKS.
 Documentation links and `git diff --check` also pass. No GitHub Actions workflow
 is configured in this checkout; local checks are the available automated evidence.
 
-**BLOCKED / UNVERIFIED:** real Supabase OAuth/client/hook setup, real Vault availability
-and encryption/privileges, B's actual fixed-template model/sandbox worker,
+**PAUSED / UNVERIFIED:** the user paused hosted preview rollout after the plan
+rejection. Real Supabase OAuth/client/hook setup, B's fixed-template model/sandbox worker,
 real ChatGPT and Claude login/refresh/reconnect,
 and staged hosted persistence/rollback. These need private configuration or B's
-runtime; none can be inferred from a green fixture test. B's branch
+runtime; none can be inferred from a green fixture test. Hosted schema and Vault
+checks above passed independently of these remaining gates. B's branch
 `feat/agent-demo` at `fb4c1568b08c2175d141f807fa32982ef4bccddc` contains separate
 deterministic buyer/sourcing processes and a real MCP simulated-purchase demo.
 It has no model client and does not consume the new private runner protocol.
@@ -192,3 +237,10 @@ required checks before any production merge; the A target auto-deploys.
 
 See [the B runtime handoff](20-DEVELOPER-B-RUNNER-HANDOFF.md). A15/A16 remain open
 until these real integration gates pass.
+
+The user's current scope is **Developer A only**. The A-owned implementation and
+local fixture gates are complete; B's worker is deferred rather than implemented
+by A. Full A11/A16 release acceptance still needs a running compatible deployment,
+Supabase OAuth/client/hook and email configuration, and the real ChatGPT/Claude
+login, refresh, reconnect, isolation and revocation evidence. The user has paused
+the hosted preview rollout, so these are pending release gates, not local passes.

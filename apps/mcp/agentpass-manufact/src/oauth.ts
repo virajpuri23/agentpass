@@ -132,6 +132,9 @@ function verifiedClaims(authInfo: OAuthAuthInfo, config: ReturnType<typeof norma
 }
 
 function createSupabaseVerifier(config: HumanOAuthConfig) {
+  if (process.env.MCP_USE_OAUTH_SUPABASE_JWT_SECRET !== undefined) {
+    throw new Error('AgentPass requires ES256/JWKS; remove MCP_USE_OAUTH_SUPABASE_JWT_SECRET.');
+  }
   const normalized = normalizedConfig(config);
   const provider = oauthSupabaseProvider({
     supabaseUrl: normalized.supabaseUrl,

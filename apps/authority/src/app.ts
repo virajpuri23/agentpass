@@ -16,7 +16,7 @@ import { AccountService,AccountBootstrapError,type VerifiedConnectionIdentity } 
 import { createConsentRouter,type ConsentBrowserConfig } from './consent-browser.js';
 import { onboardingSchemas } from '../../../packages/contracts/src/onboarding.js';
 import { ConsentService } from './consent.js';
-import { mountAgentControl,type AgentControlOptions,agentControlFromEnvironment } from './agent-control.js';
+import { mountAgentControl,type AgentControlOptions,agentControlFromEnvironment,assertManagedPrincipalLive } from './agent-control.js';
 import { createSupabaseLoginRouter,type SupabaseLoginConfig } from './supabase-login.js';
 
 export function createAuthorityApp(options: { db: Database.Database | AuthorityStore; supplier: SupplierService; now?: () => Date;workforce?:WorkforceOptions;verifyHumanToken?:(token:string)=>Promise<VerifiedConnectionIdentity>;consentBrowser?:ConsentBrowserConfig;supabaseLogin?:SupabaseLoginConfig;agentControl?:AgentControlOptions|{environment:NodeJS.ProcessEnv} }) {
@@ -27,6 +27,7 @@ export function createAuthorityApp(options: { db: Database.Database | AuthorityS
     const connection=await accounts.connectionForPrincipal(principal.id);
     if(connection&&(connection.account_state!=='ACTIVE'||connection.membership_state!=='ACTIVE'||!connection.principal_active||connection.state==='REVOKED'||connection.revoked_at))deny('INVALID_CALLER','Connection or membership is inactive',401);
     if(connection&&requireAuthority&&connection.state!=='ACTIVE')deny('INSUFFICIENT_SCOPE','Connection requires trusted owner consent');
+    if(options.agentControl)await assertManagedPrincipalLive(db,principal,(options.now??(()=>new Date()))());
   }:undefined);
   const workforce = new WorkforceGateway(engine,options.workforce);
   app.disable('x-powered-by');
@@ -74,6 +75,7 @@ export function createAuthorityApp(options: { db: Database.Database | AuthorityS
     return engine.delegate(p,String(req.params.id),body.recipient_principal_id,body.scope);
   }));
   app.post('/v1/grants/:id/provision-child',route((p,req) => {
+    if((req.res as express.Response).locals.account_context){setAuditContext({action:'principal.provision'});throw new Denial({status:'DENIED',code:'INVALID_REQUEST',reason:'Human OAuth connections must use provision_agent for managed provisioning',next_action:'contact_owner'},403);}
     const body = z.object({scope:scopeSchema,credential_hash:z.string().regex(/^[a-f0-9]{64}$/),idempotency_key:id}).strict().parse(req.body);
     setAuditContext({action:'principal.provision',grantId:id.parse(req.params.id)});
     return engine.provisionChild(p,String(req.params.id),body.scope,body.credential_hash,body.idempotency_key);
@@ -116,7 +118,7 @@ export function createAuthorityApp(options: { db: Database.Database | AuthorityS
     if (p.role !== 'OWNER') deny('INVALID_CALLER','Audit requires organization owner');
     return db.prepare('SELECT e.event_id,e.timestamp,e.principal_id,e.grant_id,e.action,e.decision,e.reason_code,e.request_id,e.trace_id FROM audit_events e JOIN principals p ON p.id = e.principal_id LEFT JOIN grants g ON g.id=e.grant_id WHERE (p.organization_id = ? OR g.organization_id = ?) ORDER BY e.timestamp,e.rowid').all(p.organization_id,p.organization_id);
   }));
-  if(options.agentControl)mountAgentControl(app,engine,'environment' in options.agentControl?agentControlFromEnvironment(engine,options.agentControl.environment):options.agentControl);
+  if(options.agentControl)app.locals.agentControl=mountAgentControl(app,engine,'environment' in options.agentControl?agentControlFromEnvironment(engine,options.agentControl.environment):options.agentControl);
   app.use((_req,_res,next) => { next(new Denial({status:'DENIED',code:'INVALID_REQUEST',reason:'Unknown endpoint'},404)); });
   app.use(async (error: unknown,req: express.Request,res: express.Response,_next: express.NextFunction) => {
     let result; let status;

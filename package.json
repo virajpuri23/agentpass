@@ -12,6 +12,7 @@
     "demo:run": "tsx --env-file=.env scripts/run-e2e.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
+    "check:openapi": "vitest run apps/authority/test/openapi.test.ts",
     "start": "tsx apps/remote/src/server.ts",
     "setup:postgres": "tsx db/setup-postgres.ts",
     "db:migrate": "node --import tsx db/migrate.ts",
@@ -31,6 +32,7 @@
     "tsx": "^4.23.15"
   },
   "devDependencies": {
+    "@apidevtools/swagger-parser": "^12.1.0",
     "@types/better-sqlite3": "^9.6.0",
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.5",

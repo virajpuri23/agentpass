@@ -3,20 +3,21 @@
 **You own:** `apps/authority/**`, `apps/mcp/**`, `db/**` (unless otherwise agreed).  
 **You do not own:** agent prompts, supplier catalog logic, public demo visualization.
 
-## Planned follow-on: self-service onboarding
+## Self-service onboarding implementation
 
-Follow [the Developer A implementation plan](17-SELF-SERVICE-ONBOARDING-PLAN.md)
-for A9–A16: additive contract agreement, identity/membership persistence, OAuth,
-personal workspace consent, conversational MCP tools, private delivery/runner
-control, provenance/revocation, and real host verification. The plan distinguishes
-the existing tested authority/provisioning core from missing self-service work.
-Worker execution and dashboard changes remain Developer B's responsibility.
-Do not change shared types without both developers' agreement or treat fixture
-OAuth/runner tests as a completed hosted journey.
+The A-owned application logic for A9–A15 is implemented, and the A16 rollout
+runbook is current. Local verification passed 191 tests, root/nested typechecks and
+the MCP build at code revision `7e9af22`. The four approved Supabase migrations,
+RLS on all 13 onboarding/control tables and a private Vault round-trip also passed;
+see [current rollout status](21-SELF-SERVICE-ROLLOUT.md). Real OAuth and
+ChatGPT/Claude login remain unverified because the OAuth server is off and hosted
+preview rollout is paused. The Developer B worker and integrated runner gate are
+outside the current scope; do not treat fixture tests as proof of those journeys.
 
-A9's [decision and contract pack](18-A9-ONBOARDING-CONTRACTS.md) is available with
-executable fixtures. Its proposed paths/types are not production handlers or a
-Developer B signoff. Continue independent A-owned work without changing B's files.
+A9's [decision and contract pack](18-A9-ONBOARDING-CONTRACTS.md) was accepted by
+Developer B, as confirmed by the user, and its shared contracts are implemented.
+Supabase is the selected provider; the initial Auth0 draft was superseded. Continue
+to preserve the shared-contract agreement and Developer B file ownership.
 
 ## Your mission
 

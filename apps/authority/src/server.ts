@@ -17,5 +17,7 @@ if(onboarding.verifyHumanToken){
   const store='pragma' in db?sqliteStore(db):db;
   await assertMigrationsCurrent(store,postgres?'postgres':'sqlite');await assertOAuthResourceBindings(store);
 }
-const server = createAuthorityApp({db,supplier,workforce:workforceFromEnvironment(),...onboarding}).listen(port,process.env.AUTHORITY_HOST ?? '127.0.0.1',() => console.log(JSON.stringify({service:'authority',port,simulated:true})));
-for (const signal of ['SIGINT','SIGTERM'] as const) process.on(signal,() => server.close(async () => {if(postgres) await postgres.close();else if('close' in db) db.close();process.exit(0);}));
+const app=createAuthorityApp({db,supplier,workforce:workforceFromEnvironment(),...onboarding});
+const stopReconciliation=await app.locals.agentControl?.startReconciliation();
+const server = app.listen(port,process.env.AUTHORITY_HOST ?? '127.0.0.1',() => console.log(JSON.stringify({service:'authority',port,simulated:true})));
+for (const signal of ['SIGINT','SIGTERM'] as const) process.on(signal,async() => {await stopReconciliation?.();server.close(async () => {if(postgres) await postgres.close();else if('close' in db) db.close();process.exit(0);});});
