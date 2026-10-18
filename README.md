@@ -23,6 +23,24 @@ All purchases are **simulated**. No live inventory or payment is touched.
 
 `AGENTS.md` has repository instructions for Codex/other coding agents. `contracts/` provides wire examples; `packages/contracts/src/index.ts` defines stable shared types. `db/schema.sql` is a SQLite-oriented starting schema, **not a production-ready migration**.
 
+## Coding-agent workforce demo (Developer B)
+
+A lead coding agent gets a landing page built by four specialist agents (Design,
+Security as an external company, Hosting, Analytics). AgentPass controls what each
+may touch: the Design agent can't read `.env`, the Security agent can't write,
+the Hosting agent is refused `deploy.production`, reads the hint, requests
+`deploy.preview` instead and ships a **real local build**; the Analytics agent gets
+aggregates, never raw rows; every temporary grant is revoked at the end.
+
+```bash
+npm run demo                 # headless: timeline + 12 checks (12/12), exit 1 on failure
+npm run dev:activity         # then open http://127.0.0.1:3200/workforce.html
+```
+
+Authority runs on a **labeled mock** until Developer A's generic-action contract
+ships (`docs/19-WORKFORCE-ADAPTER-B.md`). Full package, observed results,
+screenshots and blockers: [`docs/21-WORKFORCE-DEMO.md`](docs/21-WORKFORCE-DEMO.md).
+
 ## Scope promise
 
 **P0: demo a real agent-to-agent, cross-organization authorization flow** with authenticated agent identities, parent-child grants, merchant-side independent policy, safe simulated execution, and structured failures.
