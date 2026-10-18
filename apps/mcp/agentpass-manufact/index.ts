@@ -1,3 +1,4 @@
+import { atConsoleOrigin } from '../src/console-origin.js';
 import { createConsoleHandler } from '../../dashboard/src/handler.js';
 import { MCPServer, type RequestContext } from 'mcp-use';
 import { z } from 'zod';
@@ -36,7 +37,7 @@ let consoleHandler:ReturnType<typeof createConsoleHandler>|undefined;
 // Explicit public origin prevents accepting arbitrary Host/proxy headers as a trusted origin.
 if (process.env.CONSOLE_ORIGIN && process.env.MCP_PUBLIC_URL) {
   consoleHandler = createConsoleHandler({authorityUrl,mcpUrl:process.env.MCP_PUBLIC_URL,origin:process.env.CONSOLE_ORIGIN});
-  for (const path of ['/connect','/console','/console.js','/console.css','/console-api/*']) server.all(path,c => consoleHandler!(c.req.raw));
+  for (const path of ['/connect','/console','/console.js','/console.css','/console-api/*']) server.all(path,c => consoleHandler!(atConsoleOrigin(c.req.raw,process.env.CONSOLE_ORIGIN!)));
 }
 
 function caller(request: Request) {
