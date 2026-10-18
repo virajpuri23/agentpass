@@ -1,0 +1,1873 @@
+{
+  "trace": [
+    {
+      "kind": "note",
+      "at": "2026-10-17T23:16:18.932Z",
+      "agent": "buyer-agent",
+      "text": "Buyer agent online"
+    },
+    {
+      "kind": "call",
+      "at": "2026-10-17T23:16:18.933Z",
+      "agent": "buyer-agent",
+      "tool": "get_my_grants",
+      "args": {},
+      "status": "OK",
+      "ms": 483,
+      "data": {
+        "grants": [
+          {
+            "id": "grant-root-buyer",
+            "organization_id": "buyer-co",
+            "parent_grant_id": null,
+            "issuer_principal_id": "owner-1",
+            "subject_principal_id": "buyer-agent",
+            "scope": {
+              "actions": [
+                "supplier.quote.request",
+                "supplier.purchase.execute"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 100000,
+              "total_budget_cents": 100000,
+              "expires_at": "2026-10-18T21:16:10.901Z",
+              "max_delegation_depth": 2
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "76302aa7-d672-4fcf-bcb5-60735d6784d5",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "grant-root-buyer",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "buyer-agent",
+            "scope": {
+              "actions": [
+                "supplier.quote.request",
+                "supplier.purchase.execute"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 510,
+              "total_budget_cents": 510,
+              "expires_at": "2026-10-17T22:10:57.039Z",
+              "max_delegation_depth": 1
+            },
+            "revoked_at": "2026-10-17T21:56:10.843Z"
+          },
+          {
+            "id": "d6290fcf-aacd-46ae-8834-876f2cfa7509",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "grant-root-buyer",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "buyer-agent",
+            "scope": {
+              "actions": [
+                "supplier.quote.request",
+                "supplier.purchase.execute"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 510,
+              "total_budget_cents": 510,
+              "expires_at": "2026-10-17T22:11:45.136Z",
+              "max_delegation_depth": 1
+            },
+            "revoked_at": "2026-10-17T21:57:00.397Z"
+          },
+          {
+            "id": "grant-root-buyer-demo-1",
+            "organization_id": "buyer-co",
+            "parent_grant_id": null,
+            "issuer_principal_id": "owner-1",
+            "subject_principal_id": "buyer-agent",
+            "scope": {
+              "actions": [
+                "supplier.quote.request",
+                "supplier.purchase.execute"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 100000,
+              "total_budget_cents": 100000,
+              "expires_at": "2026-10-18T23:04:18.979Z",
+              "max_delegation_depth": 2
+            },
+            "revoked_at": null
+          }
+        ]
+      }
+    },
+    {
+      "kind": "note",
+      "at": "2026-10-17T23:16:19.416Z",
+      "agent": "buyer-agent",
+      "text": "Holding root grant grant-root-buyer-demo-1: $1000.00 for PACK-500"
+    },
+    {
+      "kind": "call",
+      "at": "2026-10-17T23:16:19.416Z",
+      "agent": "buyer-agent",
+      "tool": "delegate_authority",
+      "args": {
+        "parent_grant_id": "grant-root-buyer-demo-1",
+        "recipient_principal_id": "sourcing-agent",
+        "scope": {
+          "actions": [
+            "supplier.quote.request"
+          ],
+          "supplier_ids": [
+            "supplier-co"
+          ],
+          "sku_ids": [
+            "PACK-500"
+          ],
+          "max_per_action_cents": 0,
+          "total_budget_cents": 0,
+          "expires_at": "2026-10-17T23:26:19.416Z",
+          "max_delegation_depth": 0
+        }
+      },
+      "status": "OK",
+      "ms": 469,
+      "data": {
+        "id": "f198869e-694f-493d-b1e4-4eed9f0cbfeb",
+        "organization_id": "buyer-co",
+        "issuer_principal_id": "buyer-agent",
+        "subject_principal_id": "sourcing-agent",
+        "parent_grant_id": "grant-root-buyer-demo-1",
+        "scope": {
+          "actions": [
+            "supplier.quote.request"
+          ],
+          "supplier_ids": [
+            "supplier-co"
+          ],
+          "sku_ids": [
+            "PACK-500"
+          ],
+          "max_per_action_cents": 0,
+          "total_budget_cents": 0,
+          "expires_at": "2026-10-17T23:26:19.416Z",
+          "max_delegation_depth": 0
+        },
+        "revoked_at": null
+      }
+    },
+    {
+      "kind": "note",
+      "at": "2026-10-17T23:16:19.885Z",
+      "agent": "buyer-agent",
+      "text": "Delegated quote-only grant f198869e-694f-493d-b1e4-4eed9f0cbfeb to sourcing-agent"
+    },
+    {
+      "kind": "note",
+      "at": "2026-10-17T23:16:21.566Z",
+      "agent": "sourcing-agent",
+      "text": "Sourcing agent online (own identity, no inherited credentials)"
+    },
+    {
+      "kind": "call",
+      "at": "2026-10-17T23:16:21.568Z",
+      "agent": "sourcing-agent",
+      "tool": "execute_action",
+      "args": {
+        "grant_id": "f198869e-694f-493d-b1e4-4eed9f0cbfeb",
+        "action": "supplier.quote.request",
+        "supplier_id": "supplier-co",
+        "sku_id": "PACK-500",
+        "quantity": 500,
+        "idempotency_key": "quote-22f9ba26"
+      },
+      "status": "OK",
+      "ms": 1114,
+      "data": {
+        "quote_id": "quote-70f95b47-cb0b-4a04-9ec2-ad5c00510dc0",
+        "supplier_id": "supplier-co",
+        "sku_id": "PACK-500",
+        "quantity": 500,
+        "unit_price_cents": 170,
+        "total_cents": 85000,
+        "currency": "USD",
+        "expires_at": "2026-10-17T23:31:22.504Z"
+      }
+    },
+    {
+      "kind": "note",
+      "at": "2026-10-17T23:16:22.682Z",
+      "agent": "sourcing-agent",
+      "text": "Supplier quoted 500 x PACK-500 = $850.00 (quote quote-70f95b47-cb0b-4a04-9ec2-ad5c00510dc0)"
+    },
+    {
+      "kind": "call",
+      "at": "2026-10-17T23:16:22.683Z",
+      "agent": "sourcing-agent",
+      "tool": "execute_action",
+      "args": {
+        "grant_id": "f198869e-694f-493d-b1e4-4eed9f0cbfeb",
+        "action": "supplier.purchase.execute",
+        "supplier_id": "supplier-co",
+        "sku_id": "PACK-500",
+        "quote_id": "quote-70f95b47-cb0b-4a04-9ec2-ad5c00510dc0",
+        "idempotency_key": "purchase-22f9ba26"
+      },
+      "status": "AUTHORITY_REQUIRED",
+      "ms": 549,
+      "code": "INSUFFICIENT_SCOPE",
+      "data": {
+        "status": "AUTHORITY_REQUIRED",
+        "code": "INSUFFICIENT_SCOPE",
+        "reason": "Action requires additional authority",
+        "next_action": "request_authority",
+        "required_scope": {
+          "actions": [
+            "supplier.purchase.execute"
+          ],
+          "supplier_ids": [
+            "supplier-co"
+          ],
+          "sku_ids": [
+            "PACK-500"
+          ],
+          "max_per_action_cents": 85000,
+          "total_budget_cents": 85000,
+          "expires_at": "2026-10-17T23:26:19.416Z",
+          "max_delegation_depth": 0
+        }
+      }
+    },
+    {
+      "kind": "note",
+      "at": "2026-10-17T23:16:23.232Z",
+      "agent": "sourcing-agent",
+      "text": "Missing scope supplier.purchase.execute; recovering via request_authority"
+    },
+    {
+      "kind": "note",
+      "at": "2026-10-17T23:16:23.232Z",
+      "agent": "sourcing-agent",
+      "text": "Requesting $1200.00 purchase authority",
+      "decider": "deterministic"
+    },
+    {
+      "kind": "call",
+      "at": "2026-10-17T23:16:23.232Z",
+      "agent": "sourcing-agent",
+      "tool": "get_my_grants",
+      "args": {},
+      "status": "OK",
+      "ms": 635,
+      "data": {
+        "grants": [
+          {
+            "id": "bae18e8d-84d5-401a-8ba4-ef45ae537e06",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "grant-root-buyer",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.quote.request"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 0,
+              "total_budget_cents": 0,
+              "expires_at": "2026-10-17T22:06:37.957Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "22da7fe1-7408-440c-b143-e12cf7ccf2fc",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "grant-root-buyer",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.purchase.execute"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 90000,
+              "total_budget_cents": 90000,
+              "expires_at": "2026-10-17T22:06:37.957Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": "2026-10-17T21:51:45.570Z"
+          },
+          {
+            "id": "8f7104db-7761-4302-84f0-65a80eb368a6",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "grant-root-buyer",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.quote.request"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 0,
+              "total_budget_cents": 0,
+              "expires_at": "2026-10-17T21:51:48.850Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "d6a4acfa-1928-4306-a674-ba0eaa3a066f",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "grant-root-buyer",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.purchase.execute"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 15000,
+              "total_budget_cents": 15000,
+              "expires_at": "2026-10-17T22:06:37.957Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "29bd0b9a-acd3-4730-b866-82fdf6f2c922",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "grant-root-buyer",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.purchase.execute"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 15000,
+              "total_budget_cents": 15000,
+              "expires_at": "2026-10-17T22:06:37.957Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "d34a65f3-b5fa-4e34-b7db-fc8592cfbb7f",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "76302aa7-d672-4fcf-bcb5-60735d6784d5",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.quote.request"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 0,
+              "total_budget_cents": 0,
+              "expires_at": "2026-10-17T22:10:57.039Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "a22a17bd-8eb7-4d88-8aa9-9848d71361e3",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "76302aa7-d672-4fcf-bcb5-60735d6784d5",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.purchase.execute"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 340,
+              "total_budget_cents": 340,
+              "expires_at": "2026-10-17T22:10:57.039Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": "2026-10-17T21:56:06.891Z"
+          },
+          {
+            "id": "aa166a12-9776-443a-b265-6dcd049c2d3e",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "76302aa7-d672-4fcf-bcb5-60735d6784d5",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.purchase.execute"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 340,
+              "total_budget_cents": 340,
+              "expires_at": "2026-10-17T22:10:57.039Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "a605c435-467c-487d-874d-cb71fcf73f45",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "76302aa7-d672-4fcf-bcb5-60735d6784d5",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.purchase.execute"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 340,
+              "total_budget_cents": 340,
+              "expires_at": "2026-10-17T22:10:57.039Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "ffbeb9ef-98dd-4ec7-ac61-765f85b242cc",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "76302aa7-d672-4fcf-bcb5-60735d6784d5",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.quote.request"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 0,
+              "total_budget_cents": 0,
+              "expires_at": "2026-10-17T21:56:09.954Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "94f6bb2e-4a68-4f96-96ae-b58ef066cd50",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "d6290fcf-aacd-46ae-8834-876f2cfa7509",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.quote.request"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 0,
+              "total_budget_cents": 0,
+              "expires_at": "2026-10-17T22:11:45.136Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "50970531-ff69-45d4-a349-81446aec3bce",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "d6290fcf-aacd-46ae-8834-876f2cfa7509",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.purchase.execute"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 340,
+              "total_budget_cents": 340,
+              "expires_at": "2026-10-17T22:11:45.136Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": "2026-10-17T21:56:55.367Z"
+          },
+          {
+            "id": "bed32f4a-bdf5-40d2-ab55-a65ce0e53ff5",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "d6290fcf-aacd-46ae-8834-876f2cfa7509",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.purchase.execute"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 340,
+              "total_budget_cents": 340,
+              "expires_at": "2026-10-17T22:11:45.136Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "df0bada6-4efc-4719-b196-7b42cad7f063",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "d6290fcf-aacd-46ae-8834-876f2cfa7509",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.purchase.execute"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 340,
+              "total_budget_cents": 340,
+              "expires_at": "2026-10-17T22:11:45.136Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "4569c963-e883-4dc1-aa5f-5f2887c4c0d3",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "d6290fcf-aacd-46ae-8834-876f2cfa7509",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.quote.request"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 0,
+              "total_budget_cents": 0,
+              "expires_at": "2026-10-17T21:56:58.639Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "0b227d06-02cf-4c93-81db-ad7e13aef652",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "grant-root-buyer-demo-1",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.quote.request"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 0,
+              "total_budget_cents": 0,
+              "expires_at": "2026-10-17T23:15:43.370Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "911b87f6-deb9-4391-9bef-a353a38ea0b4",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "grant-root-buyer-demo-1",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.quote.request"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 0,
+              "total_budget_cents": 0,
+              "expires_at": "2026-10-17T23:16:57.507Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "945e248e-4fea-49a6-9f84-f808103d1008",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "grant-root-buyer-demo-1",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.quote.request"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 0,
+              "total_budget_cents": 0,
+              "expires_at": "2026-10-17T23:19:25.418Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "8673f44c-06fc-4bae-8d13-78ff8eb55dc1",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "grant-root-buyer-demo-1",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.quote.request"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 0,
+              "total_budget_cents": 0,
+              "expires_at": "2026-10-17T23:21:49.185Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "f198869e-694f-493d-b1e4-4eed9f0cbfeb",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "grant-root-buyer-demo-1",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.quote.request"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 0,
+              "total_budget_cents": 0,
+              "expires_at": "2026-10-17T23:26:19.416Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          }
+        ]
+      }
+    },
+    {
+      "kind": "call",
+      "at": "2026-10-17T23:16:23.868Z",
+      "agent": "sourcing-agent",
+      "tool": "request_authority",
+      "args": {
+        "parent_grant_id": "grant-root-buyer-demo-1",
+        "requested_scope": {
+          "actions": [
+            "supplier.purchase.execute"
+          ],
+          "supplier_ids": [
+            "supplier-co"
+          ],
+          "sku_ids": [
+            "PACK-500"
+          ],
+          "max_per_action_cents": 120000,
+          "total_budget_cents": 120000,
+          "expires_at": "2026-10-17T23:26:19.416Z",
+          "max_delegation_depth": 0
+        },
+        "reason": "Purchase PACK-500 from supplier-co within an authoritative supplier quote"
+      },
+      "status": "OK",
+      "ms": 569,
+      "data": {
+        "request_id": "c1ee1ee5-8906-4cdc-ae0c-1ff0b3aaa949",
+        "status": "PENDING"
+      }
+    },
+    {
+      "kind": "call",
+      "at": "2026-10-17T23:16:24.438Z",
+      "agent": "buyer-agent",
+      "tool": "get_authority_request",
+      "args": {
+        "request_id": "c1ee1ee5-8906-4cdc-ae0c-1ff0b3aaa949"
+      },
+      "status": "OK",
+      "ms": 996,
+      "data": {
+        "id": "c1ee1ee5-8906-4cdc-ae0c-1ff0b3aaa949",
+        "requester_principal_id": "sourcing-agent",
+        "parent_grant_id": "grant-root-buyer-demo-1",
+        "requested_scope": {
+          "actions": [
+            "supplier.purchase.execute"
+          ],
+          "supplier_ids": [
+            "supplier-co"
+          ],
+          "sku_ids": [
+            "PACK-500"
+          ],
+          "max_per_action_cents": 120000,
+          "total_budget_cents": 120000,
+          "expires_at": "2026-10-17T23:26:19.416Z",
+          "max_delegation_depth": 0
+        },
+        "reason": "Purchase PACK-500 from supplier-co within an authoritative supplier quote",
+        "status": "PENDING"
+      }
+    },
+    {
+      "kind": "call",
+      "at": "2026-10-17T23:16:25.434Z",
+      "agent": "buyer-agent",
+      "tool": "get_my_grants",
+      "args": {},
+      "status": "OK",
+      "ms": 458,
+      "data": {
+        "grants": [
+          {
+            "id": "grant-root-buyer",
+            "organization_id": "buyer-co",
+            "parent_grant_id": null,
+            "issuer_principal_id": "owner-1",
+            "subject_principal_id": "buyer-agent",
+            "scope": {
+              "actions": [
+                "supplier.quote.request",
+                "supplier.purchase.execute"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 100000,
+              "total_budget_cents": 100000,
+              "expires_at": "2026-10-18T21:16:10.901Z",
+              "max_delegation_depth": 2
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "76302aa7-d672-4fcf-bcb5-60735d6784d5",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "grant-root-buyer",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "buyer-agent",
+            "scope": {
+              "actions": [
+                "supplier.quote.request",
+                "supplier.purchase.execute"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 510,
+              "total_budget_cents": 510,
+              "expires_at": "2026-10-17T22:10:57.039Z",
+              "max_delegation_depth": 1
+            },
+            "revoked_at": "2026-10-17T21:56:10.843Z"
+          },
+          {
+            "id": "d6290fcf-aacd-46ae-8834-876f2cfa7509",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "grant-root-buyer",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "buyer-agent",
+            "scope": {
+              "actions": [
+                "supplier.quote.request",
+                "supplier.purchase.execute"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 510,
+              "total_budget_cents": 510,
+              "expires_at": "2026-10-17T22:11:45.136Z",
+              "max_delegation_depth": 1
+            },
+            "revoked_at": "2026-10-17T21:57:00.397Z"
+          },
+          {
+            "id": "grant-root-buyer-demo-1",
+            "organization_id": "buyer-co",
+            "parent_grant_id": null,
+            "issuer_principal_id": "owner-1",
+            "subject_principal_id": "buyer-agent",
+            "scope": {
+              "actions": [
+                "supplier.quote.request",
+                "supplier.purchase.execute"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 100000,
+              "total_budget_cents": 100000,
+              "expires_at": "2026-10-18T23:04:18.979Z",
+              "max_delegation_depth": 2
+            },
+            "revoked_at": null
+          }
+        ]
+      }
+    },
+    {
+      "kind": "note",
+      "at": "2026-10-17T23:16:25.892Z",
+      "agent": "buyer-agent",
+      "text": "Child asked $1200.00; counteroffering $900.00",
+      "decider": "deterministic"
+    },
+    {
+      "kind": "call",
+      "at": "2026-10-17T23:16:25.892Z",
+      "agent": "buyer-agent",
+      "tool": "respond_authority_request",
+      "args": {
+        "request_id": "c1ee1ee5-8906-4cdc-ae0c-1ff0b3aaa949",
+        "decision": "COUNTEROFFER",
+        "offered_scope": {
+          "actions": [
+            "supplier.purchase.execute"
+          ],
+          "supplier_ids": [
+            "supplier-co"
+          ],
+          "sku_ids": [
+            "PACK-500"
+          ],
+          "max_per_action_cents": 90000,
+          "total_budget_cents": 90000,
+          "expires_at": "2026-10-17T23:26:19.416Z",
+          "max_delegation_depth": 0
+        }
+      },
+      "status": "OK",
+      "ms": 604,
+      "data": {
+        "id": "c1ee1ee5-8906-4cdc-ae0c-1ff0b3aaa949",
+        "requester_principal_id": "sourcing-agent",
+        "parent_grant_id": "grant-root-buyer-demo-1",
+        "requested_scope": {
+          "actions": [
+            "supplier.purchase.execute"
+          ],
+          "supplier_ids": [
+            "supplier-co"
+          ],
+          "sku_ids": [
+            "PACK-500"
+          ],
+          "max_per_action_cents": 120000,
+          "total_budget_cents": 120000,
+          "expires_at": "2026-10-17T23:26:19.416Z",
+          "max_delegation_depth": 0
+        },
+        "offered_scope": {
+          "actions": [
+            "supplier.purchase.execute"
+          ],
+          "supplier_ids": [
+            "supplier-co"
+          ],
+          "sku_ids": [
+            "PACK-500"
+          ],
+          "max_per_action_cents": 90000,
+          "total_budget_cents": 90000,
+          "expires_at": "2026-10-17T23:26:19.416Z",
+          "max_delegation_depth": 0
+        },
+        "reason": "Purchase PACK-500 from supplier-co within an authoritative supplier quote",
+        "status": "COUNTEROFFERED"
+      }
+    },
+    {
+      "kind": "call",
+      "at": "2026-10-17T23:16:26.497Z",
+      "agent": "sourcing-agent",
+      "tool": "get_authority_request",
+      "args": {
+        "request_id": "c1ee1ee5-8906-4cdc-ae0c-1ff0b3aaa949"
+      },
+      "status": "OK",
+      "ms": 450,
+      "data": {
+        "id": "c1ee1ee5-8906-4cdc-ae0c-1ff0b3aaa949",
+        "requester_principal_id": "sourcing-agent",
+        "parent_grant_id": "grant-root-buyer-demo-1",
+        "requested_scope": {
+          "actions": [
+            "supplier.purchase.execute"
+          ],
+          "supplier_ids": [
+            "supplier-co"
+          ],
+          "sku_ids": [
+            "PACK-500"
+          ],
+          "max_per_action_cents": 120000,
+          "total_budget_cents": 120000,
+          "expires_at": "2026-10-17T23:26:19.416Z",
+          "max_delegation_depth": 0
+        },
+        "offered_scope": {
+          "actions": [
+            "supplier.purchase.execute"
+          ],
+          "supplier_ids": [
+            "supplier-co"
+          ],
+          "sku_ids": [
+            "PACK-500"
+          ],
+          "max_per_action_cents": 90000,
+          "total_budget_cents": 90000,
+          "expires_at": "2026-10-17T23:26:19.416Z",
+          "max_delegation_depth": 0
+        },
+        "reason": "Purchase PACK-500 from supplier-co within an authoritative supplier quote",
+        "status": "COUNTEROFFERED"
+      }
+    },
+    {
+      "kind": "note",
+      "at": "2026-10-17T23:16:26.948Z",
+      "agent": "sourcing-agent",
+      "text": "Accepting counteroffer of $900.00",
+      "decider": "deterministic"
+    },
+    {
+      "kind": "call",
+      "at": "2026-10-17T23:16:26.948Z",
+      "agent": "sourcing-agent",
+      "tool": "accept_authority_offer",
+      "args": {
+        "request_id": "c1ee1ee5-8906-4cdc-ae0c-1ff0b3aaa949",
+        "idempotency_key": "accept-c1ee1ee5-8906-4cdc-ae0c-1ff0b3aaa949"
+      },
+      "status": "OK",
+      "ms": 518,
+      "data": {
+        "id": "52fc2b6d-1f69-4967-8f03-4e9fe120efbb",
+        "organization_id": "buyer-co",
+        "issuer_principal_id": "buyer-agent",
+        "subject_principal_id": "sourcing-agent",
+        "parent_grant_id": "grant-root-buyer-demo-1",
+        "scope": {
+          "actions": [
+            "supplier.purchase.execute"
+          ],
+          "supplier_ids": [
+            "supplier-co"
+          ],
+          "sku_ids": [
+            "PACK-500"
+          ],
+          "max_per_action_cents": 90000,
+          "total_budget_cents": 90000,
+          "expires_at": "2026-10-17T23:26:19.416Z",
+          "max_delegation_depth": 0
+        },
+        "revoked_at": null
+      }
+    },
+    {
+      "kind": "call",
+      "at": "2026-10-17T23:16:27.466Z",
+      "agent": "sourcing-agent",
+      "tool": "execute_action",
+      "args": {
+        "grant_id": "52fc2b6d-1f69-4967-8f03-4e9fe120efbb",
+        "action": "supplier.purchase.execute",
+        "supplier_id": "supplier-co",
+        "sku_id": "PACK-500",
+        "quote_id": "quote-70f95b47-cb0b-4a04-9ec2-ad5c00510dc0",
+        "idempotency_key": "purchase-22f9ba26"
+      },
+      "status": "OK",
+      "ms": 866,
+      "data": {
+        "receipt_id": "bce9d7de-ac88-41cd-b619-7a764e88350b",
+        "request_id": "ead3a015-a883-4808-99b8-fd05416fb2d2",
+        "order_id": "order-8f4fdbfa-11a0-41aa-8fe3-eb7eb1a00cf2",
+        "supplier_id": "supplier-co",
+        "sku_id": "PACK-500",
+        "quantity": 500,
+        "amount_cents": 85000,
+        "currency": "USD",
+        "grant_id": "52fc2b6d-1f69-4967-8f03-4e9fe120efbb",
+        "outcome": "COMPLETED",
+        "simulated": true
+      }
+    },
+    {
+      "kind": "note",
+      "at": "2026-10-17T23:16:28.332Z",
+      "agent": "sourcing-agent",
+      "text": "Purchased: receipt bce9d7de-ac88-41cd-b619-7a764e88350b, order order-8f4fdbfa-11a0-41aa-8fe3-eb7eb1a00cf2, $850.00"
+    },
+    {
+      "kind": "call",
+      "at": "2026-10-17T23:16:28.333Z",
+      "agent": "sourcing-agent",
+      "tool": "get_my_grants",
+      "args": {},
+      "status": "OK",
+      "ms": 656,
+      "data": {
+        "grants": [
+          {
+            "id": "bae18e8d-84d5-401a-8ba4-ef45ae537e06",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "grant-root-buyer",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.quote.request"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 0,
+              "total_budget_cents": 0,
+              "expires_at": "2026-10-17T22:06:37.957Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "22da7fe1-7408-440c-b143-e12cf7ccf2fc",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "grant-root-buyer",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.purchase.execute"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 90000,
+              "total_budget_cents": 90000,
+              "expires_at": "2026-10-17T22:06:37.957Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": "2026-10-17T21:51:45.570Z"
+          },
+          {
+            "id": "8f7104db-7761-4302-84f0-65a80eb368a6",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "grant-root-buyer",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.quote.request"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 0,
+              "total_budget_cents": 0,
+              "expires_at": "2026-10-17T21:51:48.850Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "d6a4acfa-1928-4306-a674-ba0eaa3a066f",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "grant-root-buyer",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.purchase.execute"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 15000,
+              "total_budget_cents": 15000,
+              "expires_at": "2026-10-17T22:06:37.957Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "29bd0b9a-acd3-4730-b866-82fdf6f2c922",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "grant-root-buyer",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.purchase.execute"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 15000,
+              "total_budget_cents": 15000,
+              "expires_at": "2026-10-17T22:06:37.957Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "d34a65f3-b5fa-4e34-b7db-fc8592cfbb7f",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "76302aa7-d672-4fcf-bcb5-60735d6784d5",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.quote.request"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 0,
+              "total_budget_cents": 0,
+              "expires_at": "2026-10-17T22:10:57.039Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "a22a17bd-8eb7-4d88-8aa9-9848d71361e3",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "76302aa7-d672-4fcf-bcb5-60735d6784d5",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.purchase.execute"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 340,
+              "total_budget_cents": 340,
+              "expires_at": "2026-10-17T22:10:57.039Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": "2026-10-17T21:56:06.891Z"
+          },
+          {
+            "id": "aa166a12-9776-443a-b265-6dcd049c2d3e",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "76302aa7-d672-4fcf-bcb5-60735d6784d5",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.purchase.execute"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 340,
+              "total_budget_cents": 340,
+              "expires_at": "2026-10-17T22:10:57.039Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "a605c435-467c-487d-874d-cb71fcf73f45",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "76302aa7-d672-4fcf-bcb5-60735d6784d5",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.purchase.execute"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 340,
+              "total_budget_cents": 340,
+              "expires_at": "2026-10-17T22:10:57.039Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "ffbeb9ef-98dd-4ec7-ac61-765f85b242cc",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "76302aa7-d672-4fcf-bcb5-60735d6784d5",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.quote.request"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 0,
+              "total_budget_cents": 0,
+              "expires_at": "2026-10-17T21:56:09.954Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "94f6bb2e-4a68-4f96-96ae-b58ef066cd50",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "d6290fcf-aacd-46ae-8834-876f2cfa7509",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.quote.request"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 0,
+              "total_budget_cents": 0,
+              "expires_at": "2026-10-17T22:11:45.136Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "50970531-ff69-45d4-a349-81446aec3bce",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "d6290fcf-aacd-46ae-8834-876f2cfa7509",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.purchase.execute"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 340,
+              "total_budget_cents": 340,
+              "expires_at": "2026-10-17T22:11:45.136Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": "2026-10-17T21:56:55.367Z"
+          },
+          {
+            "id": "bed32f4a-bdf5-40d2-ab55-a65ce0e53ff5",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "d6290fcf-aacd-46ae-8834-876f2cfa7509",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.purchase.execute"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 340,
+              "total_budget_cents": 340,
+              "expires_at": "2026-10-17T22:11:45.136Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "df0bada6-4efc-4719-b196-7b42cad7f063",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "d6290fcf-aacd-46ae-8834-876f2cfa7509",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.purchase.execute"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 340,
+              "total_budget_cents": 340,
+              "expires_at": "2026-10-17T22:11:45.136Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "4569c963-e883-4dc1-aa5f-5f2887c4c0d3",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "d6290fcf-aacd-46ae-8834-876f2cfa7509",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.quote.request"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 0,
+              "total_budget_cents": 0,
+              "expires_at": "2026-10-17T21:56:58.639Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "0b227d06-02cf-4c93-81db-ad7e13aef652",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "grant-root-buyer-demo-1",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.quote.request"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 0,
+              "total_budget_cents": 0,
+              "expires_at": "2026-10-17T23:15:43.370Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "911b87f6-deb9-4391-9bef-a353a38ea0b4",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "grant-root-buyer-demo-1",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.quote.request"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 0,
+              "total_budget_cents": 0,
+              "expires_at": "2026-10-17T23:16:57.507Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "945e248e-4fea-49a6-9f84-f808103d1008",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "grant-root-buyer-demo-1",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.quote.request"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 0,
+              "total_budget_cents": 0,
+              "expires_at": "2026-10-17T23:19:25.418Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "8673f44c-06fc-4bae-8d13-78ff8eb55dc1",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "grant-root-buyer-demo-1",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.quote.request"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 0,
+              "total_budget_cents": 0,
+              "expires_at": "2026-10-17T23:21:49.185Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "f198869e-694f-493d-b1e4-4eed9f0cbfeb",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "grant-root-buyer-demo-1",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.quote.request"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 0,
+              "total_budget_cents": 0,
+              "expires_at": "2026-10-17T23:26:19.416Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          },
+          {
+            "id": "52fc2b6d-1f69-4967-8f03-4e9fe120efbb",
+            "organization_id": "buyer-co",
+            "parent_grant_id": "grant-root-buyer-demo-1",
+            "issuer_principal_id": "buyer-agent",
+            "subject_principal_id": "sourcing-agent",
+            "scope": {
+              "actions": [
+                "supplier.purchase.execute"
+              ],
+              "supplier_ids": [
+                "supplier-co"
+              ],
+              "sku_ids": [
+                "PACK-500"
+              ],
+              "max_per_action_cents": 90000,
+              "total_budget_cents": 90000,
+              "expires_at": "2026-10-17T23:26:19.416Z",
+              "max_delegation_depth": 0
+            },
+            "revoked_at": null
+          }
+        ]
+      }
+    },
+    {
+      "kind": "call",
+      "at": "2026-10-17T23:16:28.991Z",
+      "agent": "sourcing-agent",
+      "tool": "execute_action",
+      "args": {
+        "grant_id": "52fc2b6d-1f69-4967-8f03-4e9fe120efbb",
+        "action": "supplier.margin.read",
+        "supplier_id": "supplier-co",
+        "sku_id": "PACK-500",
+        "quote_id": "quote-70f95b47-cb0b-4a04-9ec2-ad5c00510dc0",
+        "idempotency_key": "margin-89d01b2d-a1cd-4645-9fd6-0ce3c0127a84"
+      },
+      "status": "DENIED",
+      "ms": 575,
+      "code": "SELLER_POLICY_DENIED",
+      "data": {
+        "status": "DENIED",
+        "code": "SELLER_POLICY_DENIED",
+        "reason": "Supplier private data is unavailable",
+        "next_action": "contact_owner"
+      }
+    },
+    {
+      "kind": "call",
+      "at": "2026-10-17T23:16:29.567Z",
+      "agent": "sourcing-agent",
+      "tool": "execute_action",
+      "args": {
+        "grant_id": "f198869e-694f-493d-b1e4-4eed9f0cbfeb",
+        "action": "supplier.quote.request",
+        "supplier_id": "supplier-co",
+        "sku_id": "PACK-500",
+        "quantity": 500,
+        "idempotency_key": "quote-d189058c-7eb9-49cc-ade9-419c0b6bec17"
+      },
+      "status": "OK",
+      "ms": 740,
+      "data": {
+        "quote_id": "quote-7cb8ed53-c703-4cf9-bb89-df0ecffd9a47",
+        "supplier_id": "supplier-co",
+        "sku_id": "PACK-500",
+        "quantity": 500,
+        "unit_price_cents": 170,
+        "total_cents": 85000,
+        "currency": "USD",
+        "expires_at": "2026-10-17T23:31:30.135Z"
+      }
+    },
+    {
+      "kind": "call",
+      "at": "2026-10-17T23:16:30.307Z",
+      "agent": "sourcing-agent",
+      "tool": "execute_action",
+      "args": {
+        "grant_id": "52fc2b6d-1f69-4967-8f03-4e9fe120efbb",
+        "action": "supplier.purchase.execute",
+        "supplier_id": "supplier-co",
+        "sku_id": "PACK-500",
+        "quote_id": "quote-7cb8ed53-c703-4cf9-bb89-df0ecffd9a47",
+        "idempotency_key": "overspend-cff1b710-c208-4812-ac49-2d34190e87eb"
+      },
+      "status": "DENIED",
+      "ms": 660,
+      "code": "BUDGET_EXCEEDED",
+      "data": {
+        "status": "DENIED",
+        "code": "BUDGET_EXCEEDED",
+        "reason": "Shared grant budget exhausted",
+        "next_action": "contact_owner"
+      }
+    },
+    {
+      "kind": "call",
+      "at": "2026-10-17T23:16:30.969Z",
+      "agent": "sourcing-agent",
+      "tool": "delegate_authority",
+      "args": {
+        "parent_grant_id": "52fc2b6d-1f69-4967-8f03-4e9fe120efbb",
+        "recipient_principal_id": "sourcing-agent",
+        "scope": {
+          "actions": [
+            "supplier.purchase.execute"
+          ],
+          "supplier_ids": [
+            "supplier-co"
+          ],
+          "sku_ids": [
+            "PACK-500"
+          ],
+          "max_per_action_cents": 120000,
+          "total_budget_cents": 120000,
+          "expires_at": "2026-10-17T23:21:30.968Z",
+          "max_delegation_depth": 0
+        }
+      },
+      "status": "DENIED",
+      "ms": 556,
+      "code": "OUTSIDE_PARENT_SCOPE",
+      "data": {
+        "status": "DENIED",
+        "code": "OUTSIDE_PARENT_SCOPE",
+        "reason": "Delegation must narrow every parent scope dimension",
+        "next_action": "contact_owner"
+      }
+    },
+    {
+      "kind": "call",
+      "at": "2026-10-17T23:16:31.526Z",
+      "agent": "sourcing-agent",
+      "tool": "respond_authority_request",
+      "args": {
+        "request_id": "c1ee1ee5-8906-4cdc-ae0c-1ff0b3aaa949",
+        "decision": "COUNTEROFFER",
+        "offered_scope": {
+          "actions": [
+            "supplier.purchase.execute"
+          ],
+          "supplier_ids": [
+            "supplier-co"
+          ],
+          "sku_ids": [
+            "PACK-500"
+          ],
+          "max_per_action_cents": 120000,
+          "total_budget_cents": 120000,
+          "expires_at": "2026-10-17T23:21:31.526Z",
+          "max_delegation_depth": 0
+        }
+      },
+      "status": "DENIED",
+      "ms": 521,
+      "code": "INVALID_CALLER",
+      "data": {
+        "status": "DENIED",
+        "code": "INVALID_CALLER",
+        "reason": "Grant does not belong to caller",
+        "next_action": "contact_owner"
+      }
+    },
+    {
+      "kind": "call",
+      "at": "2026-10-17T23:16:32.048Z",
+      "agent": "sourcing-agent",
+      "tool": "execute_action",
+      "args": {
+        "grant_id": "f198869e-694f-493d-b1e4-4eed9f0cbfeb",
+        "action": "supplier.quote.request",
+        "supplier_id": "supplier-co",
+        "sku_id": "PACK-500",
+        "quantity": 1,
+        "idempotency_key": "forge-2771b96e-5003-43d5-8fd0-0de6b9a3aca0",
+        "agent_id": "buyer-agent"
+      },
+      "status": "ERROR",
+      "ms": 454,
+      "code": "INVALID_REQUEST",
+      "data": {
+        "status": "ERROR",
+        "code": "INVALID_REQUEST",
+        "reason": "Input validation error: Invalid arguments for tool execute_action: Unrecognized key: \"agent_id\""
+      }
+    },
+    {
+      "kind": "call",
+      "at": "2026-10-17T23:16:32.503Z",
+      "agent": "buyer-agent",
+      "tool": "revoke_authority",
+      "args": {
+        "grant_id": "52fc2b6d-1f69-4967-8f03-4e9fe120efbb",
+        "reason": "Demo: owner revokes delegated authority"
+      },
+      "status": "OK",
+      "ms": 422,
+      "data": {
+        "grant_id": "52fc2b6d-1f69-4967-8f03-4e9fe120efbb",
+        "revoked_at": "2026-10-17T23:16:32.786Z"
+      }
+    },
+    {
+      "kind": "note",
+      "at": "2026-10-17T23:16:32.925Z",
+      "agent": "buyer-agent",
+      "text": "Revoked 52fc2b6d-1f69-4967-8f03-4e9fe120efbb: Demo: owner revokes delegated authority"
+    },
+    {
+      "kind": "call",
+      "at": "2026-10-17T23:16:32.926Z",
+      "agent": "sourcing-agent",
+      "tool": "execute_action",
+      "args": {
+        "grant_id": "52fc2b6d-1f69-4967-8f03-4e9fe120efbb",
+        "action": "supplier.purchase.execute",
+        "supplier_id": "supplier-co",
+        "sku_id": "PACK-500",
+        "quote_id": "quote-70f95b47-cb0b-4a04-9ec2-ad5c00510dc0",
+        "idempotency_key": "again-40ebd39a-7465-47fd-b81c-e81e8f20c19f"
+      },
+      "status": "DENIED",
+      "ms": 469,
+      "code": "GRANT_REVOKED",
+      "data": {
+        "status": "DENIED",
+        "code": "GRANT_REVOKED",
+        "reason": "Grant or ancestor was revoked",
+        "next_action": "contact_owner"
+      }
+    }
+  ],
+  "checks": [
+    {
+      "step": 1,
+      "title": "Root grant visible only to buyer",
+      "pass": true,
+      "detail": "buyer holds grant-root-buyer-demo-1; child holds [bae18e8d-84d5…, 22da7fe1-7408…, 8f7104db-7761…, d6a4acfa-1928…, 29bd0b9a-acd3…, d34a65f3-b5fa…, a22a17bd-8eb7…, aa166a12-9776…, a605c435-467c…, ffbeb9ef-98dd…, 94f6bb2e-4a68…, 50970531-ff69…, bed32f4a-bdf5…, df0bada6-4efc…, 4569c963-e883…, 0b227d06-02cf…, 911b87f6-deb9…, 945e248e-4fea…, 8673f44c-06fc…, f198869e-694f…, 52fc2b6d-1f69…]"
+    },
+    {
+      "step": 2,
+      "title": "Buyer delegates quote-only grant to sourcing child",
+      "pass": true,
+      "detail": "grant f198869e-694f…: quote.request, $0 budget"
+    },
+    {
+      "step": 3,
+      "title": "Supplier returns trusted $850 quote for 500 units",
+      "pass": true,
+      "detail": "quote quote-70f95b4…: 500 x $1.70 = $850.00"
+    },
+    {
+      "step": 4,
+      "title": "Purchase on quote-only grant -> AUTHORITY_REQUIRED + recovery hint",
+      "pass": true,
+      "detail": "INSUFFICIENT_SCOPE -> next_action=request_authority"
+    },
+    {
+      "step": 5,
+      "title": "Child asks $1,200; parent counteroffers $900; child accepts",
+      "pass": true,
+      "detail": "asked $1200.00 -> offered $900.00 -> grant 52fc2b6d-1f69…"
+    },
+    {
+      "step": 6,
+      "title": "Purchase completes via AgentPass gateway + supplier",
+      "pass": true,
+      "detail": "receipt bce9d7de-ac88…, order order-8f4fdbf…, $850.00 (simulated)"
+    },
+    {
+      "step": 7,
+      "title": "Margin read denied; no private cost data anywhere",
+      "pass": true,
+      "detail": "DENIED SELLER_POLICY_DENIED; trace scanned for private fields: clean"
+    },
+    {
+      "step": 8,
+      "title": "Overspend, wider grant, self-approval, forged identity all denied",
+      "pass": true,
+      "detail": "overspend BUDGET_EXCEEDED; widen OUTSIDE_PARENT_SCOPE; self-approve INVALID_CALLER; forged INVALID_REQUEST"
+    },
+    {
+      "step": 9,
+      "title": "After revocation the child is blocked",
+      "pass": true,
+      "detail": "revoke OK; retry -> DENIED GRANT_REVOKED"
+    }
+  ],
+  "passed": true
+}

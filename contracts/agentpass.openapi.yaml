@@ -150,6 +150,154 @@ paths:
         Owners see organization grants/activity/receipts; others see held/issued grants and their
         own activity/receipts. Negotiations stay private to requester and parent even for owners.
         Returns at most 200 events and 100 receipts with truncation flags.
+  /v1/runs:
+    get:
+      operationId: listRuns
+      summary: Inspect persisted caller-visible run evidence
+      tags: [Authority]
+      description: >-
+        Correlation IDs never confer authority. Caller and organization visibility are enforced.
+        Events are historical; budgets and request states are current snapshots.
+        Missing and inaccessible runs return the same error. See docs/22-RUN-INSPECTION.md.
+      responses:
+        '200':
+          description: Persisted run evidence.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [status, data]
+                properties:
+                  status: {type: string, const: OK}
+                  data:
+                    $ref: '#/components/schemas/RunList'
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '403':
+          $ref: '#/components/responses/ApiError'
+        '404':
+          $ref: '#/components/responses/ApiError'
+        '503':
+          $ref: '#/components/responses/ApiError'
+  /v1/runs/{run_id}:
+    get:
+      operationId: getRun
+      summary: Inspect persisted caller-visible run evidence
+      tags: [Authority]
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema:
+            type: string
+            pattern: '^run-[a-zA-Z0-9_-]{1,80}$'
+      description: >-
+        Correlation IDs never confer authority. Caller and organization visibility are enforced.
+        Events are historical; budgets and request states are current snapshots.
+        Missing and inaccessible runs return the same error. See docs/22-RUN-INSPECTION.md.
+      responses:
+        '200':
+          description: Persisted run evidence.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [status, data]
+                properties:
+                  status: {type: string, const: OK}
+                  data:
+                    $ref: '#/components/schemas/ConsoleSnapshot'
+        '400':
+          $ref: '#/components/responses/ApiError'
+        '401':
+          $ref: '#/components/responses/ApiError'
+        '403':
+          $ref: '#/components/responses/ApiError'
+        '404':
+          $ref: '#/components/responses/ApiError'
+        '503':
+          $ref: '#/components/responses/ApiError'
+  /console-api/runs:
+    get:
+      operationId: consoleListRuns
+      summary: Inspect persisted caller-visible run evidence
+      tags: [Console]
+      security: [{ConsoleCookie: []}]
+      servers:
+        - url: http://localhost:3000
+      description: >-
+        Correlation IDs never confer authority. Caller and organization visibility are enforced.
+        Events are historical; budgets and request states are current snapshots.
+        Missing and inaccessible runs return the same error. See docs/22-RUN-INSPECTION.md.
+      responses:
+        '200':
+          description: Persisted run evidence.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [status, data]
+                properties:
+                  status: {type: string, const: OK}
+                  data:
+                    $ref: '#/components/schemas/RunList'
+        '400':
+          $ref: '#/components/responses/ConsoleError'
+        '401':
+          $ref: '#/components/responses/ConsoleError'
+        '403':
+          $ref: '#/components/responses/ConsoleError'
+        '404':
+          $ref: '#/components/responses/ConsoleError'
+        '503':
+          $ref: '#/components/responses/ConsoleError'
+  /console-api/runs/{run_id}:
+    get:
+      operationId: consoleGetRun
+      summary: Inspect persisted caller-visible run evidence
+      tags: [Console]
+      security: [{ConsoleCookie: []}]
+      servers:
+        - url: http://localhost:3000
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema:
+            type: string
+            pattern: '^run-[a-zA-Z0-9_-]{1,80}$'
+      description: >-
+        Correlation IDs never confer authority. Caller and organization visibility are enforced.
+        Events are historical; budgets and request states are current snapshots.
+        Missing and inaccessible runs return the same error. See docs/22-RUN-INSPECTION.md.
+      responses:
+        '200':
+          description: Persisted run evidence.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [status, data]
+                properties:
+                  status: {type: string, const: OK}
+                  data:
+                    $ref: '#/components/schemas/ConsoleSnapshot'
+        '400':
+          $ref: '#/components/responses/ConsoleError'
+        '401':
+          $ref: '#/components/responses/ConsoleError'
+        '403':
+          $ref: '#/components/responses/ConsoleError'
+        '404':
+          $ref: '#/components/responses/ConsoleError'
+        '503':
+          $ref: '#/components/responses/ConsoleError'
   /v1/authority/requests:
     post:
       operationId: requestAuthority
@@ -4110,6 +4258,26 @@ components:
           type: string
           minLength: 1
           maxLength: 200
+    RunList:
+      type: object
+      additionalProperties: false
+      required: [runs, truncated, visibility]
+      properties:
+        runs:
+          type: array
+          maxItems: 100
+          items:
+            type: object
+            additionalProperties: false
+            required: [run_id, started_at, updated_at, event_count]
+            properties:
+              run_id: {type: string}
+              started_at: {type: string, format: date-time}
+              updated_at: {type: string, format: date-time}
+              event_count:
+                oneOf: [{type: integer}, {type: string, pattern: '^[0-9]+$'}]
+        truncated: {type: boolean}
+        visibility: {type: string, enum: [organization, caller_only]}
     ConsoleSnapshot:
       type: object
       additionalProperties: false
@@ -4123,6 +4291,9 @@ components:
         - visibility
         - snapshot_at
       properties:
+        run_id:
+          type: string
+          pattern: '^run-[a-zA-Z0-9_-]{1,80}$'
         principal:
           $ref: '#/components/schemas/Principal'
         grants:
@@ -4188,7 +4359,8 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/AuditEvent'
-          maxItems: 200
+          maxItems: 500
+          description: Console snapshots return at most 200 events; selected runs return at most 500.
         receipts:
           type: array
           items:
@@ -5573,6 +5745,8 @@ components:
   parameters: {}
 x-mcp-tools:
   legacy_service_tools:
+    - list_runs
+    - get_run
     - provision_child
     - describe_authority
     - get_my_grants
@@ -5592,5 +5766,4 @@ x-mcp-tools:
     - revoke_connection
   description: >-
     Tool definitions are discovered with tools/list; there are no REST /tools endpoints.
-    describe_authority is static discovery; get_my_grants uses /v1/me. Stdio retains only the ten
-    legacy service tools.
+    describe_authority is static discovery; get_my_grants uses /v1/me. Stdio retains the service tools, including read-only run inspection.

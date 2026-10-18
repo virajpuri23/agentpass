@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMcpServer } from '../src/server.js';
 
 const expectedTools = [
-  'provision_child',
+  'list_runs','get_run','provision_child',
   'describe_authority',
   'get_my_grants',
   'request_authority',
