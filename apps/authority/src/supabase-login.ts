@@ -1,10 +1,37 @@
 import express from 'express';
-import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import type { AuthorityStore } from '../../../db/store.js';
 import { ConsentSessions } from './consent-sessions.js';
 
 export const SUPABASE_AUTHORIZATION_PATH = '/onboarding/identity';
+export const SUPABASE_EMAIL_RETURN_PATH = `${SUPABASE_AUTHORIZATION_PATH}/email-return`;
+
+const emailReturnScript = `(async () => {
+  const token = new URLSearchParams(location.hash.slice(1)).get('access_token');
+  history.replaceState(null, '', location.pathname);
+  try {
+    if (!token) throw new Error();
+    const response = await fetch('${SUPABASE_AUTHORIZATION_PATH}/verify', { credentials: 'same-origin', cache: 'no-store' });
+    if (!response.ok) throw new Error();
+    const page = new DOMParser().parseFromString(await response.text(), 'text/html');
+    const csrf = page.querySelector('input[name="csrf"]')?.value;
+    if (!csrf) throw new Error();
+    const form = document.createElement('form');
+    form.method = 'post';
+    form.action = '${SUPABASE_EMAIL_RETURN_PATH}';
+    for (const [name, value] of Object.entries({ csrf, access_token: token })) {
+      const input = document.createElement('input');
+      input.type = 'hidden'; input.name = name; input.value = value;
+      form.append(input);
+    }
+    document.body.append(form);
+    form.submit();
+  } catch {
+    document.querySelector('p').textContent = 'Restart sign-in from Manufact in the same browser, then open the new email link.';
+  }
+})();`;
+const emailReturnScriptHash = createHash('sha256').update(emailReturnScript).digest('base64');
 
 export interface SupabaseLoginConfig {
   origin: string;
@@ -217,15 +244,36 @@ export function createSupabaseLoginRouter(
     const { id, session } = await requireSession(req, 'LOGIN');
     requireCsrf(body, session);
     if (!await sessions.consume(id)) throw new LoginError(403, 'This sign-in form was already used.');
-    await authRequest('otp', { method: 'POST', body: { email: body.email, create_user: true } });
+    await authRequest(`otp?redirect_to=${encodeURIComponent(new URL(SUPABASE_EMAIL_RETURN_PATH, origin).href)}`, { method: 'POST', body: { email: body.email, create_user: true } });
     const next = await sessions.create({ phase: 'OTP', authorization_id: session.authorization_id, email: body.email, csrf: cryptoRandomToken() });
     res.setHeader('set-cookie', cookie(next));
     res.redirect(303, `${SUPABASE_AUTHORIZATION_PATH}/verify`);
   }));
 
+  router.get('/email-return', (_req, res) => {
+    res.setHeader('content-security-policy', `default-src 'none'; script-src 'sha256-${emailReturnScriptHash}'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`);
+    res.type('html').send(html('Completing email sign-in', `<p>Finishing email verification…</p><script>${emailReturnScript}</script>`));
+  });
+
+  async function finishEmailSignIn(res: express.Response, session: IdentitySession, accessToken: string) {
+    await verifiedUser(accessToken, session.email!);
+    const next = await sessions.create({ phase: 'CONSENT', authorization_id: session.authorization_id, email: session.email, access_token: accessToken, csrf: cryptoRandomToken() });
+    res.setHeader('set-cookie', cookie(next));
+    res.redirect(303, `${SUPABASE_AUTHORIZATION_PATH}/review`);
+  }
+
+  router.post('/email-return', route(async (req, res) => {
+    requireOrigin(req);
+    const body = z.object({ csrf: z.string().min(1).max(128), access_token: z.string().min(1).max(16384) }).strict().parse(req.body);
+    const { id, session } = await requireSession(req, 'OTP');
+    requireCsrf(body, session);
+    if (!session.email || !await sessions.consume(id)) throw new LoginError(403, 'This sign-in form was already used.');
+    await finishEmailSignIn(res, session, body.access_token);
+  }));
+
   router.get('/verify', route(async (req, res) => {
     const { session } = await requireSession(req, 'OTP');
-    res.type('html').send(html('Verify your email', `<p>If the address can sign in, an email was sent to ${escape(session.email ?? '')}. Copy the sign-in link from that email and paste it below without opening it, or enter its numeric code.</p><form method="post" action="${SUPABASE_AUTHORIZATION_PATH}/verify"><input type="hidden" name="csrf" value="${escape(session.csrf)}"><label for="token">Sign-in link or email code</label><input id="token" name="token" type="text" autocomplete="off" maxlength="1200" required><button type="submit">Verify email</button></form>`));
+    res.type('html').send(html('Verify your email', `<p>If the address can sign in, an email was sent to ${escape(session.email ?? '')}. Open the email’s sign-in link in this browser. You can also paste the original link or enter its numeric code below.</p><form method="post" action="${SUPABASE_AUTHORIZATION_PATH}/verify"><input type="hidden" name="csrf" value="${escape(session.csrf)}"><label for="token">Sign-in link or email code</label><input id="token" name="token" type="text" autocomplete="off" maxlength="1200" required><button type="submit">Verify email</button></form>`));
   }));
 
   router.post('/verify', route(async (req, res) => {
@@ -253,10 +301,7 @@ export function createSupabaseLoginRouter(
     const tokenResponse = z.object({ access_token: z.string().min(1).max(16384) }).passthrough().parse(
       await authRequest('verify', { method: 'POST', body: verification }),
     );
-    await verifiedUser(tokenResponse.access_token, session.email);
-    const next = await sessions.create({ phase: 'CONSENT', authorization_id: session.authorization_id, email: session.email, access_token: tokenResponse.access_token, csrf: cryptoRandomToken() });
-    res.setHeader('set-cookie', cookie(next));
-    res.redirect(303, `${SUPABASE_AUTHORIZATION_PATH}/review`);
+    await finishEmailSignIn(res, session, tokenResponse.access_token);
   }));
 
   router.get('/review', route(async (req, res) => {

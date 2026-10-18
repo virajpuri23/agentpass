@@ -16,7 +16,7 @@ describe('Supabase identity and OAuth consent UI', () => {
   let db: ReturnType<typeof openDatabase>;
   let server: ReturnType<express.Express['listen']> | undefined;
   let baseUrl: string;
-  let calls: Array<{ path: string; method: string; authorization: string | null; apikey: string | null; origin: string | null; body: any }>;
+  let calls: Array<{ path: string; search: string; method: string; authorization: string | null; apikey: string | null; origin: string | null; body: any }>;
   let oauthClientId: string;
   let callbackResult: string;
   let userConfirmedAt: string | null;
@@ -36,10 +36,11 @@ describe('Supabase identity and OAuth consent UI', () => {
       const headers = new Headers(init?.headers);
       let body: any = null;
       if (typeof init?.body === 'string') body = JSON.parse(init.body);
-      calls.push({ path: url.pathname, method, authorization: headers.get('authorization'), apikey: headers.get('apikey'), origin: headers.get('origin'), body });
+      calls.push({ path: url.pathname, search: url.search, method, authorization: headers.get('authorization'), apikey: headers.get('apikey'), origin: headers.get('origin'), body });
 
       if (url.pathname === '/auth/v1/otp' && method === 'POST') return Response.json({ message_id: 'fixture-message' });
       if (url.pathname === '/auth/v1/verify' && method === 'POST') return Response.json({ access_token: accessToken, token_type: 'bearer' });
+      if (url.pathname === '/auth/v1/user' && headers.get('authorization') !== `Bearer ${accessToken}`) return Response.json({ error: 'invalid_token' }, { status: 401 });
       if (url.pathname === '/auth/v1/user' && method === 'GET') return Response.json({
         id: 'supabase-user-id-fixture', email, email_confirmed_at: userConfirmedAt, confirmed_at: userConfirmedAt,
       });
@@ -182,6 +183,35 @@ describe('Supabase identity and OAuth consent UI', () => {
     const form = await fetch(`${baseUrl}/onboarding/identity/verify`, { headers: { cookie } });
     return { cookie, csrf: csrfFrom(await form.text()) };
   }
+
+  it('requests the exact email callback and verifies a returned provider session before consent', async () => {
+    const { cookie, csrf } = await emailVerification();
+    const otpCall = calls.find(call => call.path === '/auth/v1/otp')!;
+    expect(new URLSearchParams(otpCall.search).get('redirect_to')).toBe(`${origin}/onboarding/identity/email-return`);
+    const callback = await fetch(`${baseUrl}/onboarding/identity/email-return`);
+    expect(callback.headers.get('content-security-policy')).toContain("script-src 'sha256-");
+    const callbackPage = await callback.text();
+    expect(callbackPage).toContain("history.replaceState(null, '', location.pathname)");
+    expect(callbackPage).not.toContain('localStorage');
+    const returned = await post('/email-return', cookie, { csrf, access_token: accessToken });
+    expect(returned.status).toBe(303);
+    expect(returned.headers.get('location')).toBe('/onboarding/identity/review');
+    const review = await fetch(`${baseUrl}/onboarding/identity/review`, { headers: { cookie: cookiePair(returned) } });
+    expect(await review.text()).toContain('Review sign-in request');
+    expect(calls.some(call => call.path.endsWith('/consent'))).toBe(false);
+    expect((await post('/email-return', cookie, { csrf, access_token: accessToken })).status).toBe(401);
+  });
+
+  it('rejects null origins, forged CSRF, invalid tokens, and other emails on email return', async () => {
+    const { cookie, csrf } = await emailVerification();
+    expect((await post('/email-return', cookie, { csrf, access_token: accessToken }, 'null')).status).toBe(403);
+    expect((await post('/email-return', cookie, { csrf: 'forged', access_token: accessToken })).status).toBe(403);
+    expect(calls.some(call => call.path === '/auth/v1/user')).toBe(false);
+    expect((await post('/email-return', cookie, { csrf, access_token: 'invalid' })).status).toBe(503);
+    const other = await emailVerification('other@example.test');
+    expect((await post('/email-return', other.cookie, { csrf: other.csrf, access_token: accessToken })).status).toBe(403);
+    expect(calls.some(call => call.path.includes('/oauth/authorizations/'))).toBe(false);
+  });
 
   it.each(['signup', 'magiclink'])('verifies a default Supabase %s link and keeps consent separate', async type => {
     const { cookie, csrf } = await emailVerification();
