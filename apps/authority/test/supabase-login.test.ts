@@ -113,6 +113,7 @@ describe('Supabase identity and OAuth consent UI', () => {
   it('sends an email OTP, verifies the provider user, displays trusted consent, and redirects only to the registered callback', async () => {
     const start = await fetch(`${baseUrl}/onboarding/identity?authorization_id=authz-fixture`, { redirect: 'manual' });
     expect(start.status).toBe(200);
+    expect(start.headers.get('referrer-policy')).toBe('same-origin');
     const firstCookie = cookiePair(start);
     expect(start.headers.get('set-cookie')).toContain('HttpOnly; Secure; SameSite=Lax; Path=/onboarding/identity; Max-Age=300');
     const startPage = await start.text();
@@ -222,6 +223,7 @@ describe('Supabase identity and OAuth consent UI', () => {
     const cookie = cookiePair(start), csrf = csrfFrom(await start.text());
 
     expect((await post('/login', cookie, { csrf, email }, 'https://attacker.example')).status).toBe(403);
+    expect((await post('/login', cookie, { csrf, email }, 'null')).status).toBe(403);
     expect((await post('/login', cookie, { csrf: 'wrong-csrf', email })).status).toBe(403);
     expect(calls.filter(call => call.path === '/auth/v1/otp')).toHaveLength(0);
 

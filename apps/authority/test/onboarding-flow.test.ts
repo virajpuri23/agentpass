@@ -83,10 +83,12 @@ describe('FIXTURE self-service browser and private runner lifecycle',()=>{
   it('rejects login state mismatch, cross-account consent, CSRF and over-policy budget',async()=>{
     const context=(await json('/v1/onboarding/context')).data;
     const start=await browser(`/onboarding?connection=${context.connection.id}`);
+    expect(start.headers.get('referrer-policy')).toBe('same-origin');
     expect((await browser('/onboarding/callback?code=x&state=forged',{headers:{cookie:cookie(start)}})).status).toBe(403);
     browserSubject='other-person';expect((await login(context.connection.id)).callback.status).toBe(403);browserSubject=identity.subject;
     const {callback}=await login(context.connection.id),session=cookie(callback),html=await (await browser('/onboarding/approve',{headers:{cookie:session}})).text(),csrf=html.match(/name="csrf" value="([^"]+)"/)![1];
     const post=(originHeader:string,budget:string,csrfValue=csrf)=>browser('/onboarding/approve',{method:'POST',headers:{cookie:session,origin:originHeader,'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({csrf:csrfValue,budget})});
+    expect((await post('null','0.00')).status).toBe(403);
     expect((await post('https://attacker.example','0.00')).status).toBe(403);expect((await post(origin,'0.00','forged')).status).toBe(403);expect((await post(origin,'20.01')).status).toBe(403);
     expect(db.prepare('SELECT * FROM grants').all()).toHaveLength(0);
   });
