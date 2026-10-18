@@ -10,59 +10,58 @@
 <body>
   <header class="top">
     <div>
-      <h1>AgentPass <span class="sub">coding-agent workforce</span></h1>
-      <p class="lede">A lead coding agent gets a landing page built by four specialists. AgentPass decides what each one may touch.</p>
+      <h1>AgentPass</h1>
+      <p class="lede">One AI manager, four AI helpers, one web page. AgentPass hands out passes and checks every move.</p>
     </div>
     <div class="controls">
-      <span id="authority" class="badge">authority: —</span>
+      <span id="authority" class="badge">—</span>
+      <label class="check">Speed
+        <select id="speed" aria-label="Playback speed">
+          <option value="slow">Slow</option>
+          <option value="normal" selected>Normal</option>
+          <option value="instant">Instant</option>
+        </select>
+      </label>
       <button id="run">Run demo</button>
     </div>
   </header>
 
-  <main class="grid">
-    <section class="panel team" aria-label="Agent team">
-      <h2>Agent team</h2>
-      <ul id="team">
-        <li data-agent="lead-agent"><b>🧑‍💻 Lead coding agent</b><small>Acme · holds the root grant</small><span class="state">idle</span></li>
-        <li data-agent="design-agent"><b>🎨 Design agent</b><small>Acme · repo.read, repo.write on UI paths</small><span class="state">not started</span></li>
-        <li data-agent="security-agent" class="external"><b>🔒 Security agent</b><small>Sentinel Sec (external) · repo.read only</small><span class="state">not started</span></li>
-        <li data-agent="hosting-agent"><b>🚀 Hosting agent</b><small>Acme · repo.read, deploy.preview after negotiation</small><span class="state">not started</span></li>
-        <li data-agent="analytics-agent"><b>📊 Analytics agent</b><small>Acme · analytics.aggregate only</small><span class="state">not started</span></li>
-      </ul>
+  <main>
+    <ul class="team" id="team" aria-label="The team">
+      <li data-agent="lead-agent"><b>🧑‍💻 Manager</b><span class="state">idle</span></li>
+      <li data-agent="design-agent"><b>🎨 Design</b><span class="state">not started</span></li>
+      <li data-agent="security-agent" class="external"><b>🔍 Security reviewer</b><small>outside company</small><span class="state">not started</span></li>
+      <li data-agent="hosting-agent"><b>🚀 Publishing</b><span class="state">not started</span></li>
+      <li data-agent="analytics-agent"><b>📊 Numbers</b><span class="state">not started</span></li>
+    </ul>
+
+    <section class="card">
+      <h2>What happens</h2>
+      <ol class="story" id="story"><li class="empty">Press “Run demo”.</li></ol>
+      <p class="result" id="result"></p>
     </section>
 
-    <section class="panel timeline" aria-label="Execution timeline">
-      <h2>Execution timeline <span id="count" class="muted"></span></h2>
+    <div class="two">
+      <section class="card">
+        <h2>Results</h2>
+        <dl class="results">
+          <dt>Page headline</dt><dd id="hero">—</dd>
+          <dt>Security review</dt><dd id="security">—</dd>
+          <dt>Test copy</dt><dd id="preview">—</dd>
+          <dt>Visitor numbers</dt><dd id="metrics">—</dd>
+        </dl>
+      </section>
+      <section class="card">
+        <h2>The 12 checks</h2>
+        <ol class="checks" id="checks"></ol>
+      </section>
+    </div>
+
+    <details class="card">
+      <summary>Technical log <span id="count" class="muted"></span></summary>
       <ol id="timeline"><li class="empty">Press “Run demo”.</li></ol>
-    </section>
-
-    <section class="panel authority" aria-label="Authority state">
-      <h2>Authority state</h2>
-      <table id="grants">
-        <thead><tr><th>Grant</th><th>Holder</th><th>Actions</th><th>Resources</th><th>Status</th></tr></thead>
-        <tbody><tr class="empty"><td colspan="5">No grants yet.</td></tr></tbody>
-      </table>
-      <div class="decisions">
-        <div><span class="n ok" id="n-allowed">0</span> allowed</div>
-        <div><span class="n bad" id="n-denied">0</span> denied</div>
-        <div><span class="n req" id="n-negotiated">0</span> negotiated</div>
-        <div><span class="n rev" id="n-revoked">0</span> revoked</div>
-      </div>
-    </section>
-
-    <section class="panel outputs" aria-label="Outputs">
-      <h2>Outputs</h2>
-      <div class="out" id="out-design"><h3>Landing page</h3><div class="diff"><div><small>before</small><pre id="hero-before">—</pre></div><div><small>after</small><pre id="hero-after">—</pre></div></div></div>
-      <div class="out" id="out-security"><h3>Security findings</h3><ul id="findings"><li class="muted">—</li></ul><p id="fix" class="muted"></p></div>
-      <div class="out" id="out-hosting"><h3>Preview</h3><p id="preview" class="muted">—</p></div>
-      <div class="out" id="out-analytics"><h3>Analytics</h3><p id="metrics" class="muted">—</p><ul id="suggestions"></ul></div>
-    </section>
+    </details>
   </main>
-
-  <footer class="foot">
-    <ol id="checks" class="checks"></ol>
-    <p id="result" class="result"></p>
-    <p class="muted">Every row is a real call by a separate agent session. Preview deploys are local builds. <a href="/">Other demos</a></p>
-  </footer>
+  <p class="foot">Every yes and no is a real AgentPass decision, slowed down so you can follow. The test copy runs on this computer; no real website is touched. <a href="/">Other demos</a></p>
 </body>
 </html>
