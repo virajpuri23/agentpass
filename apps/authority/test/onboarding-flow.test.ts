@@ -7,7 +7,7 @@ import { sqliteStore } from '../../../db/store.js';
 import type { AuthorityScope } from '../../../packages/contracts/src/index.js';
 import { createAuthorityApp } from '../src/app.js';
 import { AccountService } from '../src/accounts.js';
-import { onboardingFromEnvironment } from '../src/onboarding-config.js';
+import { onboardingFromEnvironment,assertOAuthResourceBindings } from '../src/onboarding-config.js';
 
 describe('FIXTURE self-service browser and private runner lifecycle',()=>{
   let db:ReturnType<typeof openDatabase>,server:Server,base:string;
@@ -42,7 +42,8 @@ describe('FIXTURE self-service browser and private runner lifecycle',()=>{
     db=openDatabase(':memory:');await migrateStore(sqliteStore(db),'sqlite');secrets.clear();runnerOrganizations.length=0;browserSubject=identity.subject;
     vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{
       if(String(input)==='https://identity.example/oauth/token'){
-        expect(JSON.parse(String(init?.body))).toMatchObject({grant_type:'authorization_code',client_id:'consent-client',redirect_uri:`${origin}/onboarding/callback`});
+        expect(Object.fromEntries(new URLSearchParams(String(init?.body)))).toMatchObject({grant_type:'authorization_code',redirect_uri:`${origin}/onboarding/callback`});
+        expect((init?.headers as Record<string,string>).authorization).toBe(`Basic ${Buffer.from('consent-client:fixture-client-secret').toString('base64')}`);
         return new Response(JSON.stringify({access_token:'fixture-browser-token'}),{headers:{'content-type':'application/json'}});
       }
       return nativeFetch(input,init);
@@ -117,10 +118,23 @@ describe('FIXTURE self-service browser and private runner lifecycle',()=>{
 });
 
 describe('onboarding environment boundary',()=>{
+  it('requires persisted exact client/resource bindings before OAuth startup',async()=>{
+    const db=openDatabase(':memory:'),store=sqliteStore(db),env={MCP_USE_OAUTH_SUPABASE_URL:'https://identity.example',MCP_PUBLIC_URL:'https://agentpass.example/mcp',AGENTPASS_OAUTH_CLIENT_IDS:'host-client',AGENTPASS_CONSENT_CLIENT_ID:'consent-client'};
+    try{
+      await migrateStore(store,'sqlite');
+      await expect(assertOAuthResourceBindings(store,env)).rejects.toThrow('mapping is missing');
+      db.prepare('INSERT INTO oauth_resource_clients(client_id,resource) VALUES(?,?)').run('host-client',env.MCP_PUBLIC_URL);
+      await expect(assertOAuthResourceBindings(store,env)).rejects.toThrow('mapping is missing');
+      db.prepare('INSERT INTO oauth_resource_clients(client_id,resource) VALUES(?,?)').run('consent-client',env.MCP_PUBLIC_URL);
+      await expect(assertOAuthResourceBindings(store,env)).resolves.toBeUndefined();
+      db.prepare('UPDATE oauth_resource_clients SET resource=? WHERE client_id=?').run('https://other.example/mcp','host-client');
+      await expect(assertOAuthResourceBindings(store,env)).rejects.toThrow('mapping is missing');
+    }finally{db.close();}
+  });
   it('keeps legacy startup and rejects partial or unsafe consent config',()=>{
     expect(onboardingFromEnvironment({})).toEqual({});
     expect(()=>onboardingFromEnvironment({AGENTPASS_CONSENT_CLIENT_ID:'client'})).toThrow();
-    const env={MCP_USE_OAUTH_AUTH0_DOMAIN:'identity.example',MCP_PUBLIC_URL:'https://agentpass.example/mcp',AGENTPASS_OAUTH_CLIENT_IDS:'chatgpt-client',AGENTPASS_CONSENT_CLIENT_ID:'consent-client',AGENTPASS_CONSENT_CLIENT_SECRET:'fixture',AGENTPASS_CONSENT_SESSION_KEY:'a'.repeat(64)};
+    const env={MCP_USE_OAUTH_SUPABASE_URL:'https://identity.example',MCP_PUBLIC_URL:'https://agentpass.example/mcp',AGENTPASS_OAUTH_CLIENT_IDS:'chatgpt-client',AGENTPASS_CONSENT_CLIENT_ID:'consent-client',AGENTPASS_CONSENT_CLIENT_SECRET:'fixture',AGENTPASS_CONSENT_SESSION_KEY:'a'.repeat(64),SUPABASE_PUBLISHABLE_KEY:'sb_publishable_fixture'};
     expect(onboardingFromEnvironment(env).consentBrowser?.policy()).toMatchObject({supplier_ids:[],sku_ids:[],total_budget_cents:0});
     expect(()=>onboardingFromEnvironment({...env,AGENTPASS_CONSENT_SESSION_KEY:'bad'})).toThrow();
     expect(()=>onboardingFromEnvironment({...env,AGENTPASS_ONBOARDING_MAX_PER_ACTION_CENTS:'1'})).toThrow();

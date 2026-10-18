@@ -15,8 +15,9 @@ import { createConsentRouter,type ConsentBrowserConfig } from './consent-browser
 import { onboardingSchemas } from '../../../packages/contracts/src/onboarding.js';
 import { ConsentService } from './consent.js';
 import { mountAgentControl,type AgentControlOptions,agentControlFromEnvironment } from './agent-control.js';
+import { createSupabaseLoginRouter,type SupabaseLoginConfig } from './supabase-login.js';
 
-export function createAuthorityApp(options: { db: Database.Database | AuthorityStore; supplier: SupplierService; now?: () => Date;verifyHumanToken?:(token:string)=>Promise<VerifiedConnectionIdentity>;consentBrowser?:ConsentBrowserConfig;agentControl?:AgentControlOptions|{environment:NodeJS.ProcessEnv} }) {
+export function createAuthorityApp(options: { db: Database.Database | AuthorityStore; supplier: SupplierService; now?: () => Date;verifyHumanToken?:(token:string)=>Promise<VerifiedConnectionIdentity>;consentBrowser?:ConsentBrowserConfig;supabaseLogin?:SupabaseLoginConfig;agentControl?:AgentControlOptions|{environment:NodeJS.ProcessEnv} }) {
   const app = express();
   const db = 'pragma' in options.db ? sqliteStore(options.db) : options.db;
   const accounts=new AccountService(db,options.now);
@@ -31,6 +32,7 @@ export function createAuthorityApp(options: { db: Database.Database | AuthorityS
   });
   app.use(express.json({limit:'32kb'}));
   app.get('/health',async (_req,res) => { await db.prepare('SELECT 1').get(); res.json({status:'OK'}); });
+  if(options.supabaseLogin)app.use('/onboarding/identity',createSupabaseLoginRouter(db,options.supabaseLogin,options.now));
   if(options.consentBrowser)app.use('/onboarding',createConsentRouter(engine,options.consentBrowser,options.now));
   else app.use('/onboarding',(_req,res)=>res.status(503).json({status:'ERROR',code:'SERVICE_UNAVAILABLE',reason:'Trusted browser consent is not configured',next_action:'contact_owner'}));
   app.use('/v1',async (req,res,next) => {

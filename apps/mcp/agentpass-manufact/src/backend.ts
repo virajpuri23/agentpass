@@ -4,7 +4,7 @@ import { HttpSupplierService } from '../../../authority/src/supplier.js';
 import { createSupplierApp } from '../../../supplier/src/app.js';
 import { createSupplierService } from '../../../supplier/src/service.js';
 import { postgresStore as supplierPostgresStore } from '../../../supplier/src/store.js';
-import { onboardingFromEnvironment } from '../../../authority/src/onboarding-config.js';
+import { onboardingFromEnvironment,assertOAuthResourceBindings } from '../../../authority/src/onboarding-config.js';
 import { assertMigrationsCurrent } from '../../../../db/migrations.js';
 import type { Server } from 'node:http';
 
@@ -35,7 +35,7 @@ export async function authorityEndpoint(): Promise<string> {
   };
   try {
     await db.store.prepare('SELECT 1 FROM agentpass.principals LIMIT 1').get();
-    if (onboarding.verifyHumanToken) await assertMigrationsCurrent(db.store, 'postgres');
+    if (onboarding.verifyHumanToken) {await assertMigrationsCurrent(db.store, 'postgres');await assertOAuthResourceBindings(db.store);}
     if (!supplierUrl) {
       supplierStore = supplierPostgresStore(process.env.SUPPLIER_DATABASE_URL!);
       if (!await supplierStore.getProduct('PACK-500')) throw new Error('Supplier catalog is not initialized.');

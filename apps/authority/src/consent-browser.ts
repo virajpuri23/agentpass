@@ -27,15 +27,15 @@ export function createConsentRouter(engine:AuthorityEngine,config:ConsentBrowser
   router.get('/',route(async(req,res)=>{
     const connection=z.string().min(1).max(128).regex(/^[A-Za-z0-9][A-Za-z0-9:_-]*$/).parse(req.query.connection),state=randomBytes(32).toString('base64url'),verifier=randomBytes(32).toString('base64url');
     const id=await sessions.create({phase:'LOGIN',connection,state,verifier});
-    const url=new URL('authorize',issuer.href.endsWith('/')?issuer:new URL(issuer.href+'/'));
-    for(const [name,value] of Object.entries({client_id:config.clientId,response_type:'code',redirect_uri:callback,scope:'openid agentpass:connect',resource:resource.href,state,code_challenge:createHash('sha256').update(verifier).digest('base64url'),code_challenge_method:'S256',prompt:'login'}))url.searchParams.set(name,value);
+    const url=new URL('oauth/authorize',issuer.href.endsWith('/')?issuer:new URL(issuer.href+'/'));
+    for(const [name,value] of Object.entries({client_id:config.clientId,response_type:'code',redirect_uri:callback,scope:'openid',resource:resource.href,state,code_challenge:createHash('sha256').update(verifier).digest('base64url'),code_challenge_method:'S256'}))url.searchParams.set(name,value);
     res.setHeader('set-cookie',cookie(id));res.redirect(303,url.href);
   }));
   router.get('/callback',route(async(req,res)=>{
     const id=sessionId(req),session=await sessions.read(id),query=z.object({code:z.string().min(1).max(4096),state:z.string().min(1).max(128)}).parse(req.query);
     if(!session||session.phase!=='LOGIN'||typeof session.state!=='string'||!equal(query.state,session.state))deny('INVALID_CALLER','Invalid consent login state',403);
     if(!await sessions.consume(id))deny('INVALID_CALLER','Consent login already consumed',403);
-    const response=await fetch(new URL('oauth/token',issuer.href.endsWith('/')?issuer:new URL(issuer.href+'/')),{method:'POST',redirect:'error',signal:AbortSignal.timeout(5000),headers:{'content-type':'application/json'},body:JSON.stringify({grant_type:'authorization_code',code:query.code,redirect_uri:callback,client_id:config.clientId,client_secret:config.clientSecret,code_verifier:session.verifier})});
+    const response=await fetch(new URL('oauth/token',issuer.href.endsWith('/')?issuer:new URL(issuer.href+'/')),{method:'POST',redirect:'error',signal:AbortSignal.timeout(5000),headers:{'content-type':'application/x-www-form-urlencoded',authorization:`Basic ${Buffer.from(`${encodeURIComponent(config.clientId)}:${encodeURIComponent(config.clientSecret)}`).toString('base64')}`},body:new URLSearchParams({grant_type:'authorization_code',code:query.code,redirect_uri:callback,code_verifier:String(session.verifier)})});
     if(!response.ok)deny('INVALID_CALLER','Consent login unavailable',401);
     const {access_token}=z.object({access_token:z.string().min(1).max(16384)}).parse(await response.json());
     const identity=await config.verifyHumanToken(access_token);

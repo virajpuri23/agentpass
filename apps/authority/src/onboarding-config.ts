@@ -3,19 +3,32 @@ import type { AuthorityScope } from '../../../packages/contracts/src/index.js';
 import { createHumanTokenVerifier,humanOAuthConfigFromEnv } from '../../mcp/agentpass-manufact/src/oauth.js';
 import type { ConsentBrowserConfig } from './consent-browser.js';
 import type { VerifiedConnectionIdentity } from './accounts.js';
+import type { SupabaseLoginConfig } from './supabase-login.js';
+import type { AuthorityStore } from '../../../db/store.js';
 interface OnboardingRuntimeOptions {
   verifyHumanToken?:(token:string)=>Promise<VerifiedConnectionIdentity>;
   consentBrowser?:ConsentBrowserConfig;
   agentControl?:{environment:NodeJS.ProcessEnv};
+  supabaseLogin?:SupabaseLoginConfig;
+}
+
+export async function assertOAuthResourceBindings(db:AuthorityStore,env:NodeJS.ProcessEnv=process.env){
+  const oauth=humanOAuthConfigFromEnv(env);if(!oauth)return;
+  const clients=new Set([...oauth.clientIds,...(env.AGENTPASS_CONSENT_CLIENT_ID?[env.AGENTPASS_CONSENT_CLIENT_ID]:[])]);
+  for(const client of clients){
+    const row=await db.prepare('SELECT resource FROM oauth_resource_clients WHERE client_id=?').get(client);
+    if(row?.resource!==new URL(oauth.resource).href)throw new Error('Approved OAuth client/resource mapping is missing; configure private hook policy before startup');
+  }
 }
 
 export function onboardingFromEnvironment(env:NodeJS.ProcessEnv=process.env):OnboardingRuntimeOptions{
   const oauth=humanOAuthConfigFromEnv(env);
   const consentKeys=['AGENTPASS_CONSENT_CLIENT_ID','AGENTPASS_CONSENT_CLIENT_SECRET','AGENTPASS_CONSENT_SESSION_KEY'] as const;
   const configured=consentKeys.filter(key=>env[key]!==undefined);
-  if(!oauth){if(configured.length)throw new Error('Consent requires OAuth configuration');return {};}
+  if(!oauth){if(configured.length||env.SUPABASE_PUBLISHABLE_KEY)throw new Error('Consent requires OAuth configuration');return {};}
   const verifyHumanToken=createHumanTokenVerifier(oauth);
   let consentBrowser:ConsentBrowserConfig|undefined;
+  let supabaseLogin:SupabaseLoginConfig|undefined;
   if(configured.length){
     if(configured.length!==consentKeys.length)throw new Error('Configure all trusted consent client and session settings');
     const sessionKey=z.string().regex(/^[a-f0-9]{64}$/).parse(env.AGENTPASS_CONSENT_SESSION_KEY);
@@ -28,6 +41,10 @@ export function onboardingFromEnvironment(env:NodeJS.ProcessEnv=process.env):Onb
     const policy=():AuthorityScope=>({actions:['supplier.quote.request','supplier.purchase.execute'],supplier_ids:supplierIds,sku_ids:skuIds,max_per_action_cents:perAction,total_budget_cents:total,expires_at:new Date(Date.now()+3600000).toISOString(),max_delegation_depth:2});
     const clientId=z.string().trim().min(1).parse(env.AGENTPASS_CONSENT_CLIENT_ID),clientSecret=z.string().min(1).parse(env.AGENTPASS_CONSENT_CLIENT_SECRET);
     consentBrowser={origin:resource.origin,issuer:issuer.href,resource:resource.href,clientId,clientSecret,sessionKey:Buffer.from(sessionKey,'hex'),policy,verifyHumanToken:createHumanTokenVerifier({...oauth,clientIds:[clientId]})};
+    const publishableKey=z.string().regex(/^sb_publishable_[A-Za-z0-9_-]+$/).parse(env.SUPABASE_PUBLISHABLE_KEY);
+    const redirectUris=z.array(z.url()).max(50).parse(JSON.parse(env.AGENTPASS_OAUTH_REDIRECT_URIS??'[]'));
+    supabaseLogin={origin:resource.origin,supabaseUrl:new URL(issuer.href).origin,publishableKey,sessionKey:Buffer.from(sessionKey,'hex'),clientIds:[...new Set([...oauth.clientIds,clientId])],redirectUris:[...new Set([...redirectUris,new URL('/onboarding/callback',resource).href])]};
   }
-  return {verifyHumanToken,...(consentBrowser?{consentBrowser}:{}),agentControl:{environment:env}};
+  else if(env.SUPABASE_PUBLISHABLE_KEY)throw new Error('Configure trusted consent before enabling the identity UI');
+  return {verifyHumanToken,...(consentBrowser?{consentBrowser,supabaseLogin}:{}),agentControl:{environment:env}};
 }
