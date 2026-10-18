@@ -14,18 +14,27 @@ export function createConsoleHandler(options: Options) {
     if (target.username || target.password || target.search || target.hash || (target.protocol !== 'https:' && !(target.protocol === 'http:' && ['localhost','127.0.0.1','[::1]'].includes(target.hostname)))) throw new Error('Service URLs require HTTPS outside loopback and cannot contain credentials or query parameters.');
   }
   // shortcut: sessions are process-local and expire after one hour; use a shared session store before running multiple replicas.
-  const sessions = new Map<string,{token:string;expires:number}>();
+  const sessions = new Map<string,{token:string;expires:number;workflow?:string}>();
   const now = options.now ?? Date.now;
+  const links=new Map<string,{token:string;workflow:string;expires:number}>();
   const headers = {'cache-control':'no-store','referrer-policy':'no-referrer','x-content-type-options':'nosniff','x-frame-options':'DENY',
     'content-security-policy':"default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"};
   const json = (body: unknown, status = 200, extra = {}) => Response.json(body,{status,headers:{...headers,...extra}});
   const failure = (code: string, reason: string, status: number) => json({status:'DENIED',code,reason},status);
   const cookie = (id: string) => `agentpass_session=${id}; HttpOnly; SameSite=Strict; Path=/${secure ? '; Secure' : ''}`;
-  return async (request: Request): Promise<Response> => {
+  const handle=async (request: Request): Promise<Response> => {
     try {
       const url = new URL(request.url);
       if (url.origin !== origin) return failure('INVALID_ORIGIN','Console origin mismatch.',403);
       if (url.search) return failure('INVALID_REQUEST','Query parameters are not supported.',400);
+      const opening=url.pathname.match(/^\/console-api\/open\/([a-f0-9]{64})$/);
+      if(request.method==='GET'&&opening){
+        const ticket=links.get(opening[1]);links.delete(opening[1]);
+        if(!ticket||ticket.expires<=now())return failure('INVALID_REQUEST','Dashboard link unavailable. Open it again from Codex.',404);
+        if(sessions.size>=1000)return failure('SERVICE_UNAVAILABLE','Session capacity reached.',503);
+        const id=randomBytes(32).toString('base64url');sessions.set(id,{token:ticket.token,workflow:ticket.workflow,expires:now()+900000});
+        return new Response(null,{status:303,headers:{...headers,'set-cookie':cookie(id),location:'/console#workflow='+encodeURIComponent(ticket.workflow)}});
+      }
       if (request.method === 'GET' && ['/connect','/console','/console.js','/console.css'].includes(url.pathname)) {
         const file = url.pathname.endsWith('.js') ? 'console.js' : url.pathname.endsWith('.css') ? 'console.css' : 'index.html';
         return new Response(await readFile(resolve(process.env.CONSOLE_ASSETS_DIR ?? 'apps/dashboard/public',file),'utf8'),{headers:{...headers,'content-type':file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html'}});
@@ -66,9 +75,11 @@ export function createConsoleHandler(options: Options) {
       if (!session) return failure('MISSING_CREDENTIAL','Connect with your credential to continue.',401);
       const client = createAuthorityClient({authorityUrl:options.authorityUrl,agentApiKey:session.token});
       const runPath=url.pathname.match(/^\/console-api\/runs(?:\/(run-[a-zA-Z0-9_-]{1,80}))?$/);
-      if (request.method === 'GET' && (url.pathname === '/console-api/snapshot'||runPath)) {
-        const result = await client('GET',runPath ? 'v1/runs'+(runPath[1]?'/'+runPath[1]:'') : 'v1/console');
-        return json(result,result.status==='OK'?200:result.code==='INVALID_CALLER'?401:503);
+      const workflow=url.pathname.match(/^\/console-api\/workflows\/([a-zA-Z0-9_-]{1,200})$/);
+      if(session.workflow&&(request.method!=='GET'||runPath||(workflow&&workflow[1]!==session.workflow)))return failure('INVALID_REQUEST','Read-only workflow session.',403);
+      if (request.method === 'GET' && (url.pathname === '/console-api/snapshot'||workflow||runPath)) {
+        const result = await client('GET',workflow?'v1/workflows/'+workflow[1]:session.workflow?'v1/workflows/'+session.workflow:runPath?'v1/runs'+(runPath[1]?'/'+runPath[1]:''):'v1/console');
+        return json(result,result.status==='OK'?200:result.code==='INVALID_CALLER'?401:result.code==='INVALID_REQUEST'?404:503);
       }
       const match = url.pathname.match(/^\/console-api(\/v1\/(?:authority\/requests(?:\/[a-zA-Z0-9_-]+\/(?:respond|accept))?|grants\/[a-zA-Z0-9_-]+\/revoke))$/);
       if (request.method === 'POST' && match) {
@@ -79,4 +90,13 @@ export function createConsoleHandler(options: Options) {
       return failure('INVALID_REQUEST','Unknown console endpoint.',404);
     } catch (error) { if (error instanceof SyntaxError) return failure('INVALID_REQUEST','Invalid JSON request.',400);return json({status:'ERROR',code:'SERVICE_UNAVAILABLE',reason:'Console unavailable. Refresh or reconnect.'},503); }
   };
+  return Object.assign(handle,{async createWorkflowLink(token:string,rootId:string){
+    if(!/^[a-zA-Z0-9_-]{1,200}$/.test(rootId))return undefined;
+    for(const [id,link] of links)if(link.expires<=now())links.delete(id);
+    if(links.size>=1000||sessions.size>=1000)return undefined;
+    const verified=await createAuthorityClient({authorityUrl:options.authorityUrl,agentApiKey:token})('GET','v1/workflows/'+rootId);
+    if(verified.status!=='OK')return undefined;
+    const id=randomBytes(32).toString('hex');links.set(id,{token,workflow:rootId,expires:now()+60000});
+    return new URL('/console-api/open/'+id,origin).href;
+  }});
 }

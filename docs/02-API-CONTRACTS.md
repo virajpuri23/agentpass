@@ -267,3 +267,25 @@ the key return `INVALID_CALLER`; database errors fail closed. Later accepted gra
 do not extend the original credential lifetime. Seeded existing keys keep their
 existing behavior. The console proxy does not expose provisioning; agents use the
 MCP tool or the authenticated service API.
+
+## Workflow inspection read model
+
+`GET /v1/workflows/:root_grant_id` and MCP `get_workflow` are read-only. The caller
+must be in the grant's organization and be its subject, issuer, or organization
+owner. Missing and inaccessible roots return the same `INVALID_REQUEST` response.
+The response includes the root and same-organization descendants, current effective
+budgets, committed/reserved ledger totals, and historical audit decisions and
+completed simulated receipts whose grant belongs to that branch. Activity and
+receipts from sibling branches are excluded, even for the same principal.
+Negotiations retain the existing requester/parent visibility rule; ancestor status
+does not reveal another pair's private request. Inspection grants no execution
+permission and can display revoked or expired grants to a still-authenticated
+caller. Activity is capped at 500 and receipts at 100, with truncation flags.
+
+The optional console proxies `/console-api/workflows/:id`. A successful MCP
+`get_workflow` may include a one-use dashboard link in UI-only `_meta.dashboard_url`.
+Redeeming it at `/console-api/open/:ticket` sets a new opaque HttpOnly cookie and
+redirects to `/console#workflow=:id`. Links expire after one minute; browser sessions
+after fifteen minutes. These sessions can read only the selected workflow and cannot
+perform writes. Every data read reauthenticates the original caller. Neither a link
+nor a browser session extends the underlying credential or grant lifetime.

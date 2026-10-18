@@ -111,6 +111,29 @@ paths:
       description: >-
         Only caller-held grants. Inspector budgets include ancestor reservations and debits; invalid
         chains have a null remaining budget.
+  /v1/workflows/{root_grant_id}:
+    get:
+      operationId: getWorkflow
+      summary: Inspect a caller-held or caller-issued delegation workflow
+      tags: [Authority]
+      security: [{AgentBearer: []}]
+      parameters:
+        - {name: root_grant_id, in: path, required: true, schema: {type: string, minLength: 1}}
+      responses:
+        '200':
+          description: Current grants and budgets with persisted branch activity and simulated receipts.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, data]
+                properties:
+                  status: {type: string, const: OK}
+                  data: {$ref: '#/components/schemas/WorkflowSnapshot'}
+        '401': {$ref: '#/components/responses/ApiError'}
+        '404': {$ref: '#/components/responses/ApiError'}
+        '413': {$ref: '#/components/responses/ApiError'}
+        '503': {$ref: '#/components/responses/ApiError'}
   /v1/console:
     get:
       operationId: getConsoleSnapshot
@@ -2920,6 +2943,39 @@ paths:
           schema:
             type: string
             format: uri
+  /console-api/workflows/{root_grant_id}:
+    get:
+      operationId: consoleGetWorkflow
+      summary: Read an authenticated delegation workflow
+      tags: [Console]
+      security: [{ConsoleCookie: []}]
+      parameters:
+        - {name: root_grant_id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Authenticated workflow snapshot.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, data]
+                properties:
+                  status: {type: string, const: OK}
+                  data: {$ref: '#/components/schemas/WorkflowSnapshot'}
+        '401': {$ref: '#/components/responses/ConsoleError'}
+        '403': {$ref: '#/components/responses/ConsoleError'}
+        '404': {$ref: '#/components/responses/ConsoleError'}
+  /console-api/open/{ticket}:
+    get:
+      operationId: openWorkflowDashboard
+      summary: Redeem a one-use one-minute link created by an authenticated MCP workflow inspection
+      tags: [Console]
+      security: []
+      parameters:
+        - {name: ticket, in: path, required: true, schema: {type: string, pattern: '^[a-f0-9]{64}$'}}
+      responses:
+        '303': {description: Sets an opaque HttpOnly read-only workflow cookie and redirects to the console.}
+        '404': {$ref: '#/components/responses/ConsoleError'}
   /console-api/snapshot:
     get:
       operationId: getBrowserSnapshot
@@ -4790,6 +4846,41 @@ components:
                 oneOf: [{type: integer}, {type: string, pattern: '^[0-9]+$'}]
         truncated: {type: boolean}
         visibility: {type: string, enum: [organization, caller_only]}
+    WorkflowSnapshot:
+      type: object
+      additionalProperties: false
+      required: [root_grant_id, principal, grants, budgets, requests, activity, receipts, visibility, snapshot_at]
+      properties:
+        root_grant_id: {type: string}
+        principal: {$ref: '#/components/schemas/Principal'}
+        grants:
+          type: array
+          items: {$ref: '#/components/schemas/Grant'}
+        budgets:
+          type: array
+          items:
+            type: object
+            required: [grant_id, remaining_budget_cents, authority_code, committed_cents, reserved_cents]
+            properties:
+              grant_id: {type: string}
+              remaining_budget_cents: {type: [integer, 'null']}
+              authority_code: {type: string}
+              committed_cents: {type: integer, minimum: 0}
+              reserved_cents: {type: integer, minimum: 0}
+        requests: {$ref: '#/components/schemas/ConsoleSnapshot/properties/requests'}
+        activity: {$ref: '#/components/schemas/ConsoleSnapshot/properties/activity'}
+        receipts: {$ref: '#/components/schemas/ConsoleSnapshot/properties/receipts'}
+        visibility:
+          type: object
+          required: [grants, descendants_complete, requests, activity, activity_truncated, receipts_truncated]
+          properties:
+            grants: {type: string, const: delegated_workflow}
+            descendants_complete: {type: boolean}
+            requests: {type: string, const: parties_only}
+            activity: {type: string, const: delegated_workflow}
+            activity_truncated: {type: boolean}
+            receipts_truncated: {type: boolean}
+        snapshot_at: {type: string, format: date-time}
     ConsoleSnapshot:
       type: object
       additionalProperties: false
@@ -6259,6 +6350,7 @@ x-mcp-tools:
   legacy_service_tools:
     - list_runs
     - get_run
+    - get_workflow
     - provision_child
     - describe_authority
     - get_my_grants
