@@ -41,7 +41,7 @@ const successSchema = z.object({
 
 const envelopeSchema = z.union([successSchema, workforceDecisionSchema, errorSchema]);
 type Envelope = z.infer<typeof envelopeSchema>;
-type Config = { authorityUrl: string; agentApiKey: string };
+type Config = { authorityUrl: string; agentApiKey: string; runId?: string };
 
 const invalidCaller = (reason: string): Envelope => ({
   status: 'DENIED',
@@ -85,6 +85,7 @@ function createAuthorityClient(config: Config) {
         signal: AbortSignal.timeout(5000),
         headers: {
           authorization: `Bearer ${config.agentApiKey}`,
+          ...(config.runId ? {'x-agentpass-run-id':config.runId} : {}),
           ...(body === undefined ? {} : { 'content-type': 'application/json' }),
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -132,6 +133,9 @@ export function createMcpServer(config: Config): McpServer {
       recovery_tools: ['request_authority', 'get_authority_request', 'accept_authority_offer'],
     },
   }));
+
+  server.registerTool('list_runs',{description:'List persisted runs visible to this authenticated caller.',inputSchema:z.object({}).strict()},async()=>toolResult(await callAuthority('GET','v1/runs')));
+  server.registerTool('get_run',{description:'Read caller-visible run events, current grant/request snapshots and simulated receipts. A run ID never grants access.',inputSchema:z.object({run_id:z.string().regex(/^run-[a-zA-Z0-9_-]{1,80}$/)}).strict()},async({run_id})=>toolResult(await callAuthority('GET',`v1/runs/${encodeURIComponent(run_id)}`)));
 
   server.registerTool('get_my_grants', {
     description: 'Return grants belonging to the authenticated caller.',
@@ -241,7 +245,7 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
     process.exitCode = 1;
   } else {
     try {
-      serveStdio(() => createMcpServer({ authorityUrl, agentApiKey }), {
+      serveStdio(() => createMcpServer({ authorityUrl, agentApiKey, runId:process.env.AGENTPASS_RUN_ID }), {
         onerror: () => console.error('AgentPass MCP transport error.'),
       });
     } catch {

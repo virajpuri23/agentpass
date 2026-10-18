@@ -36,7 +36,7 @@ const successSchema = z.object({
 
 export const envelopeSchema = z.union([successSchema, workforceDecisionSchema, errorSchema]);
 export type Envelope = z.infer<typeof envelopeSchema>;
-type Config = { authorityUrl: string; agentApiKey: string };
+type Config = { authorityUrl: string; agentApiKey: string; runId?: string };
 
 const invalidCaller = (reason: string): Envelope => ({
   status: 'DENIED',
@@ -79,6 +79,7 @@ export function createAuthorityClient(config: Config) {
         signal: AbortSignal.timeout(5000),
         headers: {
           authorization: `Bearer ${config.agentApiKey}`,
+          ...(config.runId ? {'x-agentpass-run-id':config.runId} : {}),
           ...(body === undefined ? {} : { 'content-type': 'application/json' }),
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),

@@ -45,7 +45,7 @@ const authority = createAuthorityApp({ db, supplier }).listen(authorityPort, '12
 const mcp = createMcpHandler(({ requestInfo }) => {
   const agentApiKey = bearer(requestInfo?.headers.get('authorization'));
   if (!agentApiKey) throw new Error('Unauthenticated MCP request reached the server factory.');
-  return createMcpServer({ authorityUrl, agentApiKey });
+  return createMcpServer({ authorityUrl, agentApiKey, runId:requestInfo?.headers.get('x-agentpass-run-id')??undefined });
 }, { onerror: () => console.error('AgentPass MCP request error.') });
 
 function bearer(header: string | null | undefined): string | undefined {

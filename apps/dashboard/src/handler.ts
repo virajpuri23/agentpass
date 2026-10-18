@@ -65,13 +65,15 @@ export function createConsoleHandler(options: Options) {
       const session = sessionId && sessions.get(sessionId);
       if (!session) return failure('MISSING_CREDENTIAL','Connect with your credential to continue.',401);
       const client = createAuthorityClient({authorityUrl:options.authorityUrl,agentApiKey:session.token});
-      if (request.method === 'GET' && url.pathname === '/console-api/snapshot') {
-        const result = await client('GET','v1/console');
+      const runPath=url.pathname.match(/^\/console-api\/runs(?:\/(run-[a-zA-Z0-9_-]{1,80}))?$/);
+      if (request.method === 'GET' && (url.pathname === '/console-api/snapshot'||runPath)) {
+        const result = await client('GET',runPath ? 'v1/runs'+(runPath[1]?'/'+runPath[1]:'') : 'v1/console');
         return json(result,result.status==='OK'?200:result.code==='INVALID_CALLER'?401:503);
       }
       const match = url.pathname.match(/^\/console-api(\/v1\/(?:authority\/requests(?:\/[a-zA-Z0-9_-]+\/(?:respond|accept))?|grants\/[a-zA-Z0-9_-]+\/revoke))$/);
       if (request.method === 'POST' && match) {
-        const result = await client('POST',match[1].slice(1),body);
+        const writeClient=createAuthorityClient({authorityUrl:options.authorityUrl,agentApiKey:session.token,runId:request.headers.get('x-agentpass-run-id')??undefined});
+        const result = await writeClient('POST',match[1].slice(1),body);
         return json(result,result.status==='OK'?200:result.status==='ERROR'?503:403);
       }
       return failure('INVALID_REQUEST','Unknown console endpoint.',404);

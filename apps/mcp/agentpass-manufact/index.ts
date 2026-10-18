@@ -45,7 +45,7 @@ function caller(request: Request) {
 function authority(ctx: RequestContext<AgentPassOAuthUser, 'optional'>) {
   const token = ctx.request && caller(ctx.request.raw);
   if (!token) throw new Error('Authenticated request required.');
-  return createAuthorityClient({ authorityUrl: authorityUrl!, agentApiKey: token });
+  return createAuthorityClient({ authorityUrl: authorityUrl!, agentApiKey: token, runId:ctx.request?.raw.headers.get('x-agentpass-run-id')??undefined });
 }
 
 // Validate every HTTP MCP request; no principal or credential survives between callers.
@@ -107,6 +107,16 @@ export const describeAuthority = server.tool({
   scope_limits: ['actions', 'supplier_ids', 'sku_ids', 'max_per_action_cents', 'total_budget_cents', 'expires_at', 'max_delegation_depth', 'resources', 'max_executions'],
   recovery_tools: ['request_authority', 'get_authority_request', 'accept_authority_offer'],
 } }));
+
+export const listRuns = server.tool({
+  name:'list_runs',description:'List persisted run IDs visible to the authenticated caller. Run IDs are correlation metadata, never authority.',
+  inputSchema:z.object({}).strict(),outputSchema:envelopeSchema,annotations:readOnly,
+},async(_input,ctx)=>toolResult(await authority(ctx)('GET','v1/runs')));
+
+export const getRun = server.tool({
+  name:'get_run',description:'Inspect a persisted run: caller-visible events, related grants, private-to-parties requests and simulated receipts. Grant budgets and request states are current snapshots; events are historical. Missing or inaccessible runs return the same error.',
+  inputSchema:z.object({run_id:z.string().regex(/^run-[a-zA-Z0-9_-]{1,80}$/)}).strict(),outputSchema:envelopeSchema,annotations:readOnly,
+},async({run_id},ctx)=>toolResult(await authority(ctx)('GET',`v1/runs/${encodeURIComponent(run_id)}`)));
 
 export const getMyGrants = server.tool({
   name: 'get_my_grants', description: 'Inspect only the authenticated caller’s delegated authority.',

@@ -1,7 +1,7 @@
 import express from 'express';
 import { WorkforceGateway,type WorkforceOptions } from './workforce.js';
 import { workforceActionSchema } from '../../../packages/contracts/src/workforce.js';
-import { consoleSnapshot } from './console.js';
+import { consoleSnapshot, listRuns } from './console.js';
 import { randomUUID } from 'node:crypto';
 import { auditContext, setAuditContext } from './audit.js';
 import { SupplierPolicyDenial } from './supplier.js';
@@ -31,8 +31,10 @@ export function createAuthorityApp(options: { db: Database.Database | AuthorityS
   }:undefined);
   const workforce = new WorkforceGateway(engine,options.workforce);
   app.disable('x-powered-by');
-  app.use((_req,_res,next) => {
-    auditContext.run({traceId:randomUUID(),requestId:randomUUID(),action:'http.request'},next);
+  app.use((req,_res,next) => {
+    const runId=req.header('x-agentpass-run-id');
+    if(runId && !/^run-[a-zA-Z0-9_-]{1,80}$/.test(runId)) return next(new Denial({status:'DENIED',code:'INVALID_REQUEST',reason:'Invalid run correlation ID'},400));
+    auditContext.run({runId,traceId:randomUUID(),requestId:randomUUID(),action:'http.request'},next);
   });
   app.use(express.json({limit:'32kb'}));
   app.get('/health',async (_req,res) => { await db.prepare('SELECT 1').get(); res.json({status:'OK'}); });
@@ -69,6 +71,11 @@ export function createAuthorityApp(options: { db: Database.Database | AuthorityS
     return new ConsentService(engine,policy,options.now).revoke(context.account_id,context.connection.id);
   }));
   app.get('/v1/console',route(p => consoleSnapshot(engine,p)));
+  app.get('/v1/runs',route(p => listRuns(engine,p)));
+  app.get('/v1/runs/:id',route((p,req) => {
+    const runId=z.string().regex(/^run-[a-zA-Z0-9_-]{1,80}$/).parse(req.params.id);
+    return consoleSnapshot(engine,p,runId);
+  }));
   app.post('/v1/grants/:id/delegate',route((p,req) => {
     const body = z.object({recipient_principal_id:id,scope:scopeSchema}).strict().parse(req.body);
     setAuditContext({action:'grant.delegate',grantId:id.parse(req.params.id)});
