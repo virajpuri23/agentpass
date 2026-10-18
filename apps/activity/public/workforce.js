@@ -157,8 +157,17 @@ function placeSecurity(two) {
     g.setAttribute('transform', 'translate(176 300)'); rect.setAttribute('width', '130'); rect.setAttribute('height', '112');
     title.setAttribute('x', '12'); title.setAttribute('y', '24'); sub.setAttribute('x', '12'); sub.setAttribute('y', '42');
     title.textContent = '🔍 Security'; badge.setAttribute('transform', 'translate(12 56)');
-    P.security = [241, 355]; P.securityTop = [241, 300];
+    // Two helpers: centre them under the manager, evenly spaced.
+    document.getElementById('n-design').setAttribute('transform', 'translate(50 300)');
+    g.setAttribute('transform', 'translate(220 300)');
+    document.getElementById('wire-design').setAttribute('d', 'M200 236 L115 300');
+    document.getElementById('wire-second').setAttribute('d', 'M200 236 L285 300');
+    P.design = [115, 355]; P.designTop = [115, 300]; P.security = [285, 355]; P.securityTop = [285, 300];
   } else {
+    document.getElementById('n-design').setAttribute('transform', 'translate(36 300)');
+    document.getElementById('wire-design').setAttribute('d', 'M200 236 L101 300');
+    document.getElementById('wire-second').setAttribute('d', 'M200 236 L241 300');
+    P.design = [101, 355]; P.designTop = [101, 300];
     g.setAttribute('transform', 'translate(690 392)'); rect.setAttribute('width', '280'); rect.setAttribute('height', '50');
     title.setAttribute('x', '14'); title.setAttribute('y', '22'); sub.setAttribute('x', '14'); sub.setAttribute('y', '40');
     title.textContent = '🔍 Security reviewer'; badge.setAttribute('transform', 'translate(190 8)');
