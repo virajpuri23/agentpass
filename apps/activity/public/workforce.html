@@ -15,54 +15,164 @@
     </div>
     <div class="controls">
       <span id="authority" class="badge">authority: —</span>
+      <label class="check">Speed
+        <select id="speed" aria-label="Playback speed">
+          <option value="slow">Slow</option>
+          <option value="normal" selected>Normal</option>
+          <option value="instant">Instant</option>
+        </select>
+      </label>
+      <label class="check"><input type="checkbox" id="step"> Step through</label>
+      <button id="next" class="secondary" hidden disabled>Next ▸</button>
       <button id="run">Run demo</button>
     </div>
   </header>
 
-  <main class="grid">
-    <section class="panel team" aria-label="Agent team">
-      <h2>Agent team</h2>
-      <ul id="team">
-        <li data-agent="lead-agent"><b>🧑‍💻 Lead coding agent</b><small>Acme · holds the root grant</small><span class="state">idle</span></li>
-        <li data-agent="design-agent"><b>🎨 Design agent</b><small>Acme · repo.read, repo.write on UI paths</small><span class="state">not started</span></li>
-        <li data-agent="security-agent" class="external"><b>🔒 Security agent</b><small>Sentinel Sec (external) · repo.read only</small><span class="state">not started</span></li>
-        <li data-agent="hosting-agent"><b>🚀 Hosting agent</b><small>Acme · repo.read, deploy.preview after negotiation</small><span class="state">not started</span></li>
-        <li data-agent="analytics-agent"><b>📊 Analytics agent</b><small>Acme · analytics.aggregate only</small><span class="state">not started</span></li>
-      </ul>
-    </section>
+  <main>
+    <section class="stage" aria-label="Animated diagram">
+      <svg id="diagram" viewBox="0 0 1000 470" role="img" aria-labelledby="diagram-title">
+        <title id="diagram-title">Acme's lead agent and its specialists reach the project only through the AgentPass gate; an external security company audits read-only</title>
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrowhead"/></marker>
+        </defs>
 
-    <section class="panel timeline" aria-label="Execution timeline">
-      <h2>Execution timeline <span id="count" class="muted"></span></h2>
-      <ol id="timeline"><li class="empty">Press “Run demo”.</li></ol>
-    </section>
+        <!-- company boundaries -->
+        <rect class="org" x="16" y="16" width="440" height="438" rx="18"/>
+        <text class="org-label" x="36" y="46">Acme</text><text class="org-sub" x="36" y="64">the lead’s company</text>
+        <rect class="org" x="672" y="16" width="312" height="330" rx="18"/>
+        <text class="org-label" x="692" y="46">Project</text><text class="org-sub" x="692" y="64">demo-project · every access gated</text>
+        <rect class="org ext" x="672" y="362" width="312" height="92" rx="18"/>
+        <text class="org-label" x="692" y="386">Sentinel Sec</text><text class="org-sub" x="692" y="404">external company</text>
 
-    <section class="panel authority" aria-label="Authority state">
-      <h2>Authority state</h2>
-      <table id="grants">
-        <thead><tr><th>Grant</th><th>Holder</th><th>Actions</th><th>Resources</th><th>Status</th></tr></thead>
-        <tbody><tr class="empty"><td colspan="5">No grants yet.</td></tr></tbody>
-      </table>
-      <div class="decisions">
-        <div><span class="n ok" id="n-allowed">0</span> allowed</div>
-        <div><span class="n bad" id="n-denied">0</span> denied</div>
-        <div><span class="n req" id="n-negotiated">0</span> negotiated</div>
-        <div><span class="n rev" id="n-revoked">0</span> revoked</div>
+        <!-- static links -->
+        <path class="wire" d="M200 118 L200 150" marker-end="url(#arrow)"/>
+        <path class="wire faint" d="M200 236 L101 300"/>
+        <path class="wire faint" d="M200 236 L241 300"/>
+        <path class="wire faint" d="M200 236 L381 300"/>
+        <path class="wire faint" d="M296 193 L500 235"/>
+        <path class="wire faint" d="M628 235 L690 78"/>
+        <path class="wire faint" d="M628 235 L690 174"/>
+        <path class="wire faint" d="M628 235 L690 270"/>
+        <path class="wire faint" d="M628 290 L690 417"/>
+
+        <!-- Acme nodes -->
+        <g class="node" id="n-owner" transform="translate(110 70)">
+          <rect width="180" height="48" rx="12"/>
+          <text x="16" y="21" class="n-title">👤 Owner</text>
+          <text x="16" y="38" class="n-sub">a person · issues the root grant</text>
+        </g>
+        <g class="node" id="n-lead" transform="translate(104 150)">
+          <rect width="192" height="86" rx="14"/>
+          <text x="16" y="26" class="n-title">🧑‍💻 Lead agent</text>
+          <text x="16" y="45" class="n-sub" id="s-lead">coordinates the specialists</text>
+          <g class="badge" id="b-lead" transform="translate(16 56)"><rect width="0" height="20" rx="10"/><text x="8" y="14"></text></g>
+        </g>
+        <g class="node dim" id="n-design" transform="translate(36 300)">
+          <rect width="130" height="112" rx="14"/>
+          <text x="12" y="24" class="n-title">🎨 Design</text>
+          <text x="12" y="42" class="n-sub" id="s-design">not started yet</text>
+          <g class="badge" id="b-design" transform="translate(12 56)"><rect width="0" height="20" rx="10"/><text x="8" y="14"></text></g>
+          <text id="l-design" x="104" y="26" class="lock" opacity="0">🔒</text>
+        </g>
+        <g class="node dim" id="n-hosting" transform="translate(176 300)">
+          <rect width="130" height="112" rx="14"/>
+          <text x="12" y="24" class="n-title">🚀 Hosting</text>
+          <text x="12" y="42" class="n-sub" id="s-hosting">not started yet</text>
+          <g class="badge" id="b-hosting" transform="translate(12 56)"><rect width="0" height="20" rx="10"/><text x="8" y="14"></text></g>
+          <text id="l-hosting" x="104" y="26" class="lock" opacity="0">🔒</text>
+        </g>
+        <g class="node dim" id="n-analytics" transform="translate(316 300)">
+          <rect width="130" height="112" rx="14"/>
+          <text x="12" y="24" class="n-title">📊 Analytics</text>
+          <text x="12" y="42" class="n-sub" id="s-analytics">not started yet</text>
+          <g class="badge" id="b-analytics" transform="translate(12 56)"><rect width="0" height="20" rx="10"/><text x="8" y="14"></text></g>
+          <text id="l-analytics" x="104" y="26" class="lock" opacity="0">🔒</text>
+        </g>
+
+        <!-- the gate -->
+        <g class="node gate" id="n-gate" transform="translate(500 150)">
+          <rect width="128" height="170" rx="20"/>
+          <text x="64" y="44" class="n-title c">🛡️</text>
+          <text x="64" y="74" class="n-title c">AgentPass</text>
+          <text x="64" y="94" class="n-sub c">checks every</text>
+          <text x="64" y="110" class="n-sub c">request</text>
+        </g>
+
+        <!-- project resources -->
+        <g class="node res" id="r-repo" transform="translate(690 56)">
+          <rect width="280" height="44" rx="12"/>
+          <text x="14" y="20" class="n-title">📁 Source code</text>
+          <text x="14" y="36" class="n-sub">src/** · read and write by grant</text>
+        </g>
+        <g transform="translate(690 108)"><g class="vault-g" id="r-env"><rect width="280" height="36" rx="10" class="vault"/><text x="12" y="23" class="vault-text">🔒 .env secrets: nobody’s grant covers it</text></g></g>
+        <g class="node res" id="r-preview" transform="translate(690 152)">
+          <rect width="280" height="44" rx="12"/>
+          <text x="14" y="20" class="n-title">🧪 Preview deploy</text>
+          <text x="14" y="36" class="n-sub">a local build · only by negotiated grant</text>
+        </g>
+        <g transform="translate(690 204)"><g class="vault-g" id="r-prod"><rect width="280" height="36" rx="10" class="vault"/><text x="12" y="23" class="vault-text">🔒 Production: outside the lead’s own authority</text></g></g>
+        <g class="node res" id="r-agg" transform="translate(690 248)">
+          <rect width="280" height="44" rx="12"/>
+          <text x="14" y="20" class="n-title">📈 Analytics aggregates</text>
+          <text x="14" y="36" class="n-sub">views, signups, conversion · no user rows</text>
+        </g>
+        <g transform="translate(690 300)"><g class="vault-g" id="r-raw"><rect width="280" height="36" rx="10" class="vault"/><text x="12" y="23" class="vault-text">🔒 Raw user records: emails stay private</text></g></g>
+
+        <!-- external security company -->
+        <g class="node dim external" id="n-security" transform="translate(690 392)">
+          <rect width="280" height="50" rx="14"/>
+          <text x="14" y="22" class="n-title">🔒 Security agent</text>
+          <text x="14" y="40" class="n-sub" id="s-security">not contacted yet · read-only when it is</text>
+          <g class="badge" id="b-security" transform="translate(190 8)"><rect width="0" height="20" rx="10"/><text x="8" y="14"></text></g>
+        </g>
+
+        <g id="flows"></g>
+      </svg>
+
+      <div class="caption" aria-live="polite">
+        <div class="step-no" id="step-no">Ready</div>
+        <div class="step-title" id="story">Press “Run demo” to watch one lead and four real agents build a page under AgentPass.</div>
+        <div class="step-detail" id="story-detail"></div>
+        <div class="step-state" id="story-state"></div>
       </div>
+      <ol class="dots" id="dots" aria-label="Progress"></ol>
     </section>
 
-    <section class="panel outputs" aria-label="Outputs">
-      <h2>Outputs</h2>
-      <div class="out" id="out-design"><h3>Landing page</h3><div class="diff"><div><small>before</small><pre id="hero-before">—</pre></div><div><small>after</small><pre id="hero-after">—</pre></div></div></div>
-      <div class="out" id="out-security"><h3>Security findings</h3><ul id="findings"><li class="muted">—</li></ul><p id="fix" class="muted"></p></div>
-      <div class="out" id="out-hosting"><h3>Preview</h3><p id="preview" class="muted">—</p></div>
-      <div class="out" id="out-analytics"><h3>Analytics</h3><p id="metrics" class="muted">—</p><ul id="suggestions"></ul></div>
-    </section>
+    <aside class="side">
+      <section class="card">
+        <h2>Authority state</h2>
+        <table id="grants">
+          <thead><tr><th>Holder</th><th>May do</th><th>On</th><th>Status</th></tr></thead>
+          <tbody><tr class="empty"><td colspan="4">No grants yet.</td></tr></tbody>
+        </table>
+        <div class="decisions">
+          <div><span class="n ok" id="n-allowed">0</span> granted</div>
+          <div><span class="n bad" id="n-denied">0</span> refused</div>
+          <div><span class="n req" id="n-negotiated">0</span> negotiated</div>
+          <div><span class="n rev" id="n-revoked">0</span> revoked</div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>What happened</h2>
+        <ol class="story" id="checks"></ol>
+        <p class="result" id="result"></p>
+      </section>
+
+      <section class="card outputs">
+        <h2>Outputs</h2>
+        <div class="out"><h3>Landing page hero</h3><div class="diff"><div><small>before</small><pre id="hero-before">—</pre></div><div><small>after</small><pre id="hero-after">—</pre></div></div></div>
+        <div class="out"><h3>Security findings</h3><ul id="findings"><li class="muted">—</li></ul><p id="fix" class="muted"></p></div>
+        <div class="out"><h3>Preview</h3><p id="preview" class="muted">—</p></div>
+        <div class="out"><h3>Analytics</h3><p id="metrics" class="muted">—</p><ul id="suggestions"></ul></div>
+      </section>
+
+      <details class="card">
+        <summary>Technical log <span id="count" class="muted"></span></summary>
+        <ol id="timeline"><li class="empty">Press “Run demo”.</li></ol>
+      </details>
+    </aside>
   </main>
-
-  <footer class="foot">
-    <ol id="checks" class="checks"></ol>
-    <p id="result" class="result"></p>
-    <p class="muted">Every row is a real call by a separate agent session. Preview deploys are local builds. <a href="/">Other demos</a></p>
-  </footer>
+  <p class="foot">Every animation is a real call made by a separate agent session, replayed at a readable pace. Preview deploys are local builds; nothing reaches production. <a href="/">Other demos</a></p>
 </body>
 </html>
