@@ -44,6 +44,15 @@ for (const backend of backends) {
         expect(read.json.data).toEqual(r.json.data);
       });
 
+      it('prices the release-crew tools from the catalog', async () => {
+        const cases = [['SEC-SCAN', 2, 24000], ['DESIGN-PACK', 1, 18000], ['QA-MINUTES', 350, 35000]] as const;
+        for (const [sku_id, quantity, total] of cases) {
+          const r = await s.call('POST', '/internal/quote', quoteInput({ sku_id, quantity }));
+          expect(r.json.data, sku_id).toMatchObject({ sku_id, quantity, total_cents: total });
+          expect(r.text).not.toMatch(/internal|cost|margin|stock/i);
+        }
+      });
+
       it('rejects caller-supplied prices and unknown fields', async () => {
         const r = await s.call('POST', '/internal/quote', quoteInput({ unit_price_cents: 1, total_cents: 1 }));
         expect(r.status).toBe(400);

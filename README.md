@@ -33,6 +33,24 @@ logic is implemented; live OAuth and host journeys remain unverified, and hosted
 preview rollout is paused. The optional Developer B worker is outside the current
 Developer A scope.
 
+## Coding-agent workforce demo (Developer B)
+
+A lead coding agent gets a landing page built by four specialist agents (Design,
+Security as an external company, Hosting, Analytics). AgentPass controls what each
+may touch: the Design agent can't read `.env`, the Security agent can't write,
+the Hosting agent is refused `deploy.production`, reads the hint, requests
+`deploy.preview` instead and ships a **real local build**; the Analytics agent gets
+aggregates, never raw rows; every temporary grant is revoked at the end.
+
+```bash
+npm run demo                 # headless: timeline + 12 checks (12/12), exit 1 on failure
+npm run dev:activity         # then open http://127.0.0.1:3200/workforce.html
+```
+
+Authority runs on a **labeled mock** until Developer A's generic-action contract
+ships (`docs/19-WORKFORCE-ADAPTER-B.md`). Full package, observed results,
+screenshots and blockers: [`docs/21-WORKFORCE-DEMO.md`](docs/21-WORKFORCE-DEMO.md).
+
 ## Scope promise
 
 **P0: demo a real agent-to-agent, cross-organization authorization flow** with authenticated agent identities, parent-child grants, merchant-side independent policy, safe simulated execution, and structured failures.
@@ -140,7 +158,7 @@ npx mcp-use client sourcing tools call get_my_grants
 
 The CLI stores connection headers in its local user configuration; keep that configuration private and outside Git. Supply keys through each client's private configuration, never a model prompt. The sourcing client must never receive the buyer/owner key.
 
-Discovered tools: `provision_child`, `describe_authority`, `get_my_grants`, `request_authority`, `get_authority_request`, `respond_authority_request`, `accept_authority_offer`, `delegate_authority`, `execute_action`, `revoke_authority`. All return structured envelopes with text fallbacks; all core workflows work without rendering the view.
+Discovered tools: `provision_child`, `describe_authority`, `get_my_grants`, `request_authority`, `get_authority_request`, `respond_authority_request`, `accept_authority_offer`, `delegate_authority`, `execute_action`, `verify_authority`, `revoke_authority`. The remote Manufact adapter also retains its six human onboarding tools. The additive [workforce contract](docs/11-WORKFORCE-CONTRACT.md) covers generic resources, protected gateways and recovery. All return structured envelopes with text fallbacks; all core workflows work without rendering the view.
 
 ### Supabase persistence and hosted authority
 

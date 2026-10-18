@@ -74,7 +74,7 @@ describe('hosted MCP entry', () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
       'accept_authority_offer', 'delegate_authority', 'describe_authority', 'execute_action',
-      'get_authority_request', 'get_my_grants', 'get_run', 'list_runs', 'provision_child', 'request_authority', 'respond_authority_request', 'revoke_authority',
+      'get_authority_request', 'get_my_grants', 'get_run', 'list_runs', 'provision_child', 'request_authority', 'respond_authority_request', 'revoke_authority', 'verify_authority',
     ]);
     await client.close();
   });

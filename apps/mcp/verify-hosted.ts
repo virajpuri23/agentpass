@@ -62,7 +62,7 @@ try {
   const sourcing = await connect(process.env.SOURCING_API_KEY!);
   const stranger = await connect(process.env.SUPPLIER_API_KEY!);
   const tools = (await buyer.listTools()).tools;
-  assert.deepEqual(tools.map(tool => tool.name).sort(), ['describe_authority','get_my_grants','request_authority','get_authority_request','respond_authority_request','accept_authority_offer','delegate_authority','execute_action','revoke_authority'].sort());
+  assert.deepEqual(tools.map(tool => tool.name).sort(), ['provision_child','describe_authority','get_my_grants','get_onboarding_context','provision_agent','list_agents','get_agent','revoke_agent','revoke_connection','request_authority','get_authority_request','respond_authority_request','accept_authority_offer','delegate_authority','execute_action','verify_authority','revoke_authority'].sort());
   assert(tools.every(tool => tool.outputSchema));
   await ok(buyer,'describe_authority');
   const snapshot = await call<{grants:Grant[]}>(buyer,'get_my_grants');

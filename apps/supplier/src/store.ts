@@ -46,6 +46,8 @@ export type FulfillResult =
 
 export interface SupplierStore {
   getProduct(skuId: string): Promise<CatalogRow | undefined>;
+  /** Active catalog rows (private fields included; shape with public-view only). */
+  listProducts(): Promise<CatalogRow[]>;
   getQuote(id: string): Promise<QuoteRow | undefined>;
   getQuoteByRequest(requestId: string): Promise<QuoteRow | undefined>;
   /** Inserts unless request_id exists; returns the stored row either way. */
@@ -53,18 +55,18 @@ export interface SupplierStore {
   getOrderByRequest(requestId: string): Promise<OrderRow | undefined>;
   /** Atomically: replay by request_id, or decrement stock and create one order per quote. */
   fulfill(order: OrderRow, quantity: number, skuId: string): Promise<FulfillResult>;
-  /** Demo reset: clear quotes/orders and restore stock. */
+  /** Demo reset: clear quotes/orders and restore seeded stock (`stock` overrides PACK-500's). */
   reset(stock?: number): Promise<void>;
   close(): Promise<void>;
 }
 
-const SEED = {
-  sku_id: 'PACK-500',
-  product_name: 'Packaging units',
-  stock_quantity: 1000,
-  public_unit_price_cents: 170,
-  internal_unit_cost_cents: 100,
-};
+/** Seed catalog. PACK-500 = cross-company demo; the rest = internal release-crew tool billing. */
+export const CATALOG = [
+  { sku_id: 'PACK-500', product_name: 'Packaging units', stock_quantity: 1000, public_unit_price_cents: 170, internal_unit_cost_cents: 100 },
+  { sku_id: 'SEC-SCAN', product_name: 'Security scan', stock_quantity: 100, public_unit_price_cents: 12000, internal_unit_cost_cents: 7000 },
+  { sku_id: 'DESIGN-PACK', product_name: 'Design asset pack', stock_quantity: 100, public_unit_price_cents: 18000, internal_unit_cost_cents: 9000 },
+  { sku_id: 'QA-MINUTES', product_name: 'Test-device minute', stock_quantity: 100000, public_unit_price_cents: 100, internal_unit_cost_cents: 55 },
+];
 
 // ---------------------------------------------------------------- SQLite
 
@@ -105,9 +107,10 @@ export function sqliteStore(path: string): SupplierStore {
   db.pragma('journal_mode = WAL');
   db.pragma('busy_timeout = 5000');
   db.exec(SQLITE_SCHEMA);
-  db.prepare(`INSERT INTO catalog (sku_id, product_name, stock_quantity, public_unit_price_cents, internal_unit_cost_cents)
+  const seedRow = db.prepare(`INSERT INTO catalog (sku_id, product_name, stock_quantity, public_unit_price_cents, internal_unit_cost_cents)
     VALUES (@sku_id, @product_name, @stock_quantity, @public_unit_price_cents, @internal_unit_cost_cents)
-    ON CONFLICT(sku_id) DO NOTHING`).run(SEED);
+    ON CONFLICT(sku_id) DO NOTHING`);
+  for (const row of CATALOG) seedRow.run(row);
 
   const toCatalog = (r: any): CatalogRow | undefined => (r ? { ...r, active: Boolean(r.active) } : undefined);
 
@@ -125,6 +128,7 @@ export function sqliteStore(path: string): SupplierStore {
 
   return {
     async getProduct(skuId) { return toCatalog(db.prepare('SELECT * FROM catalog WHERE sku_id = ?').get(skuId)); },
+    async listProducts() { return (db.prepare('SELECT * FROM catalog WHERE active = 1 ORDER BY sku_id').all()).map((r) => toCatalog(r)!); },
     async getQuote(id) { return db.prepare('SELECT * FROM quotes WHERE id = ?').get(id) as QuoteRow | undefined; },
     async getQuoteByRequest(requestId) {
       return db.prepare('SELECT * FROM quotes WHERE request_id = ?').get(requestId) as QuoteRow | undefined;
@@ -139,10 +143,11 @@ export function sqliteStore(path: string): SupplierStore {
       return db.prepare('SELECT * FROM orders WHERE request_id = ?').get(requestId) as OrderRow | undefined;
     },
     async fulfill(order, quantity, skuId) { return fulfillTx.immediate(order, quantity, skuId); },
-    async reset(stock = SEED.stock_quantity) {
+    async reset(stock?: number) {
       db.transaction(() => {
         db.exec('DELETE FROM orders; DELETE FROM quotes;');
-        db.prepare('UPDATE catalog SET stock_quantity = ? WHERE sku_id = ?').run(stock, SEED.sku_id);
+        const update = db.prepare('UPDATE catalog SET stock_quantity = ? WHERE sku_id = ?');
+        for (const row of CATALOG) update.run(row.sku_id === 'PACK-500' && stock !== undefined ? stock : row.stock_quantity, row.sku_id);
       }).immediate();
     },
     async close() { db.close(); },
@@ -178,6 +183,7 @@ export function postgresStore(connectionString: string): SupplierStore {
 
   return {
     getProduct: (skuId) => one<CatalogRow>('SELECT * FROM catalog WHERE sku_id = $1', [skuId]).then(toCatalog),
+    listProducts: async () => (await pool.query('SELECT * FROM catalog WHERE active ORDER BY sku_id')).rows as CatalogRow[],
     getQuote: (id) => one<QuoteRow>('SELECT * FROM quotes WHERE id = $1', [id]),
     getQuoteByRequest: (requestId) => one<QuoteRow>('SELECT * FROM quotes WHERE request_id = $1', [requestId]),
     async insertQuote(q) {
@@ -215,13 +221,15 @@ export function postgresStore(connectionString: string): SupplierStore {
         client.release();
       }
     },
-    async reset(stock = SEED.stock_quantity) {
+    async reset(stock?: number) {
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
         await client.query('DELETE FROM orders');
         await client.query('DELETE FROM quotes');
-        await client.query('UPDATE catalog SET stock_quantity = $1 WHERE sku_id = $2', [stock, SEED.sku_id]);
+        for (const row of CATALOG) {
+          await client.query('UPDATE catalog SET stock_quantity = $1 WHERE sku_id = $2', [row.sku_id === 'PACK-500' && stock !== undefined ? stock : row.stock_quantity, row.sku_id]);
+        }
         await client.query('COMMIT');
       } catch (error) {
         await client.query('ROLLBACK').catch(() => {});

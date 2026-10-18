@@ -1,3 +1,4 @@
+import { workforceFromEnvironment } from '../../../authority/src/workforce-client.js';
 import { postgresStore } from '../../../../db/postgres.js';
 import { createAuthorityApp } from '../../../authority/src/app.js';
 import { HttpSupplierService } from '../../../authority/src/supplier.js';
@@ -45,7 +46,7 @@ export async function authorityEndpoint(): Promise<string> {
       servers.push(supplier.server);
       supplierUrl = supplier.url;
     }
-    const app=createAuthorityApp({db:db.store,supplier:new HttpSupplierService(supplierUrl,serviceKey),...onboarding});
+    const app=createAuthorityApp({db:db.store,supplier:new HttpSupplierService(supplierUrl,serviceKey),workforce:workforceFromEnvironment(),...onboarding});
     stopReconciliation=await app.locals.agentControl?.startReconciliation();
     const authority = await listen(app);
     servers.push(authority.server);

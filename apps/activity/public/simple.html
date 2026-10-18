@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>AgentPass Demo</title>
+  <link rel="stylesheet" href="/simple.css">
+  <script src="/simple.js" defer></script>
+</head>
+<body>
+  <main>
+    <h1>AgentPass</h1>
+    <p class="lede">A buyer agent lets a helper agent shop at another company, without handing over its own keys or budget.</p>
+
+    <div class="controls">
+      <div class="toggle" role="radiogroup" aria-label="Where to run">
+        <label><input type="radio" name="where" value="local" checked> This laptop</label>
+        <label><input type="radio" name="where" value="hosted" id="where-hosted"> Manufact (live)</label>
+      </div>
+      <button id="run">Run demo</button>
+    </div>
+    <p id="status" class="status"></p>
+
+    <ol id="steps" class="steps"></ol>
+
+    <div class="budget" id="budget" hidden>
+      <div class="budget-text"><span>Budget used</span><span id="budget-amt"></span></div>
+      <div class="bar"><i id="budget-bar"></i></div>
+    </div>
+
+    <details>
+      <summary>Show technical log</summary>
+      <pre id="log"></pre>
+    </details>
+
+    <p class="foot">Every step is a real call made by a separate agent process. Purchases are simulated.</p>
+  </main>
+</body>
+</html>
