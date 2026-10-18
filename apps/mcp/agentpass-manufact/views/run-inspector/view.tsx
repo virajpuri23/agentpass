@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ModelContext, useCallTool, useHostContext, useToolContext } from "mcp-use/react";
 import { z } from "zod";
 import { GrantCard, grantSchema, money, date } from "../authority-inspector/view.js";
@@ -27,7 +27,9 @@ export default function RunInspector() {
   const [replacement,setReplacement] = useState<unknown>();
   const [availableRuns,setAvailableRuns] = useState<z.infer<typeof runListSchema>>();
   const [busy,setBusy] = useState(false);
-  const output = envelopeSchema.safeParse(replacement ?? (view.status==="ready" ? view.toolOutput : undefined)).data;
+  const hostOutput = view.status==="ready" ? view.toolOutput : undefined;
+  useEffect(()=>{setReplacement(undefined);setAvailableRuns(undefined);},[hostOutput]);
+  const output = envelopeSchema.safeParse(replacement ?? hostOutput).data;
   const snapshot = output?.status==="OK" ? snapshotSchema.safeParse(output.data).data : undefined;
   const currentList = output?.status==="OK" ? runListSchema.safeParse(output.data).data : undefined;
   const list = availableRuns ?? currentList;
@@ -36,16 +38,17 @@ export default function RunInspector() {
     setBusy(true);
     try {
       const result = id ? await runTool.callTool({run_id:id}) : await listTool.callTool({});
-      const parsed = runListSchema.safeParse(result.structuredContent.data);
+      const response = envelopeSchema.parse(result.structuredContent);
+      const parsed = runListSchema.safeParse(response.data);
       if(parsed.success)setAvailableRuns(parsed.data);
-      if(result.structuredContent.status!=="OK")setAvailableRuns(undefined);
-      setReplacement(result.structuredContent);
+      if(response.status!=="OK")setAvailableRuns(undefined);
+      setReplacement(response);
     } catch {
       setAvailableRuns(undefined);
       setReplacement({status:"ERROR",code:"SERVICE_UNAVAILABLE",reason:"Could not refresh this authenticated view. Reconnect your MCP client and run list_runs or get_run again."});
     } finally {setBusy(false);}
   }
-  const pending = busy || (view.status==="pending" && replacement===undefined);
+  const pending = busy || view.status==="pending";
   const invalid = !pending && (!output || (output.status==="OK" && !snapshot && !currentList));
   const failed = !pending && (invalid || output?.status!=="OK");
   const budgets = new Map((snapshot?.budgets ?? []).map(b=>[b.grant_id,b]));
