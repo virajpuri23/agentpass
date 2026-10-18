@@ -19,7 +19,8 @@
     "dev:dashboard": "tsx apps/dashboard/src/server.ts",
     "demo:console": "tsx apps/dashboard/src/demo.ts",
     "agent:onboard": "node --import tsx apps/cli/src/onboard.ts",
-    "agent:provision": "node --import tsx apps/cli/src/provision.ts"
+    "agent:provision": "node --import tsx apps/cli/src/provision.ts",
+    "crew:run": "tsx --env-file-if-exists=.env scripts/run-crew.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "^2.3.1",

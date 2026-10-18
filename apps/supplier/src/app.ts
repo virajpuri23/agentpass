@@ -32,12 +32,14 @@ function sameSecret(given: string | undefined, expected: string): boolean {
   return timingSafeEqual(a, b);
 }
 
-export function createSupplierApp({ service, serviceKey, healthCheck, mcp }: {
+export function createSupplierApp({ service, serviceKey, healthCheck, mcp, requestLog = true }: {
   service: SupplierService;
   serviceKey: string;
   healthCheck?: () => Promise<unknown>;
   /** Public read-only MCP discovery endpoint (see mcp.ts). */
   mcp?: (req: express.Request, res: express.Response) => Promise<void>;
+  /** One JSON line per request (on by default; off for embedded demo stacks). */
+  requestLog?: boolean;
 }) {
   if (!serviceKey) throw new Error('SUPPLIER_SERVICE_KEY is required');
   const app = express();
@@ -50,7 +52,7 @@ export function createSupplierApp({ service, serviceKey, healthCheck, mcp }: {
     const serviceKeyStatus = !path.startsWith('/internal') ? undefined
       : sameSecret(presented, serviceKey) ? 'valid' : presented ? 'invalid' : 'missing';
     res.on('finish', () => {
-      if (path === '/health') return;
+      if (path === '/health' || !requestLog) return;
       console.log(JSON.stringify({
         service: 'supplier', method: req.method, path: path.replace(/\/internal\/quotes\/.+/, '/internal/quotes/:id'),
         status: res.statusCode, ms: Date.now() - started, service_key: serviceKeyStatus,

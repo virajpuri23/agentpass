@@ -9,17 +9,20 @@
 import { writeFileSync } from 'node:fs';
 import { launchAgents } from '../apps/agent-kit/src/launcher.js';
 import type { TraceEvent } from '../apps/agent-kit/src/transport.js';
+import type { Decision, DecisionRequest } from '../apps/agent-kit/src/crew-launcher.js';
 import { hostedStack, isolatedStack, servicesStack, viaHttpMcp, type DemoStack } from './demo-stack.js';
 
 export type Check = { step: number; title: string; pass: boolean; detail: string };
 
 /** Structured stream for live views (apps/activity). Same facts as the printed trace. */
 export type DemoEvent =
-  | { type: 'meta'; mode: DemoStack['mode']; mcp: string; root: string; decider: 'deterministic' | 'llm' }
+  | { type: 'meta'; mode: DemoStack['mode']; mcp: string; root: string; decider: 'deterministic' | 'llm' | 'person'; scenario?: 'buyer-supplier' | 'release-crew' }
   | { type: 'process'; at: string; agent: string; pid: number; kind: 'started' | 'exited' }
   | { type: 'trace'; event: TraceEvent }
   | { type: 'runner'; at: string; text: string }
   | { type: 'check'; check: Check }
+  | { type: 'decision_needed'; request: DecisionRequest }
+  | { type: 'decision_made'; request_id: string; decision: Decision }
   | { type: 'done'; passed: boolean };
 
 const args = process.argv.slice(2);
