@@ -1,4 +1,5 @@
 import { createSupplierApp } from './app.js';
+import { supplierMcpHandler } from './mcp.js';
 import { createSupplierService } from './service.js';
 import { storeFromEnv } from './store.js';
 
@@ -10,7 +11,12 @@ const host = process.env.SUPPLIER_HOST ?? '127.0.0.1';
 
 const store = storeFromEnv();
 const service = createSupplierService({ store });
-const app = createSupplierApp({ service, serviceKey, healthCheck: () => store.getProduct('PACK-500') });
+const app = createSupplierApp({
+  service,
+  serviceKey,
+  healthCheck: () => store.getProduct('PACK-500'),
+  mcp: supplierMcpHandler(store),
+});
 const backend = process.env.SUPPLIER_DATABASE_URL ? 'postgres' : 'sqlite';
 
 const server = app.listen(port, host, () => console.log(JSON.stringify({ service: 'supplier', port, storage: backend, simulated: true })));

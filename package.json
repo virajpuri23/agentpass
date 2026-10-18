@@ -22,7 +22,8 @@
     "agent:runs": "node --import tsx apps/cli/src/runs.ts",
     "demo:walkthrough": "node --import tsx apps/cli/src/walkthrough.ts",
     "agent:onboard": "node --import tsx apps/cli/src/onboard.ts",
-    "agent:provision": "node --import tsx apps/cli/src/provision.ts"
+    "agent:provision": "node --import tsx apps/cli/src/provision.ts",
+    "dev:activity": "tsx --env-file-if-exists=.env apps/activity/src/server.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/client": "^2.3.1",

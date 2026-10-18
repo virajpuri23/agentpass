@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>AgentPass Visual Demo</title>
+  <link rel="stylesheet" href="/viz.css">
+  <script src="/viz.js" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div>
+      <h1>AgentPass</h1>
+      <p class="lede">How a buyer agent lets a helper agent shop at another company, safely.</p>
+    </div>
+    <div class="controls">
+      <div class="toggle" role="radiogroup" aria-label="Where to run">
+        <label><input type="radio" name="where" value="local" checked> This laptop</label>
+        <label><input type="radio" name="where" value="hosted" id="where-hosted"> Manufact (live)</label>
+      </div>
+      <label class="check">Speed
+        <select id="speed" aria-label="Animation speed">
+          <option value="3">Slower</option>
+          <option value="2" selected>Slow</option>
+          <option value="1">Fast</option>
+        </select>
+      </label>
+      <label class="check"><input type="checkbox" id="stepmode"> Step through</label>
+      <button id="next" class="secondary" hidden>Next ▸</button>
+      <button id="run">Run demo</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="stage" aria-label="Animated diagram">
+      <svg id="diagram" viewBox="0 0 1000 470" role="img" aria-labelledby="diagram-title">
+        <title id="diagram-title">Acme Retail's agents talk to Packaging Supply Inc. only through the AgentPass gate</title>
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="arrowhead"/></marker>
+        </defs>
+
+        <!-- company boundaries -->
+        <rect class="org" x="16" y="16" width="372" height="438" rx="18"/>
+        <text class="org-label" x="36" y="46">Acme Retail</text><text class="org-sub" x="36" y="64">buyer company</text>
+        <rect class="org" x="612" y="16" width="372" height="438" rx="18"/>
+        <text class="org-label" x="632" y="46">Packaging Supply Inc.</text><text class="org-sub" x="632" y="64">supplier company</text>
+
+        <!-- static links -->
+        <path class="wire" d="M200 132 L200 176" marker-end="url(#arrow)"/>
+        <path class="wire" d="M200 262 L200 306" marker-end="url(#arrow)"/>
+        <path class="wire faint" d="M296 350 L436 270"/>
+        <path class="wire faint" d="M564 235 L704 235"/>
+        <path class="wire faint" d="M296 219 L436 235"/>
+
+        <!-- nodes -->
+        <g class="node" id="n-owner" transform="translate(110 84)">
+          <rect width="180" height="48" rx="12"/>
+          <text x="16" y="21" class="n-title">👤 Owner</text>
+          <text x="16" y="38" class="n-sub">a person · sets the budget</text>
+        </g>
+        <g class="node" id="n-buyer" transform="translate(104 176)">
+          <rect width="192" height="86" rx="14"/>
+          <text x="16" y="26" class="n-title">🤖 Buyer agent</text>
+          <text x="16" y="45" class="n-sub">holds the $1,000 budget</text>
+          <g class="badge" id="b-buyer" transform="translate(16 56)"><rect width="0" height="20" rx="10"/><text x="8" y="14"></text></g>
+        </g>
+        <g class="node dim" id="n-helper" transform="translate(104 306)">
+          <rect width="192" height="96" rx="14"/>
+          <text x="16" y="26" class="n-title">🤖 Helper agent</text>
+          <text x="16" y="45" class="n-sub" id="helper-sub">not started yet</text>
+          <g class="badge" id="b-helper" transform="translate(16 58)"><rect width="0" height="20" rx="10"/><text x="8" y="14"></text></g>
+          <text id="lock" x="166" y="30" class="lock" opacity="0">🔒</text>
+        </g>
+        <g class="node gate" id="n-gate" transform="translate(436 150)">
+          <rect width="128" height="170" rx="20"/>
+          <text x="64" y="44" class="n-title c">🛡️</text>
+          <text x="64" y="74" class="n-title c">AgentPass</text>
+          <text x="64" y="94" class="n-sub c">checks every</text>
+          <text x="64" y="110" class="n-sub c">request</text>
+        </g>
+        <g class="node" id="n-supplier" transform="translate(704 176)">
+          <rect width="200" height="118" rx="14"/>
+          <text x="16" y="26" class="n-title">🏭 Supplier</text>
+          <text x="16" y="45" class="n-sub">sets its own prices &amp; rules</text>
+          <g id="vault" transform="translate(16 62)"><rect width="168" height="40" rx="10" class="vault"/><text x="12" y="25" class="vault-text">🔒 costs &amp; margins: private</text></g>
+        </g>
+
+        <g id="flows"></g>
+      </svg>
+
+      <div class="caption" aria-live="polite">
+        <div class="step-no" id="step-no">Ready</div>
+        <div class="step-title" id="step-title">Press “Run demo” to watch two real agents negotiate.</div>
+        <div class="step-detail" id="step-detail"></div>
+      </div>
+      <ol class="dots" id="dots" aria-label="Progress"></ol>
+    </section>
+
+    <aside class="side">
+      <section class="card">
+        <h2>Budget</h2>
+        <div class="budget" id="budget" aria-describedby="budget-table">
+          <div class="track" title="Owner's budget"><div class="delegated" id="bar-delegated"><div class="spent" id="bar-spent"></div></div></div>
+          <div class="tip" id="tip" role="tooltip" hidden></div>
+        </div>
+        <dl class="legend">
+          <div><dt><i class="sw track-sw"></i>Owner’s budget</dt><dd id="v-root">—</dd></div>
+          <div><dt><i class="sw delegated-sw"></i>Given to helper</dt><dd id="v-delegated">—</dd></div>
+          <div><dt><i class="sw spent-sw"></i>Spent</dt><dd id="v-spent">—</dd></div>
+          <div><dt>Left</dt><dd id="v-left">—</dd></div>
+        </dl>
+        <table class="sr" id="budget-table"><caption>Budget</caption><tbody>
+          <tr><th>Owner’s budget</th><td id="t-root">—</td></tr><tr><th>Given to helper</th><td id="t-delegated">—</td></tr><tr><th>Spent</th><td id="t-spent">—</td></tr>
+        </tbody></table>
+      </section>
+
+      <section class="card">
+        <h2>What happened</h2>
+        <ol class="story" id="story"></ol>
+        <p class="result" id="result"></p>
+      </section>
+
+      <details class="card">
+        <summary>Technical log</summary>
+        <pre id="log"></pre>
+      </details>
+    </aside>
+  </main>
+  <p class="foot">Every animation is a real call made by a separate agent process, replayed at a readable pace. Purchases are simulated. <a href="/simple.html">Simple view</a></p>
+</body>
+</html>

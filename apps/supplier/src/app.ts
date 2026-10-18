@@ -32,14 +32,32 @@ function sameSecret(given: string | undefined, expected: string): boolean {
   return timingSafeEqual(a, b);
 }
 
-export function createSupplierApp({ service, serviceKey, healthCheck }: {
+export function createSupplierApp({ service, serviceKey, healthCheck, mcp }: {
   service: SupplierService;
   serviceKey: string;
   healthCheck?: () => Promise<unknown>;
+  /** Public read-only MCP discovery endpoint (see mcp.ts). */
+  mcp?: (req: express.Request, res: express.Response) => Promise<void>;
 }) {
   if (!serviceKey) throw new Error('SUPPLIER_SERVICE_KEY is required');
   const app = express();
   app.disable('x-powered-by');
+  // One JSON line per request for runtime logs: no bodies, headers or keys.
+  app.use((req, res, next) => {
+    const started = Date.now();
+    const path = req.path; // capture before mounted routers rewrite it
+    const presented = req.header('x-service-key');
+    const serviceKeyStatus = !path.startsWith('/internal') ? undefined
+      : sameSecret(presented, serviceKey) ? 'valid' : presented ? 'invalid' : 'missing';
+    res.on('finish', () => {
+      if (path === '/health') return;
+      console.log(JSON.stringify({
+        service: 'supplier', method: req.method, path: path.replace(/\/internal\/quotes\/.+/, '/internal/quotes/:id'),
+        status: res.statusCode, ms: Date.now() - started, service_key: serviceKeyStatus,
+      }));
+    });
+    next();
+  });
   app.use(express.json({ limit: '16kb' }));
 
   app.get('/health', async (_req, res) => {
@@ -50,6 +68,12 @@ export function createSupplierApp({ service, serviceKey, healthCheck }: {
       res.status(503).json({ status: 'ERROR', code: 'SERVICE_UNAVAILABLE', reason: 'Supplier storage unavailable' });
     }
   });
+
+  if (mcp) {
+    app.all('/mcp', async (req, res, next) => {
+      try { await mcp(req, res); } catch (error) { next(error); }
+    });
+  }
 
   app.use('/internal', (req, res, next) => {
     if (sameSecret(req.header('x-service-key'), serviceKey)) return next();
