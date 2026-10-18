@@ -19,7 +19,7 @@ import { createAnalyticsGateway } from '../apps/workforce/src/gateways/analytics
 import { createDeployGateway } from '../apps/workforce/src/gateways/deploy.js';
 import { createRepoGateway } from '../apps/workforce/src/gateways/repo.js';
 import { MockWorkforceAuthority } from '../apps/workforce/src/mock-authority.js';
-import { runWorkflow, type Specialists, type WorkflowResult } from '../apps/workforce/src/orchestrator.js';
+import { runWorkflow, type Specialists, type WorkflowEvent, type WorkflowResult } from '../apps/workforce/src/orchestrator.js';
 
 const SOURCE = fileURLToPath(new URL('../demo-project/', import.meta.url));
 const argv = process.argv.slice(2);
@@ -42,7 +42,30 @@ async function loadSpecialists(): Promise<{ specialists: Specialists; missing: s
   return { specialists, missing };
 }
 
-export async function runDemo(opts: { project?: string; print?: (l: string) => void } = {}) {
+/** Live stream for the demo UI: real workflow events, agent trace lines, then the outputs. */
+export type WorkforceStreamEvent =
+  | { type: 'meta'; authority: 'MOCK' | 'AGENTPASS'; project: string; missing: string[] }
+  | { type: 'event'; event: WorkflowEvent }
+  | { type: 'trace'; at: string; agent: string; kind: string; text: string; code?: string }
+  | { type: 'outputs'; outputs: DemoOutputs }
+  | { type: 'check'; check: Check }
+  | { type: 'done'; passed: boolean };
+
+export interface DemoOutputs {
+  before: { hero: string; newsletter: string };
+  after: { hero: string; newsletter: string };
+  design?: unknown;
+  security?: unknown;
+  hosting?: unknown;
+  analytics?: unknown;
+  fix_applied: boolean;
+  grants: Record<string, unknown>;
+  revoked: string[];
+  reuse_after_revoke: unknown[];
+}
+
+export async function runDemo(opts: { project?: string; print?: (l: string) => void; onStream?: (e: WorkforceStreamEvent) => void } = {}) {
+  const stream = opts.onStream ?? (() => {});
   const print = opts.print ?? (() => {});
   const root = opts.project ?? mkdtempSync(join(tmpdir(), 'agentpass-workforce-'));
   if (!opts.project) {
@@ -68,10 +91,14 @@ export async function runDemo(opts: { project?: string; print?: (l: string) => v
 
   const gateways = { repo: createRepoGateway(root), deploy: createDeployGateway(root), analytics: createAnalyticsGateway(join(root, 'data/analytics-events.json')) };
   const { specialists, missing } = await loadSpecialists();
-  const trace: Trace = (l) => print(`${clock()}  ${l.agent.padEnd(16)} ${l.kind === 'denied' ? c(31, l.text) : l.kind === 'result' ? c(32, l.text) : l.kind === 'note' ? c(36, '» ' + l.text) : l.text}`);
+  const trace: Trace = (l) => {
+    stream({ type: 'trace', at: new Date().toISOString(), agent: l.agent, kind: l.kind, text: l.text, code: l.code });
+    print(`${clock()}  ${l.agent.padEnd(16)} ${l.kind === 'denied' ? c(31, l.text) : l.kind === 'result' ? c(32, l.text) : l.kind === 'note' ? c(36, '» ' + l.text) : l.text}`);
+  };
+  stream({ type: 'meta', authority: auth.source, project: root, missing });
 
   let result: WorkflowResult | undefined, error: Error | undefined;
-  try { result = await runWorkflow({ authority: auth, credentials, rootGrantId: root_grant.id, gateways, specialists, trace }); }
+  try { result = await runWorkflow({ authority: auth, credentials, rootGrantId: root_grant.id, gateways, specialists, trace, onEvent: (event) => stream({ type: 'event', event }) }); }
   catch (e) { error = e as Error; }
   finally { await gateways.deploy.stopAll(); }
 
@@ -81,7 +108,7 @@ export async function runDemo(opts: { project?: string; print?: (l: string) => v
   const denied = (agent: string, resource: string) => audit.some((e) => e.principal_id === agent && e.decision === 'DENY' && e.resource === resource);
   const r = result;
   const checks: Check[] = [];
-  const check = (n: number, title: string, pass: boolean, detail: string) => checks.push({ n, title, pass, detail });
+  const check = (n: number, title: string, pass: boolean, detail: string) => { const x = { n, title, pass, detail }; checks.push(x); stream({ type: 'check', check: x }); };
   const sec = r?.security as { findings?: { file: string; severity: string }[] } | undefined;
   const an = r?.analytics as { summary?: { page_views: number; signups: number; conversion_rate: number }; suggestions?: string[] } | undefined;
 
@@ -99,8 +126,11 @@ export async function runDemo(opts: { project?: string; print?: (l: string) => v
   check(12, 'Attempts to reuse revoked grants fail', (r?.reuse_after_revoke.length ?? 0) >= 4 && r!.reuse_after_revoke.every((x) => x.code === 'GRANT_REVOKED'), r?.reuse_after_revoke.map((x) => `${x.agent}: ${x.code}`).join(', ') ?? '');
 
   const fixApplied = !!r?.fix?.applied && after.newsletter.includes('escapeHtml(name)');
+  stream({ type: 'outputs', outputs: { before, after, design: r?.design, security: r?.security, hosting: r?.hosting, analytics: r?.analytics, fix_applied: fixApplied, grants: r?.grants ?? {}, revoked: r?.revoked ?? [], reuse_after_revoke: r?.reuse_after_revoke ?? [] } });
+  const passed = checks.every((x) => x.pass);
+  stream({ type: 'done', passed });
   if (!opts.project) rmSync(root, { recursive: true, force: true });
-  return { result, error, checks, missing, fixApplied, before, after, audit, passed: checks.every((x) => x.pass) };
+  return { result, error, checks, missing, fixApplied, before, after, audit, passed };
 }
 
 async function main() {

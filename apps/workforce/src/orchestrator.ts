@@ -64,10 +64,16 @@ export async function runWorkflow(input: {
   gateways: { repo: RepoGateway; deploy: DeployGateway; analytics: AnalyticsGateway };
   specialists: Specialists;
   trace?: Trace;
+  /** Live timeline: called for every WorkflowEvent as it is recorded. */
+  onEvent?: (event: WorkflowEvent) => void;
 }): Promise<WorkflowResult> {
   const { authority, credentials, gateways } = input;
   const events: WorkflowEvent[] = [];
-  const emit = (kind: WorkflowEvent['kind'], agent: string, text: string, code?: string) => { events.push({ at: new Date().toISOString(), kind, agent, text, code }); };
+  const emit = (kind: WorkflowEvent['kind'], agent: string, text: string, code?: string) => {
+    const event: WorkflowEvent = { at: new Date().toISOString(), kind, agent, text, code };
+    events.push(event);
+    input.onEvent?.(event);
+  };
   const trace: Trace = (l) => {
     input.trace?.(l);
     if (l.kind === 'denied') emit('permission_denied', l.agent, l.text, l.code);
