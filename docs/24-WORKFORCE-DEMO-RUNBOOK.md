@@ -1,4 +1,4 @@
-# Workforce demo runbook — 2:00 live, judge-facing
+# Workforce demo runbook — 30 seconds live (Normal) or 1:00 narrated (Slow), judge-facing
 
 **Screen:** `http://127.0.0.1:3200/workforce.html`. An animated stage (Acme's manager and helpers on the left, AgentPass in the middle, the project on the right, the outside security firm bottom right) with a one-sentence caption under it, progress dots, and on the right the 12 checks, a small Results block and a collapsed Technical log with every raw event. No jargon on screen: agents are "the manager" and "helpers", grants are "passes", purchasing grants are "wallets". Green `$` packets are purchases through AgentPass to the vendor box under it; wallet badges on each node show the wallet and what it spent. Every packet that moves on the diagram is a real call by a separate agent session: one "reads/edits the page" move per helper (not one per file), every refusal (✕ at AgentPass, the locked door shakes), the ask-for-less exchange, and the passes being taken back.
 
@@ -7,7 +7,7 @@
 - [ ] `npm install && npm --prefix apps/mcp/agentpass-manufact install` done once; run `npm run demo` once so the npm cache is warm (each run copies `demo-project/` to a temp dir and runs `npm install --prefer-offline` there; cold, that is the only slow part).
 - [ ] Port 3200 free (`lsof -iTCP:3200 -sTCP:LISTEN`); otherwise `ACTIVITY_PORT=3210 npm run dev:activity` and open that port.
 - [ ] `npm run dev:activity`, open the page, light or dark both fine.
-- [ ] Window ≥ 1280 wide so the diagram and the side panel sit side by side. **Speed: Slow** for a narrated run (≈1:40 on screen), Normal ≈0:45, Instant = the raw stream with no animation (≈0:05). Nothing is dropped or reordered; a page refresh catches up instantly to the server's buffer.
+- [ ] Window ≥ 1280 wide so the diagram and the side panel sit side by side. **Speed: Normal** is the 20–30 second cut (≈0:26 on screen: 18 beats, one per essential decision; the other ~50 real lines land silently in badges and the Technical log). **Slow** ≈0:55 for a narrated run. Instant = the raw stream with no animation (≈0:05). Nothing is dropped or reordered; a page refresh catches up instantly to the server's buffer.
 - [ ] Badge top left reads **`real AgentPass`** (green) = Developer A's real authority app, real grants, real execute gateway on a fresh SQLite. If it reads `practice mock` (amber) the run is on the labeled in-memory mock: say so, do not present it as the real thing.
 - [ ] Do a full rehearsal run and leave the page open: a new run clears it.
 
