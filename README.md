@@ -1,8 +1,10 @@
 # AgentPass — YC Make Something Agents Want, October 17–18, 2026
 
-> **Status:** The core authority demo is implemented and deployed. Developer A's
-> self-service onboarding logic is implemented and locally verified, but public
-> OAuth onboarding is not configured or released; see [current rollout status](docs/21-SELF-SERVICE-ROLLOUT.md).
+> **Status:** The core authority demo and headless service-agent provisioning are deployed. Hosted
+> provisioning/no-purchase, after-restart revocation, independent audit, and fixture cleanup passed.
+> Human OAuth remains disabled and Developer B's worker is
+> deferred; see [current headless release status](docs/23-HEADLESS-RELEASE.md) and the
+> [historical rollout evidence](docs/21-SELF-SERVICE-ROLLOUT.md).
 > **Submission:** Sunday October 18, 2026, **10:00 AM Pacific**. Everything here is designed to be put in a Git repository and shared with two developers.
 
 ## The 20-second pitch
@@ -25,13 +27,12 @@ All purchases are **simulated**. No live inventory or payment is touched.
 
 `AGENTS.md` has repository instructions for Codex/other coding agents. `contracts/` provides wire examples; `packages/contracts/src/index.ts` defines stable shared types. `db/schema.sql` is a SQLite-oriented starting schema, **not a production-ready migration**.
 
-**Developer A self-service onboarding:** the [implementation plan](docs/17-SELF-SERVICE-ONBOARDING-PLAN.md)
-and [rollout status](docs/21-SELF-SERVICE-ROLLOUT.md) describe verified identity
-logic, personal workspaces, bounded consent, conversational MCP tools, private
-child credential delivery and durable runner control. The A-owned application
-logic is implemented; live OAuth and host journeys remain unverified, and hosted
-preview rollout is paused. The optional Developer B worker is outside the current
-Developer A scope.
+**Developer A self-service onboarding:** the [implementation plan](docs/17-SELF-SERVICE-ONBOARDING-PLAN.md),
+[headless release status](docs/23-HEADLESS-RELEASE.md), and [October 17 rollout evidence](docs/21-SELF-SERVICE-ROLLOUT.md)
+describe the A-owned logic and its gates. Existing service-agent credentials can provision bounded
+child credentials without a UI; hosted provisioning/no-purchase, after-restart revocation,
+independent audit, and fixture cleanup passed. No purchase was executed and no rollback was tested.
+Human OAuth remains disabled, and Developer B's worker is deferred.
 
 ## Scope promise
 
@@ -82,8 +83,9 @@ agentpass/
 ```
 
 > **Important:** This repository includes specifications, contracts, schema,
-> fixtures and application code. The core demo is deployed; self-service
-> onboarding remains unreleased pending live OAuth and host verification.
+> fixtures and application code. The core demo and existing-agent headless
+> provisioning are deployed; human OAuth onboarding remains disabled pending its
+> separate provider and host gates.
 
 ## Implementation quickstart
 
@@ -91,13 +93,20 @@ Read [`docs/12-IMPLEMENTATION-QUICKSTART.md`](docs/12-IMPLEMENTATION-QUICKSTART.
 
 ## Manufact MCP App v2
 
-The earlier hosted core-demo verification is recorded in [14](docs/14-MANUFACT-VERIFICATION.md); it predates self-service onboarding. At code revision `7e9af22`, the A implementation passed **191 local tests**, root and nested typechecks, and the nested MCP production build. The four additive Supabase migrations, all 13 onboarding/control-table RLS settings and a bounded Vault round-trip were separately verified; no pre-existing row counts changed. See the [current rollout record](docs/21-SELF-SERVICE-ROLLOUT.md). The onboarding code has not been deployed: Manufact rejected its preview before build under the current plan, and hosted preview rollout is paused. OAuth remains off; real OAuth, ChatGPT/Claude journeys and B worker integration are unverified.
+The earlier hosted core-demo verification is recorded in [14](docs/14-MANUFACT-VERIFICATION.md); it predates self-service
+onboarding. PR #14 is merged as `c7e0d3cd054ac47b55e5a397103de1ec09854d46`; the running production deployment
+includes headless service-agent provisioning. Its application source matches tested revision `e61f958`. The root suite passed
+199 tests, a separate run passed 201 tests, and TypeScript checks and the nested MCP production build passed.
+Hosted provisioning/no-purchase and after-restart revocation checks passed;
+the independent audit and fixture cleanup also passed. No purchase was executed and no rollback was tested.
+Human OAuth remains disabled and Developer B's worker is deferred.
+See the [current release status](docs/23-HEADLESS-RELEASE.md) and [October 17 rollout evidence](docs/21-SELF-SERVICE-ROLLOUT.md).
 
 - MCP URL: https://fast-steel-94x84.run.mcp-use.com/mcp
 - Dashboard: https://manufact.com/cloud/org-ab91b9e3-2lgi6/servers/f01e0537-092c-48c0-b6a6-66132aa93099/overview
 - Server ID: `f01e0537-092c-48c0-b6a6-66132aa93099`
-- First verified v2 deployment: `0600457a-b145-4c48-9ede-896997b13fdd` at `49739cba5296b5fff3afe304eb08becd674a5407`. Later commits may create new deployments; consult the dashboard for the active ID.
-- The earlier failed v2 preview `7236c64a-319e-4405-9d5e-9e7beab68cd2` was blocked before building by the free-plan restriction. The later onboarding preview was also blocked before build; its ID and the user's decision to pause are recorded in [21](docs/21-SELF-SERVICE-ROLLOUT.md). Production remains on `feat/authority-core`; the A onboarding implementation has not been deployed. The build context must be the repository root because the MCP adapter imports shared authority and supplier modules; the start command selects the nested MCP App.
+- Hosted verification deployments: `7923e871-f0ac-4bf9-9579-ccb2695b967d` (initial provisioning) and `4421a18e-49e8-4946-bd73-cd0300800350` (after-restart identity/revocation), both at merged revision `c7e0d3cd054ac47b55e5a397103de1ec09854d46`. These are verification IDs, not a claim about the active deployment after docs changes; consult the dashboard for the current runtime.
+- Earlier failed v2/onboarding preview records are historical; the user kept the current plan and paused preview rollout. The production release is not a preview or separate staging data plane. The build context remains the repository root because the MCP adapter imports shared authority and supplier modules; the start command selects the nested MCP App.
 
 Use Node **22.22.2+** for the MCP App (Node 24 recommended). If dependencies were installed under a different Node major, run `npm rebuild better-sqlite3` after switching. The existing stdio adapter remains available for headless per-agent processes. The nested app was generated with the required official `mcp-apps` template and pins published `mcp-use@2.8.2`.
 
@@ -260,6 +269,7 @@ and separate client connection, then requires explicit bounded consent before
 provisioning children. The backend handles credentials privately; people do not
 enter organization/principal IDs or copy child keys. The implementation and local
 fixture evidence are in [the rollout runbook](docs/21-SELF-SERVICE-ROLLOUT.md).
-The hosted Vault check has passed, but real Supabase OAuth and ChatGPT/Claude
-staging gates remain open. This is not yet a released public onboarding service;
-the B worker remains outside the current Developer A scope.
+The deployed service-agent path and its remaining limits are documented in
+[the headless release note](docs/23-HEADLESS-RELEASE.md). Hosted provisioning/no-purchase,
+after-restart revocation, independent audit, and fixture cleanup passed. No purchase was
+executed and no rollback was tested. Human OAuth remains disabled, and the B worker is deferred.
