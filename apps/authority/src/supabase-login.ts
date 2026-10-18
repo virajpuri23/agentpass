@@ -208,7 +208,7 @@ export function createSupabaseLoginRouter(
     const csrf = cryptoRandomToken();
     const id = await sessions.create({ phase: 'LOGIN', authorization_id: authorizationId, csrf });
     res.setHeader('set-cookie', cookie(id));
-    res.type('html').send(html('Sign in to AgentPass', `<p>Verify your email to review the requesting application.</p><form method="post" action="${SUPABASE_AUTHORIZATION_PATH}/login"><input type="hidden" name="csrf" value="${escape(csrf)}"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" maxlength="320" required><button type="submit">Send sign-in code</button></form>`));
+    res.type('html').send(html('Sign in to AgentPass', `<p>Verify your email to review the requesting application.</p><form method="post" action="${SUPABASE_AUTHORIZATION_PATH}/login"><input type="hidden" name="csrf" value="${escape(csrf)}"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" maxlength="320" required><button type="submit">Send sign-in email</button></form>`));
   }));
 
   router.post('/login', route(async (req, res) => {
@@ -225,17 +225,33 @@ export function createSupabaseLoginRouter(
 
   router.get('/verify', route(async (req, res) => {
     const { session } = await requireSession(req, 'OTP');
-    res.type('html').send(html('Enter your email code', `<p>If the address can sign in, a code was sent to ${escape(session.email ?? '')}.</p><form method="post" action="${SUPABASE_AUTHORIZATION_PATH}/verify"><input type="hidden" name="csrf" value="${escape(session.csrf)}"><label for="token">Email code</label><input id="token" name="token" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6,8}" minlength="6" maxlength="8" required><button type="submit">Verify email</button></form>`));
+    res.type('html').send(html('Verify your email', `<p>If the address can sign in, an email was sent to ${escape(session.email ?? '')}. Copy the sign-in link from that email and paste it below without opening it, or enter its numeric code.</p><form method="post" action="${SUPABASE_AUTHORIZATION_PATH}/verify"><input type="hidden" name="csrf" value="${escape(session.csrf)}"><label for="token">Sign-in link or email code</label><input id="token" name="token" type="text" autocomplete="off" maxlength="1200" required><button type="submit">Verify email</button></form>`));
   }));
 
   router.post('/verify', route(async (req, res) => {
     requireOrigin(req);
-    const body = z.object({ csrf: z.string().min(1).max(128), token: z.string().regex(/^\d{6,8}$/) }).strict().parse(req.body);
+    const body = z.object({ csrf: z.string().min(1).max(128), token: z.string().trim().min(1).max(1200) }).strict().parse(req.body);
     const { id, session } = await requireSession(req, 'OTP');
     requireCsrf(body, session);
-    if (!session.email || !await sessions.consume(id)) throw new LoginError(403, 'This sign-in form was already used.');
+    if (!session.email) throw new LoginError(401, 'This sign-in session expired.');
+    let verification: Record<string, string> = { email: session.email, token: body.token, type: 'email' };
+    if (!/^\d{6,8}$/.test(body.token)) {
+      let link: URL;
+      try { link = new URL(body.token); }
+      catch { throw new LoginError(400, 'Paste the original sign-in link or email code.'); }
+      const parameters = new Set(['token', 'type', 'redirect_to']);
+      if (link.origin !== supabaseUrl.origin || link.pathname !== '/auth/v1/verify' || link.username || link.password || link.hash ||
+          [...link.searchParams.keys()].some(key => !parameters.has(key) || link.searchParams.getAll(key).length !== 1) ||
+          !['email', 'signup', 'magiclink'].includes(link.searchParams.get('type') ?? '') ||
+          !/^[A-Za-z0-9_-]{20,256}$/.test(link.searchParams.get('token') ?? '')) {
+        throw new LoginError(400, 'Paste the original sign-in link from this project.');
+      }
+      // Verify only the email token; never fetch or follow the submitted link or its redirect.
+      verification = { token_hash: link.searchParams.get('token')!, type: 'email' };
+    }
+    if (!await sessions.consume(id)) throw new LoginError(403, 'This sign-in form was already used.');
     const tokenResponse = z.object({ access_token: z.string().min(1).max(16384) }).passthrough().parse(
-      await authRequest('verify', { method: 'POST', body: { email: session.email, token: body.token, type: 'email' } }),
+      await authRequest('verify', { method: 'POST', body: verification }),
     );
     await verifiedUser(tokenResponse.access_token, session.email);
     const next = await sessions.create({ phase: 'CONSENT', authorization_id: session.authorization_id, email: session.email, access_token: tokenResponse.access_token, csrf: cryptoRandomToken() });
