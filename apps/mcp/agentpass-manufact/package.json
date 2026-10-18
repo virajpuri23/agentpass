@@ -8,7 +8,7 @@
   "description": "AgentPass authenticated authority tools and read-only MCP App inspector",
   "license": "MIT",
   "scripts": {
-    "build": "mcp-use build",
+    "build": "mcp-use build && node copy-runtime-assets.mjs",
     "dev": "mcp-use dev",
     "start": "mcp-use start",
     "deploy": "mcp-use deploy",

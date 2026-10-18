@@ -99,3 +99,5 @@ to{opacity:1;transform:none}
 .scope-compare{grid-template-columns:1fr}
 }
 
+
+.workflow-picker{background:#edf2e6;border:1px solid var(--line);padding:18px 24px;margin-bottom:24px;border-radius:8px}.workflow-picker label{margin-top:0}.workflow-picker p{font-size:12px}.workflow-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px;margin:20px 0}.workflow-stats small{display:block;font-size:11px}.workflow-stats strong{display:block;font-size:30px;letter-spacing:-1px;margin-top:6px}.filter{display:flex;align-items:center;gap:8px}.filter input{width:auto;margin:0}.timeline .event:has(code){overflow-wrap:anywhere}

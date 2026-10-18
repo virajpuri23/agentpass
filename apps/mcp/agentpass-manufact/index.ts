@@ -31,10 +31,12 @@ server.get('/health', (c) => c.json({ status: 'OK' }));
 const onboardingProxy = createOnboardingProxy(authorityUrl);
 for (const path of ['/onboarding', '/onboarding/*']) server.all(path, c => onboardingProxy(c.req.raw));
 
+let consoleHandler:ReturnType<typeof createConsoleHandler>|undefined;
+
 // Explicit public origin prevents accepting arbitrary Host/proxy headers as a trusted origin.
 if (process.env.CONSOLE_ORIGIN && process.env.MCP_PUBLIC_URL) {
-  const consoleHandler = createConsoleHandler({authorityUrl,mcpUrl:process.env.MCP_PUBLIC_URL,origin:process.env.CONSOLE_ORIGIN});
-  for (const path of ['/connect','/console','/console.js','/console.css','/console-api/*']) server.all(path,c => consoleHandler(c.req.raw));
+  consoleHandler = createConsoleHandler({authorityUrl,mcpUrl:process.env.MCP_PUBLIC_URL,origin:process.env.CONSOLE_ORIGIN});
+  for (const path of ['/connect','/console','/console.js','/console.css','/console-api/*']) server.all(path,c => consoleHandler!(c.req.raw));
 }
 
 function caller(request: Request) {
@@ -106,6 +108,17 @@ export const describeAuthority = server.tool({
   scope_limits: Object.keys(scopeSchema.shape),
   recovery_tools: ['request_authority', 'get_authority_request', 'accept_authority_offer'],
 } }));
+
+export const getWorkflow = server.tool({
+  name:'get_workflow',description:'Read the delegation tree, current budgets, historical denied actions and simulated receipts under a grant the authenticated caller holds or issued. Requests remain private to their parties. This never executes an action.',
+  inputSchema:z.object({root_grant_id:id}).strict(),outputSchema:envelopeSchema,annotations:readOnly,
+  view:{name:'workflow-inspector',description:'Delegation tree, per-agent budgets, denied actions and simulated receipts.'},
+},async({root_grant_id},ctx)=>{
+  const result=await authority(ctx)('GET',`v1/workflows/${encodeURIComponent(root_grant_id)}`);
+  const token=ctx.request&&caller(ctx.request.raw);
+  const dashboard=result.status==='OK'&&token&&consoleHandler?await consoleHandler.createWorkflowLink(token,root_grant_id):undefined;
+  return {...toolResult(result),...(dashboard?{_meta:{dashboard_url:dashboard}}:{})};
+});
 
 export const getMyGrants = server.tool({
   name: 'get_my_grants', description: 'Inspect only the authenticated caller’s delegated authority.',
