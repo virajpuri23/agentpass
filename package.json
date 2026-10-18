@@ -19,6 +19,8 @@
     "pretest": "AUTHORITY_URL=https://authority.invalid npm --prefix apps/mcp/agentpass-manufact run build",
     "dev:dashboard": "tsx apps/dashboard/src/server.ts",
     "demo:console": "tsx apps/dashboard/src/demo.ts",
+    "agent:runs": "node --import tsx apps/cli/src/runs.ts",
+    "demo:walkthrough": "node --import tsx apps/cli/src/walkthrough.ts",
     "agent:onboard": "node --import tsx apps/cli/src/onboard.ts",
     "agent:provision": "node --import tsx apps/cli/src/provision.ts"
   },

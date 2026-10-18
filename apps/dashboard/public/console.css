@@ -99,3 +99,9 @@ to{opacity:1;transform:none}
 .scope-compare{grid-template-columns:1fr}
 }
 
+
+.run-picker{padding:0 0 20px;max-width:100%}
+.run-picker label{max-width:760px}
+.run-picker pre{max-width:100%}
+.run-picker select{max-width:760px}
+.run-negotiation summary{cursor:pointer;font-size:13px;line-height:1.5;padding:12px 0;color:var(--green)}
