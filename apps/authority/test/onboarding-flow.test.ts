@@ -59,6 +59,7 @@ describe('FIXTURE self-service browser and private runner lifecycle',()=>{
     expect((await json('/v1/agents',{approved:true,organization_id:context.organization.id})).status).toBe('DENIED');
     const {response,session,csrf}=await approve(context.connection.id);expect(response.status).toBe(200);
     const active=(await json('/v1/onboarding/context')).data;expect(active.connection).toMatchObject({state:'ACTIVE',scope:{total_budget_cents:2000}});
+    expect((await json('/v1/agents?limit=1e0')).http).toBe(400);
     const replay=await browser('/onboarding/approve',{method:'POST',headers:{cookie:session,origin,'content-type':'application/x-www-form-urlencoded'},body:new URLSearchParams({csrf,budget:'20.00'})});expect(replay.status).toBe(403);
     expect(db.prepare('SELECT * FROM grants').all()).toHaveLength(1);expect(db.prepare('SELECT * FROM consent_approvals').all()).toHaveLength(1);
     expect(JSON.stringify(context)).not.toContain('fixture-client-secret');

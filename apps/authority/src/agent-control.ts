@@ -7,13 +7,15 @@ import { AuthorityEngine,Denial,deny } from './engine.js';
 import { vaultCredentialStore,type CredentialStore } from './credential-store.js';
 
 export interface RunnerAdmission { id:string;keyHash:string;organizationIds:string[] }
-export interface AgentControlOptions { credentials?:CredentialStore;mcpUrl:string;runners:RunnerAdmission[] }
+export interface AgentControlOptions { credentials?:CredentialStore;mcpUrl:string;runners:RunnerAdmission[];onboardingRunnerId?:string }
 type AgentRow={id:string;connection_id:string;organization_id:string;requester_account_id:string;parent_principal_id:string;parent_grant_id:string;idempotency_key:string;request_json:string;state:AgentInstance['state'];execution_state:AgentInstance['execution_state'];child_principal_id:string|null;child_grant_id:string|null;secret_reference:string;cleanup_pending:number;created_at:string;updated_at:string};
 type JobRow={id:string;agent_id:string;launch_id:string;runner_id:string|null;claim_id:string|null;claim_key:string|null;lease_expires_at:string|null;attempts:number;delivered:number;outcome:'COMPLETED'|'FAILED'|null;result_fingerprint:string|null};
 const hash=(value:string)=>createHash('sha256').update(value).digest('hex');
 
 export class AgentControl {
-  constructor(readonly engine:AuthorityEngine,readonly options:AgentControlOptions){}
+  constructor(readonly engine:AuthorityEngine,readonly options:AgentControlOptions){
+    if(options.onboardingRunnerId&&!options.runners.some(r=>r.id===options.onboardingRunnerId))throw new Error('Trusted onboarding runner must be configured');
+  }
   private get db(){return this.engine.db;}
   private async connection(p:Principal){
     const c=await new AccountService(this.db,this.engine.now).connectionForPrincipal(p.id);
@@ -79,6 +81,13 @@ export class AgentControl {
     if(!this.options.credentials)deny('SERVICE_UNAVAILABLE','Private credential delivery is not configured',503);
     const id=await this.transition(async()=>{
       const c=await this.connection(p);
+      if(this.options.onboardingRunnerId){
+        const account=await this.db.prepare("SELECT id FROM accounts WHERE id=? AND personal_organization_id=? AND state='ACTIVE'").get(c.account_id,c.organization_id);
+        if(!account)deny('INVALID_CALLER','Only a verified personal workspace can receive automatic runner assignment');
+        await this.db.prepare('INSERT INTO runner_workspace_assignments(organization_id,runner_id,account_id,created_at) VALUES(?,?,?,?) ON CONFLICT(organization_id) DO NOTHING').run(c.organization_id,this.options.onboardingRunnerId,c.account_id,this.engine.time());
+        const assigned=await this.db.prepare('SELECT runner_id,account_id FROM runner_workspace_assignments WHERE organization_id=?').get(c.organization_id);
+        if(assigned.runner_id!==this.options.onboardingRunnerId||assigned.account_id!==c.account_id)deny('SERVICE_UNAVAILABLE','Trusted runner assignment requires operator review',503);
+      }
       const previous=await this.db.prepare('SELECT * FROM managed_agents WHERE connection_id=? AND idempotency_key=?').get(c.id,request.idempotency_key) as AgentRow|undefined;
       if(previous){if(previous.request_json!==json)deny('ALREADY_EXECUTED','Provisioning key is bound to another request',409);return previous.id;}
       const minute=new Date(this.engine.now().getTime()-60000).toISOString();
@@ -120,9 +129,13 @@ export class AgentControl {
     if(matches.length!==1)deny('INVALID_CALLER','Runner authentication required',401);
     return matches[0];
   }
+  private async runnerAdmitted(runner:RunnerAdmission,organizationId:string){
+    if(runner.organizationIds.includes(organizationId))return true;
+    return !!await this.db.prepare('SELECT organization_id FROM runner_workspace_assignments WHERE organization_id=? AND runner_id=?').get(organizationId,runner.id);
+  }
   private async admitted(runner:RunnerAdmission,job:JobRow){
     const row=await this.row(job.agent_id);
-    if(!row||!runner.organizationIds.includes(row.organization_id))deny('INVALID_CALLER','Job unavailable',404);
+    if(!row||!await this.runnerAdmitted(runner,row.organization_id))deny('INVALID_CALLER','Job unavailable',404);
     return row;
   }
   private async transition<T>(fn:()=>Promise<T>):Promise<T>{
@@ -144,13 +157,13 @@ export class AgentControl {
   async claim(runner:RunnerAdmission,input:unknown){
     const {idempotency_key}=schemas.runner_claim_request.parse(input);
     const pending=await this.db.prepare("SELECT id,organization_id FROM managed_agents WHERE state='PENDING' OR cleanup_pending=1").all();
-    for(const row of pending)if(runner.organizationIds.includes(row.organization_id))await this.advance(row.id);
+    for(const row of pending)if(await this.runnerAdmitted(runner,row.organization_id))await this.advance(row.id);
     return this.transition(async()=>{
       const previous=await this.db.prepare('SELECT job_id,claim_id FROM agent_job_claims WHERE runner_id=? AND idempotency_key=?').get(runner.id,idempotency_key);
       if(previous){const {job}=await this.active(runner,previous.job_id,previous.claim_id);return this.claimed(job);}
       const jobs=await this.db.prepare('SELECT * FROM agent_jobs WHERE outcome IS NULL ORDER BY id').all() as JobRow[];
       for(const job of jobs){
-        let row=await this.row(job.agent_id);if(!row||!runner.organizationIds.includes(row.organization_id))continue;
+        let row=await this.row(job.agent_id);if(!row||!await this.runnerAdmitted(runner,row.organization_id))continue;
         row=await this.reconcile(row);if(row.state!=='PROVISIONING')continue;
         if(job.lease_expires_at&&Date.parse(job.lease_expires_at)>this.engine.now().getTime())continue;
         const claimId=randomUUID(),expiry=new Date(Math.min(this.engine.now().getTime()+30000,Date.parse((await this.engine.grant(row.child_grant_id!)).scope.expires_at))).toISOString();
@@ -218,7 +231,7 @@ export function mountAgentControl(app:Express,engine:AuthorityEngine,options:Age
   const route=(fn:(req:Request,res:Response)=>Promise<unknown>)=>async(req:Request,res:Response,next:NextFunction)=>{try{res.setHeader('Cache-Control','no-store');res.json({status:'OK',data:await fn(req,res)});}catch(error){next(error);}};
   const runner=(req:Request)=>control.authenticateRunner(req.headers.authorization?.match(/^Bearer ([^\s]+)$/)?.[1]);
   app.post('/v1/agents',route((req,res)=>control.provision(res.locals.principal,req.body)));
-  app.get('/v1/agents',route((req,res)=>control.list(res.locals.principal,{...req.query,...(req.query.limit!==undefined?{limit:Number(req.query.limit)}:{})})));
+  app.get('/v1/agents',route((req,res)=>control.list(res.locals.principal,{...req.query,...(typeof req.query.limit==='string'&&/^\d+$/.test(req.query.limit)?{limit:Number(req.query.limit)}:{})})));
   app.get('/v1/agents/:agent_id',route((req,res)=>control.get(res.locals.principal,String(req.params.agent_id))));
   app.post('/v1/agents/:agent_id/revoke',route((req,res)=>control.revoke(res.locals.principal,String(req.params.agent_id),req.body)));
   app.post('/v1/agent-runs/:job_id/ready',route((req,res)=>control.ready(res.locals.principal,String(req.params.job_id),req.body)));
@@ -230,11 +243,14 @@ export function mountAgentControl(app:Express,engine:AuthorityEngine,options:Age
 }
 
 export function agentControlFromEnvironment(engine:AuthorityEngine,env:NodeJS.ProcessEnv=process.env):AgentControlOptions{
-  const runners=z.array(z.object({id:z.string().min(1).max(128),keyHash:z.string().regex(/^[a-f0-9]{64}$/),organizationIds:z.array(z.string().min(1)).min(1)}).strict()).parse(JSON.parse(env.AGENTPASS_RUNNERS_JSON??'[]'));
+  const runners=z.array(z.object({id:z.string().min(1).max(128),keyHash:z.string().regex(/^[a-f0-9]{64}$/),organizationIds:z.array(z.string().min(1))}).strict()).parse(JSON.parse(env.AGENTPASS_RUNNERS_JSON??'[]'));
+  const onboardingRunnerId=env.AGENTPASS_ONBOARDING_RUNNER_ID;
+  if(onboardingRunnerId&&!runners.some(r=>r.id===onboardingRunnerId))throw new Error('Trusted onboarding runner must be configured');
+  if(runners.some(r=>r.organizationIds.length===0&&r.id!==onboardingRunnerId))throw new Error('Runner requires explicit organizations or trusted onboarding assignment');
   if(new Set(runners.map(r=>r.id)).size!==runners.length||new Set(runners.map(r=>r.keyHash)).size!==runners.length)throw new Error('Runner admissions must be unique');
   const mcpUrl=env.MCP_PUBLIC_URL??'http://127.0.0.1:3001/mcp',url=new URL(mcpUrl);
   if(url.protocol!=='https:'&&!(env.NODE_ENV!=='production'&&url.protocol==='http:'&&['127.0.0.1','localhost','[::1]'].includes(url.hostname)))throw new Error('Private worker MCP endpoint requires HTTPS or local development loopback');
   if(env.AGENTPASS_CREDENTIAL_STORE&&env.AGENTPASS_CREDENTIAL_STORE!=='vault')throw new Error('Only Vault credential storage is supported');
   if(env.AGENTPASS_CREDENTIAL_STORE==='vault'&&!env.DATABASE_URL)throw new Error('Vault requires PostgreSQL');
-  return {credentials:env.AGENTPASS_CREDENTIAL_STORE==='vault'?vaultCredentialStore(engine.db):undefined,mcpUrl,runners};
+  return {credentials:env.AGENTPASS_CREDENTIAL_STORE==='vault'?vaultCredentialStore(engine.db):undefined,mcpUrl,runners,...(onboardingRunnerId?{onboardingRunnerId}:{})};
 }
