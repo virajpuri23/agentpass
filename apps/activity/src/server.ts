@@ -159,4 +159,8 @@ const server = createServer(async (req, res) => {
   }
 });
 
+// Loopback only, on both IPv4 and IPv6: browsers may resolve `localhost` to ::1 first, which a 127.0.0.1-only bind refuses.
 server.listen(port, '127.0.0.1', () => console.log(JSON.stringify({ service: 'activity', url: `http://127.0.0.1:${port}` })));
+const server6 = createServer(server.listeners('request')[0] as (req: IncomingMessage, res: ServerResponse) => void);
+server6.on('error', () => { /* no IPv6 loopback on this host: IPv4 is enough */ });
+server6.listen(port, '::1');
