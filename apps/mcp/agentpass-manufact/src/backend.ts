@@ -1,3 +1,4 @@
+import { workforceFromEnvironment } from '../../../authority/src/workforce-client.js';
 import { postgresStore } from '../../../../db/postgres.js';
 import { createAuthorityApp } from '../../../authority/src/app.js';
 import { HttpSupplierService } from '../../../authority/src/supplier.js';
@@ -43,7 +44,7 @@ export async function authorityEndpoint(): Promise<string> {
       servers.push(supplier.server);
       supplierUrl = supplier.url;
     }
-    const authority = await listen(createAuthorityApp({db:db.store,supplier:new HttpSupplierService(supplierUrl,serviceKey),...onboarding}));
+    const authority = await listen(createAuthorityApp({db:db.store,supplier:new HttpSupplierService(supplierUrl,serviceKey),workforce:workforceFromEnvironment(),...onboarding}));
     servers.push(authority.server);
     process.once('SIGTERM', () => {void close();});process.once('SIGINT', () => {void close();});
     return authority.url;

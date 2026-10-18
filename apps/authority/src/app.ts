@@ -1,4 +1,6 @@
 import express from 'express';
+import { WorkforceGateway,type WorkforceOptions } from './workforce.js';
+import { workforceActionSchema } from '../../../packages/contracts/src/workforce.js';
 import { consoleSnapshot } from './console.js';
 import { randomUUID } from 'node:crypto';
 import { auditContext, setAuditContext } from './audit.js';
@@ -17,7 +19,7 @@ import { ConsentService } from './consent.js';
 import { mountAgentControl,type AgentControlOptions,agentControlFromEnvironment } from './agent-control.js';
 import { createSupabaseLoginRouter,type SupabaseLoginConfig } from './supabase-login.js';
 
-export function createAuthorityApp(options: { db: Database.Database | AuthorityStore; supplier: SupplierService; now?: () => Date;verifyHumanToken?:(token:string)=>Promise<VerifiedConnectionIdentity>;consentBrowser?:ConsentBrowserConfig;supabaseLogin?:SupabaseLoginConfig;agentControl?:AgentControlOptions|{environment:NodeJS.ProcessEnv} }) {
+export function createAuthorityApp(options: { db: Database.Database | AuthorityStore; supplier: SupplierService; now?: () => Date;workforce?:WorkforceOptions;verifyHumanToken?:(token:string)=>Promise<VerifiedConnectionIdentity>;consentBrowser?:ConsentBrowserConfig;supabaseLogin?:SupabaseLoginConfig;agentControl?:AgentControlOptions|{environment:NodeJS.ProcessEnv} }) {
   const app = express();
   const db = 'pragma' in options.db ? sqliteStore(options.db) : options.db;
   const accounts=new AccountService(db,options.now);
@@ -26,6 +28,7 @@ export function createAuthorityApp(options: { db: Database.Database | AuthorityS
     if(connection&&(connection.account_state!=='ACTIVE'||connection.membership_state!=='ACTIVE'||!connection.principal_active||connection.state==='REVOKED'||connection.revoked_at))deny('INVALID_CALLER','Connection or membership is inactive',401);
     if(connection&&requireAuthority&&connection.state!=='ACTIVE')deny('INSUFFICIENT_SCOPE','Connection requires trusted owner consent');
   }:undefined);
+  const workforce = new WorkforceGateway(engine,options.workforce);
   app.disable('x-powered-by');
   app.use((_req,_res,next) => {
     auditContext.run({traceId:randomUUID(),requestId:randomUUID(),action:'http.request'},next);
@@ -96,6 +99,14 @@ export function createAuthorityApp(options: { db: Database.Database | AuthorityS
     setAuditContext({action:'authority.accept',requestId:id.parse(req.params.id)});
     return engine.accept(p,String(req.params.id));
   }));
+  app.post('/v1/actions/verify',async (req,res,next)=>{
+    try {res.json(await workforce.verify(res.locals.principal,workforceActionSchema.parse(req.body)));} catch(error){next(error);}
+  });
+  app.post('/v1/actions/execute',async (req,res,next)=>{
+    if (req.body && 'resource' in req.body) {
+      try {res.json(await workforce.execute(res.locals.principal,workforceActionSchema.parse(req.body)));} catch(error){next(error);}
+    } else next();
+  });
   app.post('/v1/actions/execute',route((p,req) => {
     const input=executeSchema.parse(req.body);
     setAuditContext({action:input.action,grantId:input.grant_id});
@@ -103,7 +114,7 @@ export function createAuthorityApp(options: { db: Database.Database | AuthorityS
   }));
   app.get('/v1/audit',route(async p => {
     if (p.role !== 'OWNER') deny('INVALID_CALLER','Audit requires organization owner');
-    return db.prepare('SELECT e.event_id,e.timestamp,e.principal_id,e.grant_id,e.action,e.decision,e.reason_code,e.request_id,e.trace_id FROM audit_events e JOIN principals p ON p.id = e.principal_id WHERE p.organization_id = ? ORDER BY e.timestamp,e.rowid').all(p.organization_id);
+    return db.prepare('SELECT e.event_id,e.timestamp,e.principal_id,e.grant_id,e.action,e.decision,e.reason_code,e.request_id,e.trace_id FROM audit_events e JOIN principals p ON p.id = e.principal_id LEFT JOIN grants g ON g.id=e.grant_id WHERE (p.organization_id = ? OR g.organization_id = ?) ORDER BY e.timestamp,e.rowid').all(p.organization_id,p.organization_id);
   }));
   if(options.agentControl)mountAgentControl(app,engine,'environment' in options.agentControl?agentControlFromEnvironment(engine,options.agentControl.environment):options.agentControl);
   app.use((_req,_res,next) => { next(new Denial({status:'DENIED',code:'INVALID_REQUEST',reason:'Unknown endpoint'},404)); });

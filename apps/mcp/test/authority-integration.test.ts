@@ -2,7 +2,7 @@ import type { Server } from 'node:http';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { AuthorityScope, Grant } from '../../../packages/contracts/src/index.js';
+import { WORKFORCE_ACTIONS, type AuthorityScope, type Grant } from '../../../packages/contracts/src/index.js';
 import { openDatabase } from '../../../db/database.js';
 import { seedDatabase } from '../../../db/seed.js';
 import { createAuthorityApp } from '../../authority/src/app.js';
@@ -75,7 +75,7 @@ describe('AgentPass MCP authority integration', () => {
       const sourcing = await connect(keys['sourcing-agent']);
 
       const description = resultData<{ actions: string[] }>(await buyer.callTool({ name: 'describe_authority', arguments: {} }));
-      expect(description.actions).toEqual(['supplier.quote.request', 'supplier.purchase.execute', 'supplier.margin.read']);
+      expect(description.actions).toEqual(['supplier.quote.request', 'supplier.purchase.execute', 'supplier.margin.read', ...WORKFORCE_ACTIONS]);
 
       const buyerGrants = resultData<{ grants: Grant[] }>(await buyer.callTool({ name: 'get_my_grants', arguments: {} }));
       const root = buyerGrants.grants.find((grant) => grant.id === 'grant-root-buyer');

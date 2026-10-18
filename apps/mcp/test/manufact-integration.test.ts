@@ -17,7 +17,7 @@ import { seedPostgres } from '../../../db/seed-postgres.js';
 import { createAuthorityApp } from '../../authority/src/app.js';
 import { HttpSupplierService } from '../../authority/src/supplier.js';
 
-const tools = ['provision_child','describe_authority','get_my_grants','get_onboarding_context','provision_agent','list_agents','get_agent','revoke_agent','revoke_connection','request_authority','get_authority_request','respond_authority_request','accept_authority_offer','delegate_authority','execute_action','revoke_authority'];
+const tools = ['provision_child','describe_authority','get_my_grants','get_onboarding_context','provision_agent','list_agents','get_agent','revoke_agent','revoke_connection','request_authority','get_authority_request','respond_authority_request','accept_authority_offer','delegate_authority','execute_action','verify_authority','revoke_authority'];
 const keys = {'owner-1':'manufact-fixture-owner','buyer-agent':'manufact-fixture-buyer','sourcing-agent':'manufact-fixture-sourcing','supplier-agent':'manufact-fixture-supplier'};
 async function listen(server: Server) {
   server.listen(0,'127.0.0.1');

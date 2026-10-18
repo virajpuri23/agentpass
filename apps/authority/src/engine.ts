@@ -5,6 +5,8 @@ import type { SupplierService } from './supplier.js';
 import { quoteSchema } from './validation.js';
 import { recordAudit, setAuditContext } from './audit.js';
 import { completePurchase } from './purchases.js';
+import { workforceScopeSchema } from '../../../packages/contracts/src/workforce.js';
+import { validScopePath, pathWithin } from './workforce-paths.js';
 
 export class Denial extends Error {
   constructor(public result: ApiError, public http = 403) { super(result.reason); }
@@ -38,8 +40,8 @@ export class AuthorityEngine {
     return { id: row.id, organization_id: row.organization_id, parent_grant_id: row.parent_grant_id, issuer_principal_id: row.issuer_principal_id, subject_principal_id: row.subject_principal_id, scope: JSON.parse(row.scope_json), revoked_at: row.revoked_at };
   }
   async grants(p: Principal) {
-    const rows = await this.db.prepare('SELECT id FROM grants WHERE subject_principal_id = ? AND organization_id = ?').all(p.id, p.organization_id);
-    return Promise.all(rows.map(g => this.grant(g.id)));
+    const rows = await this.db.prepare('SELECT id FROM grants WHERE subject_principal_id = ?').all(p.id);
+    return (await Promise.all(rows.map(g => this.grant(g.id)))).filter(g => g.organization_id === p.organization_id || g.scope.resources);
   }
   async inspect(p: Principal) {
     const budgets = await Promise.all((await this.grants(p)).map(g => this.grantBudget(g)));
@@ -61,21 +63,34 @@ export class AuthorityEngine {
     }
   }
   subset(child: AuthorityScope, parent: AuthorityScope, delegation = true) {
+    if (Boolean(child.resources) !== Boolean(parent.resources)) deny('OUTSIDE_PARENT_SCOPE','Scope families must match');
+    if (child.resources) {
+      if (!workforceScopeSchema.safeParse(child).success || !workforceScopeSchema.safeParse(parent).success || child.max_executions! > parent.max_executions!) deny('OUTSIDE_PARENT_SCOPE','Invalid workforce limits');
+      for (const resource of child.resources) {
+        const source = parent.resources!.find(r => r.resource === resource.resource && r.organization_id === resource.organization_id && r.owner_principal_id === resource.owner_principal_id);
+        if (!source || !resource.paths.every(path => validScopePath(path) && source.paths.some(allowed => validScopePath(allowed) && pathWithin(path,allowed)))) deny('OUTSIDE_PARENT_SCOPE','Resource scope must narrow parent authority');
+      }
+    }
     if (!child.actions.every(a => parent.actions.includes(a)) || !child.supplier_ids.every(x => parent.supplier_ids.includes(x)) || !child.sku_ids.every(x => parent.sku_ids.includes(x)) || child.max_per_action_cents > parent.max_per_action_cents || child.total_budget_cents > parent.total_budget_cents || Date.parse(child.expires_at) > Date.parse(parent.expires_at) || child.max_delegation_depth > parent.max_delegation_depth - (delegation ? 1 : 0)) deny('OUTSIDE_PARENT_SCOPE', 'Delegation must narrow every parent scope dimension');
   }
   async chain(id: string, p: Principal): Promise<Grant[]> {
     const chain: Grant[] = [];
     let g = await this.grant(id);
-    if (g.subject_principal_id !== p.id || g.organization_id !== p.organization_id) deny('INVALID_CALLER', 'Grant does not belong to caller');
+    if (g.subject_principal_id !== p.id || (!g.scope.resources && g.organization_id !== p.organization_id)) deny('INVALID_CALLER', 'Grant does not belong to caller');
     for (;;) {
       if (chain.some(x => x.id === g.id) || chain.length > 20) deny('INSUFFICIENT_SCOPE', 'Invalid authority chain');
-      if (g.organization_id !== p.organization_id || (await this.principal(g.subject_principal_id,true)).organization_id !== p.organization_id || (await this.principal(g.issuer_principal_id,true)).organization_id !== p.organization_id) deny('INVALID_CALLER', 'Cross-organization authority is prohibited');
+      const subject = await this.principal(g.subject_principal_id,true);
+      const issuer = await this.principal(g.issuer_principal_id,true);
+      if (g.scope.resources) {
+        if (!workforceScopeSchema.safeParse(g.scope).success || g.scope.resources.some(r => r.organization_id !== g.organization_id || !r.paths.every(validScopePath))) deny('OUTSIDE_PARENT_SCOPE','Invalid workforce scope');
+        if (!g.parent_grant_id && (issuer.role !== 'OWNER' || issuer.organization_id !== g.organization_id || g.scope.resources.some(r => r.owner_principal_id !== issuer.id))) deny('INVALID_CALLER','Invalid resource owner authority');
+      } else if (g.organization_id !== p.organization_id || subject.organization_id !== p.organization_id || issuer.organization_id !== p.organization_id) deny('INVALID_CALLER', 'Cross-organization authority is prohibited');
       if (g.revoked_at) deny('GRANT_REVOKED', 'Grant or ancestor was revoked');
       if (!Number.isFinite(Date.parse(g.scope.expires_at)) || Date.parse(g.scope.expires_at) <= this.now().getTime()) deny('GRANT_EXPIRED', 'Grant or ancestor expired');
       chain.push(g);
       if (!g.parent_grant_id) break;
       const parent = await this.grant(g.parent_grant_id);
-      if (parent.subject_principal_id !== g.issuer_principal_id) deny('INVALID_CALLER', 'Invalid delegation issuer');
+      if (parent.subject_principal_id !== g.issuer_principal_id || parent.organization_id !== g.organization_id) deny('INVALID_CALLER', 'Invalid delegation issuer');
       this.subset(g.scope, parent.scope);
       g = parent;
     }
@@ -85,11 +100,18 @@ export class AuthorityEngine {
     await recordAudit(this.db,this.time(),p,action,decision,grantId,code,requestId);
   }
   async issue(p: Principal, parentId: string, recipient: string, scope: AuthorityScope): Promise<Grant> {
-    const parent = (await this.chain(parentId, p))[0];
+    const chain = await this.chain(parentId,p);
+    const parent = chain[0];
     this.subset(scope, parent.scope);
+    if (scope.resources) {
+      for (const ancestor of chain) {
+        const used = await this.db.prepare('SELECT COUNT(*) AS n FROM workforce_usage WHERE grant_id=?').get(ancestor.id);
+        if (scope.max_executions! > ancestor.scope.max_executions! - Number(used.n)) deny('BUDGET_EXCEEDED','Child limit exceeds remaining ancestor execution quota');
+      }
+    }
     if (Date.parse(scope.expires_at) <= this.now().getTime()) deny('GRANT_EXPIRED', 'New grant is already expired');
-    if ((await this.principal(recipient)).organization_id !== p.organization_id) deny('OUTSIDE_PARENT_SCOPE', 'Recipient must belong to issuer organization');
-    const g: Grant = { id: randomUUID(), organization_id: p.organization_id, issuer_principal_id: p.id, subject_principal_id: recipient, parent_grant_id: parentId, scope, revoked_at: null };
+    if ((await this.principal(recipient)).organization_id !== p.organization_id && !scope.resources) deny('OUTSIDE_PARENT_SCOPE', 'Recipient must belong to issuer organization');
+    const g: Grant = { id: randomUUID(), organization_id: parent.organization_id, issuer_principal_id: p.id, subject_principal_id: recipient, parent_grant_id: parentId, scope, revoked_at: null };
     await this.db.prepare('INSERT INTO grants(id,organization_id,parent_grant_id,issuer_principal_id,subject_principal_id,scope_json,created_at) VALUES(?,?,?,?,?,?,?)').run(g.id, g.organization_id, parentId, p.id, recipient, JSON.stringify(scope), this.time());
     await this.audit(p, 'grant.issue', 'ALLOW', g.id);
     return g;
@@ -135,7 +157,7 @@ export class AuthorityEngine {
       try { await this.chain(g.id,p); delegatedChild = true; break; }
       catch (error) { if (!(error instanceof Denial)) throw error; }
     }
-    if (p.organization_id !== parent.organization_id || p.id === parent.subject_principal_id || !delegatedChild) deny('INVALID_CALLER', 'Only an existing delegated child may request authority');
+    if ((!parent.scope.resources && p.organization_id !== parent.organization_id) || p.id === parent.subject_principal_id || !delegatedChild) deny('INVALID_CALLER', 'Only an existing delegated child may request authority');
     const requestId = randomUUID();
     await this.db.prepare('INSERT INTO authority_requests(id,requester_principal_id,parent_grant_id,requested_scope_json,reason,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)').run(requestId,p.id,parentId,JSON.stringify(scope),reason,'PENDING',this.time(),this.time());
     await this.audit(p,'authority.request','PENDING',parentId,undefined,requestId);
@@ -146,7 +168,7 @@ export class AuthorityEngine {
     if (!row) deny('INVALID_REQUEST', 'Request unavailable', 404);
     setAuditContext({requestId:id});
     const parent = await this.grant(row.parent_grant_id);
-    if (parent.organization_id !== p.organization_id || ![row.requester_principal_id, parent.subject_principal_id].includes(p.id)) deny('INVALID_CALLER', 'Request is private to its parties');
+    if ((!parent.scope.resources && parent.organization_id !== p.organization_id) || ![row.requester_principal_id, parent.subject_principal_id].includes(p.id)) deny('INVALID_CALLER', 'Request is private to its parties');
     setAuditContext({grantId:parent.id});
     return { id: row.id, requester_principal_id: row.requester_principal_id, parent_grant_id: row.parent_grant_id, requested_scope: JSON.parse(row.requested_scope_json), offered_scope: row.offered_scope_json ? JSON.parse(row.offered_scope_json) : undefined, reason: row.reason, status: row.status, issued_grant_id: row.issued_grant_id ?? undefined };
   }
@@ -184,7 +206,7 @@ export class AuthorityEngine {
   async revoke(p: Principal, id: string) {
     return await this.db.transaction(async () => {
       const g = await this.grant(id);
-      if (g.organization_id !== p.organization_id || (g.issuer_principal_id !== p.id && p.role !== 'OWNER')) deny('INVALID_CALLER','Only issuer or organization owner can revoke');
+      if (g.issuer_principal_id !== p.id && !(g.organization_id === p.organization_id && p.role === 'OWNER')) deny('INVALID_CALLER','Only issuer or organization owner can revoke');
       await this.db.prepare('UPDATE grants SET revoked_at = COALESCE(revoked_at, ?) WHERE id = ?').run(this.time(),id);
       await this.audit(p,'grant.revoke','REVOKED',id);
       return { grant_id: id, revoked_at: (await this.grant(id)).revoked_at };
