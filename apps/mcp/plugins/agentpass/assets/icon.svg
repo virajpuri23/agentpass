@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-label="AgentPass">
+  <rect width="128" height="128" rx="28" fill="#102D32"/>
+  <path d="M64 20 99 34v27c0 23-15 38-35 47-20-9-35-24-35-47V34Z" fill="none" stroke="#77E8BB" stroke-width="7" stroke-linejoin="round"/>
+  <path d="m47 64 12 12 24-27" fill="none" stroke="#77E8BB" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

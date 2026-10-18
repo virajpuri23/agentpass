@@ -1,0 +1,22 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "agentpass",
+  "version": "0.1.0",
+  "description": "Inspect, negotiate, delegate and revoke scoped agent authority through the hosted AgentPass MCP service. Supplier purchases are simulated.",
+  "author": { "name": "AgentPass" },
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "AgentPass",
+        "shortDescription": "Scoped authority for agents",
+        "longDescription": "Connect with your own provisioned AgentPass bearer credential to inspect grants, negotiate narrower permissions, delegate bounded authority, execute simulated supplier purchases and revoke grants. The hosted service independently enforces identity, scope, budgets and supplier policy. Human OAuth onboarding is currently disabled.",
+        "developerName": "AgentPass",
+        "category": "Developer Tools",
+        "capabilities": ["Interactive"],
+        "logo": "./assets/icon.svg",
+        "composerIcon": "./assets/icon.svg",
+        "defaultPrompt": "Inspect my AgentPass authority and explain my current scopes, remaining budgets and expiration before taking action."
+      }
+    }
+  }
+}
