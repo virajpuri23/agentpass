@@ -1,0 +1,7 @@
+.run-inspector button,.run-inspector select{font:inherit;border:1px solid var(--border);border-radius:7px;padding:9px 12px;color:var(--text);background:var(--panel)}
+.run-inspector button{cursor:pointer}.run-inspector button:disabled,.run-inspector select:disabled{opacity:.55;cursor:default}
+.run-inspector button:focus-visible,.run-inspector select:focus-visible,.run-inspector summary:focus-visible{outline:2px solid #2855d9;outline-offset:3px}
+.run-controls label{display:block;margin-top:12px;font-size:.8rem}.run-controls select{display:block;width:100%;margin-top:6px}
+.run-actions{display:flex;gap:8px;flex-wrap:wrap}.run-inspector .muted{margin:8px 0}.run-inspector h2{overflow-wrap:anywhere}
+.run-inspector details{margin-top:12px}.run-inspector summary{cursor:pointer;font-size:.85rem;line-height:1.5}
+.run-timeline{list-style:none;padding:0 0 0 12px;margin:14px 0 0}.run-timeline li{border-left:2px solid var(--border);padding:0 0 16px 15px;font-size:.8rem;overflow-wrap:anywhere}.run-timeline small{color:var(--muted)}

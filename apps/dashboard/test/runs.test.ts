@@ -45,9 +45,38 @@ describe('recorded runs across MCP, CLI and console',()=>{
     expect(ui.data.receipts).toEqual(cli.data.receipts);expect(ui.data.activity).toEqual(cli.data.activity);expect(ui.data.visibility.descendants_complete).toBe(false);
     expect(JSON.stringify(ui)).not.toMatch(/console-fixture-|key_hash|internal_unit_cost/);
   });
+  it('binds get_run to the MCP App resource while preserving the canonical caller-scoped response',async()=>{
+    const client=new Client({name:'run-app-reader',version:'1.0.0'});
+    try {
+      await client.connect(new StreamableHTTPClientTransport(new URL(mcpUrl),{requestInit:{headers:{authorization:'Bearer '+keys['sourcing-agent']}}}));
+      const tool=(await client.listTools()).tools.find(t=>t.name==='get_run')!;
+      expect(tool.annotations).toMatchObject({readOnlyHint:true,destructiveHint:false});
+      expect(tool._meta).toMatchObject({ui:{resourceUri:'ui://views/run-inspector.html'}});
+      const result=await client.callTool({name:'get_run',arguments:{run_id:first.run_id}});
+      expect(result._meta).toMatchObject({ui:{resourceUri:'ui://views/run-inspector.html'}});
+      const data=(result.structuredContent as any).data;
+      expect(data.principal.id).toBe('sourcing-agent');expect(data.receipts).toEqual((await read('/v1/runs/'+first.run_id,keys['sourcing-agent'])).data.receipts);
+      expect(data.activity.every((e:any)=>e.principal_id==='sourcing-agent')).toBe(true);
+      const resource=await client.readResource({uri:'ui://views/run-inspector.html'});
+      expect(resource.contents[0].mimeType).toBe('text/html;profile=mcp-app');
+      expect(JSON.stringify(resource)).not.toMatch(/console-fixture-|key_hash|internal_unit_cost/);
+    } finally {await client.close();}
+  });
+  it('keeps the View-bound tool denied for a different organization and rejects forged identity fields',async()=>{
+    const client=new Client({name:'foreign-run-app-reader',version:'1.0.0'});
+    try {
+      await client.connect(new StreamableHTTPClientTransport(new URL(mcpUrl),{requestInit:{headers:{authorization:'Bearer '+keys['supplier-agent']}}}));
+      const denied=await client.callTool({name:'get_run',arguments:{run_id:first.run_id}});
+      expect(denied.structuredContent).toMatchObject({status:'DENIED',code:'INVALID_REQUEST'});
+      expect((denied.structuredContent as any).data).toBeUndefined();
+      expect((await client.callTool({name:'get_run',arguments:{run_id:first.run_id,principal_id:'owner-1'}})).isError).toBe(true);
+    } finally {await client.close();}
+  });
   it('does not turn a known or spoofed run ID into permission to see other callers or organizations',async()=>{
     const owner=await read('/v1/runs/'+first.run_id);expect(owner.data.requests).toEqual([]);
     const child=await read('/v1/runs/'+first.run_id,keys['sourcing-agent']);expect(child.data.activity.every((e:any)=>e.principal_id==='sourcing-agent')).toBe(true);expect(child.data.requests).toHaveLength(1);
+    expect((await read('/v1/runs/run-missing',keys['sourcing-agent'])).http).toBe(404);
+    expect((await read('/v1/runs/'+first.run_id,keys['sourcing-agent'])).data.activity).toEqual(child.data.activity);
     const foreign=await read('/v1/runs/'+first.run_id,keys['supplier-agent']);const missing=await read('/v1/runs/run-missing',keys['supplier-agent']);expect(foreign).toEqual(missing);expect(foreign.http).toBe(404);
     const client=new Client({name:'unrelated-run-reader',version:'1.0.0'});try{
       await client.connect(new StreamableHTTPClientTransport(new URL(mcpUrl),{requestInit:{headers:{authorization:'Bearer '+keys['supplier-agent'],'x-agentpass-run-id':first.run_id}}}));
