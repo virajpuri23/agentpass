@@ -10,12 +10,18 @@ authorization event is replayed or fabricated.
 
 ```bash
 npm install && npm --prefix apps/mcp/agentpass-manufact install   # once
-npm run demo                                                      # headless, prints timeline + 12 checks, exit 1 on failure
+npm run demo                                                      # on the REAL AgentPass authority: timeline + 12 checks, exit 1 on failure
+npm run demo -- --authority mock                                  # same workflow on the labeled in-memory mock (fast offline path)
 npm run dev:activity                                              # then open http://127.0.0.1:3200/workforce.html and press Run demo
 ```
 
 `npm run demo` starts from a **clean seeded state** every time: a fresh copy of
-`demo-project/`, fresh random credentials, one owner-issued root grant to the lead.
+`demo-project/`, a fresh migrated SQLite running Developer A's authority app in-process
+with the `demo-project` resource registered, fresh random credentials, and one
+owner-issued workforce root grant to the lead (`buyer-agent`). Design, Hosting and
+Analytics are **provisioned by the lead** through AgentPass `provision_child` (only the
+SHA-256 of each new credential is sent); the external Security agent is a registered
+principal in another organization (`sentinel-sec`) that the lead delegates to.
 
 ## 2. The workflow (what actually happens)
 
@@ -38,10 +44,10 @@ npm run dev:activity                                              # then open ht
 
 ## 3. Observed results
 
-### `npm run demo` (local, 2026-10-18 01:2x UTC)
+### `npm run demo` (local, 2026-10-18 01:5x UTC, real AgentPass authority)
 
 ```
-Authority: MOCK (Developer A's generic-action contract not yet wired)
+Authority: AgentPass (Developer A's authority, real grants, real execute gateway)
 
 Outputs
   Preview URL: http://127.0.0.1:53687  [local-next-start: local build, not production]
@@ -56,17 +62,17 @@ Outputs
 
 Checks
   PASS   1. Design agent changes actual UI files                 Hero.tsx changed (245 → 606 bytes)
-  PASS   2. Design agent cannot read .env                        RESOURCE_DENIED recorded; .env intact
+  PASS   2. Design agent cannot read .env                        INSUFFICIENT_SCOPE recorded; .env intact
   PASS   3. Security agent completes a real audit                6 finding(s), high on src/lib/newsletter.ts
   PASS   4. Security agent cannot modify source files            write attempt refused (read-only grant)
   PASS   5. Hosting agent requests production deployment         attempted deploy.production → AUTHORITY_REQUIRED
-  PASS   6. AgentPass denies production authorization            INSUFFICIENT_SCOPE with alternative deploy.preview
+  PASS   6. AgentPass denies production authorization            OUTSIDE_PARENT_SCOPE with alternative deploy.preview
   PASS   7. Hosting agent requests narrower preview authority    requested deploy.preview; lead counteroffered COUNTEROFFERED
   PASS   8. Hosting agent deploys the preview successfully       http://127.0.0.1:53687 (local-next-start, local)
   PASS   9. Analytics agent computes real aggregate metrics      3788 views, 207 signups, 5.46% conversion, 3 suggestions
   PASS  10. Analytics agent cannot retrieve raw user records     analytics.raw refused; no emails in output
   PASS  11. Temporary grants are revoked after task completion   5 grant(s) revoked
-  PASS  12. Attempts to reuse revoked grants fail                design/security/hosting/analytics-agent: GRANT_REVOKED
+  PASS  12. Attempts to reuse revoked grants fail                design/hosting/analytics-agent: INVALID_CALLER (credential disabled), security-agent: GRANT_REVOKED
 
 12/12 checks passed
 ```
@@ -101,7 +107,8 @@ outputs (before/after, findings + fix, preview URL, analytics) · the 12 checks.
 | Tool gateways (`apps/workforce/src/gateways/`) | **Real.** The only path to files, deploys and data; `.env` is never readable, writable or listed. |
 | Preview deployment | **Real local build** (`next build` + `next start`), labeled `provider: local-next-start`. No Vercel account was available on the build machine; nothing claims production. |
 | Security agent as an external company | **Real separate principal and org** (`sentinel-sec`) with its own credential and a read-only grant. It runs in-process in this build; a separate HTTP service is a P1 follow-up. |
-| **Authority service** | **MOCK**, clearly labeled in every output (`source: 'MOCK'`, badge on the screen). `apps/workforce/src/mock-authority.ts` implements the rules behind the adapter in `apps/workforce/src/contract.ts`; Developer A's real generic-action authority replaces it in one factory. The mock's 12 rule tests are the acceptance bar for the real one. |
+| **Authority service** | **Real AgentPass** (Developer A's authority, `docs/11-WORKFORCE-CONTRACT.md`). `apps/workforce/src/real/authority.ts` adapts B's agent contract to A's wire contract; `apps/workforce/src/real/resource-adapter.ts` is the registered `demo-project` resource that AgentPass's execute gateway invokes after validating the live chain, paths and quota. The labeled in-memory mock remains as the fast offline test path (`--authority mock`). |
+| Agent identities | **Real.** Design/Hosting/Analytics are provisioned by the lead via `provision_child` (server-generated ids, fresh credentials, hashes only on the wire); revoking their grant disables the credential (`INVALID_CALLER` on reuse). Security is a registered principal in `sentinel-sec`, delegated to cross-organization. |
 | Agent-to-agent messaging | In-process calls through the orchestrator. Primitive was deliberately not integrated. |
 
 ## 6. Git summary
@@ -127,9 +134,9 @@ were not modified.
 
 ## 7. Remaining integration blockers
 
-1. **Generic-action authority contract (Developer A).** Until `docs/11-WORKFORCE-CONTRACT.md`
-   exists, the demo runs on the labeled mock. Needed actions and semantics are in
-   `docs/19-WORKFORCE-ADAPTER-B.md`; the swap is one factory in `scripts/run-workforce.ts`.
+1. **A's workforce contract is on A's branch, not `main` yet.** This demo merges
+   `codex/onboarding-contracts` (PRs #14/#18/#20) into `feat/agent-demo`; the real-authority
+   path lands on `main` together with A's stack.
 2. **Hosted run.** The workforce demo has not been run against the Manufact deployment
    (which only exposes the purchase-contract tools today); it runs locally.
 3. **Security agent as a separate process.** It is a separate principal/org but shares

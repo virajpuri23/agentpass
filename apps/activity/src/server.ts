@@ -47,10 +47,10 @@ async function stackFor(mode: Mode): Promise<DemoStack> {
 }
 
 /** The coding-agent workforce demo (lead + 4 specialists) on a fresh project copy. */
-async function runWorkforce() {
-  startRun('workforce');
+async function runWorkforce(authority: 'agentpass' | 'mock') {
+  startRun(`workforce · ${authority}`);
   try {
-    await runWorkforceDemo({ onStream: (e) => publish(e, false) });
+    await runWorkforceDemo({ authority, onStream: (e) => publish(e, false) });
   } catch (error) {
     publish({ type: 'trace', at: new Date().toISOString(), agent: 'runner', kind: 'denied', text: `Run failed: ${(error as Error).message}` }, false);
     publish({ type: 'done', passed: false }, false);
@@ -128,8 +128,9 @@ const server = createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/api/workforce/run') {
       if (running) return json(res, 409, { status: 'ERROR', code: 'BUSY', reason: 'A run is already in progress' });
+      const input = await body(req).catch(() => ({}));
       running = true;
-      void runWorkforce();
+      void runWorkforce(input.authority === 'mock' ? 'mock' : 'agentpass');
       return json(res, 202, { status: 'OK', run: runId + 1 });
     }
     if (req.method === 'POST' && (url.pathname === '/api/run' || url.pathname === '/api/replay')) {

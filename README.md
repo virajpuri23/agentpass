@@ -48,9 +48,10 @@ npm run demo                 # headless: timeline + 12 checks (12/12), exit 1 on
 npm run dev:activity         # then open http://127.0.0.1:3200/workforce.html
 ```
 
-Authority runs on a **labeled mock** until Developer A's generic-action contract
-ships (`docs/19-WORKFORCE-ADAPTER-B.md`). Full package, observed results,
-screenshots and blockers: [`docs/21-WORKFORCE-DEMO.md`](docs/21-WORKFORCE-DEMO.md).
+`npm run demo` runs on the **real AgentPass authority** (Developer A's app in-process with
+the `demo-project` resource registered; specialists provisioned via `provision_child`);
+`--authority mock` keeps the labeled in-memory mock as the fast offline path. Full package,
+observed results, screenshots and blockers: [`docs/21-WORKFORCE-DEMO.md`](docs/21-WORKFORCE-DEMO.md).
 
 ## Scope promise
 

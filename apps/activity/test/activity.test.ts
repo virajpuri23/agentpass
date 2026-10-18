@@ -114,7 +114,7 @@ describe('activity server', () => {
     const events = await stream;
     const types = events.map((e) => e.event.type);
     expect(types[0]).toBe('meta');
-    expect(events[0].event.authority).toBe('MOCK');
+    expect(events[0].event.authority).toBe('AGENTPASS'); // default mode is the real authority now
     expect(events[0].event.missing).toEqual([]);
     const kinds = events.filter((e) => e.event.type === 'event').map((e) => e.event.event.kind);
     for (const k of ['subagent_created', 'authority_delegated', 'external_contacted', 'permission_denied', 'narrower_requested', 'permission_granted', 'deployment_completed', 'analytics_analyzed', 'authority_revoked']) {
