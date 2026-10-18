@@ -21,6 +21,7 @@ describe('Supabase identity and OAuth consent UI', () => {
   let callbackResult: string;
   let userConfirmedAt: string | null;
   let authorizationLookupResponse: unknown | undefined;
+  let emailResponseStatus: number;
 
   beforeEach(async () => {
     db = openDatabase(':memory:');
@@ -30,6 +31,7 @@ describe('Supabase identity and OAuth consent UI', () => {
     callbackResult = 'https://client.example/callback?code=oauth-code-fixture&state=original-state';
     userConfirmedAt = '2026-10-17T23:30:00.000Z';
     authorizationLookupResponse = undefined;
+    emailResponseStatus = 200;
     const provider: typeof fetch = async (input, init) => {
       const url = new URL(String(input));
       const method = init?.method ?? 'GET';
@@ -38,7 +40,7 @@ describe('Supabase identity and OAuth consent UI', () => {
       if (typeof init?.body === 'string') body = JSON.parse(init.body);
       calls.push({ path: url.pathname, search: url.search, method, authorization: headers.get('authorization'), apikey: headers.get('apikey'), origin: headers.get('origin'), body });
 
-      if (url.pathname === '/auth/v1/otp' && method === 'POST') return Response.json({ message_id: 'fixture-message' });
+      if (url.pathname === '/auth/v1/otp' && method === 'POST') return Response.json({ message_id: 'fixture-message', internal_detail: 'private-provider-detail' }, { status: emailResponseStatus });
       if (url.pathname === '/auth/v1/verify' && method === 'POST') return Response.json({ access_token: accessToken, token_type: 'bearer' });
       if (url.pathname === '/auth/v1/user' && headers.get('authorization') !== `Bearer ${accessToken}`) return Response.json({ error: 'invalid_token' }, { status: 401 });
       if (url.pathname === '/auth/v1/user' && method === 'GET') return Response.json({
@@ -246,6 +248,20 @@ describe('Supabase identity and OAuth consent UI', () => {
     const token = `https://project.supabase.co/auth/v1/verify?token=${'a'.repeat(64)}&type=magiclink`;
     expect((await post('/verify', cookie, { csrf, token })).status).toBe(403);
     expect(calls.some(call => call.path.includes('/oauth/authorizations/'))).toBe(false);
+  });
+
+  it.each([429, 503])('reports email provider failure %s without creating an authenticated session or exposing provider details', async status => {
+    emailResponseStatus = status;
+    const start = await fetch(`${baseUrl}/onboarding/identity?authorization_id=authz-fixture`, { redirect: 'manual' });
+    const cookie = cookiePair(start), csrf = csrfFrom(await start.text());
+    const response = await post('/login', cookie, { csrf, email });
+    expect(response.status).toBe(status);
+    const page = await response.text();
+    expect(page).toContain(status === 429 ? 'sign-in email limit has been reached' : 'Supabase authentication could not be completed');
+    expect(page).not.toContain('private-provider-detail');
+    expect(response.headers.get('set-cookie')).toBeNull();
+    expect(calls.some(call => call.path.includes('/oauth/authorizations/'))).toBe(false);
+    expect((await post('/login', cookie, { csrf, email })).status).toBe(401);
   });
 
   it('requires exact Origin and one-use CSRF state before sending an OTP', async () => {
