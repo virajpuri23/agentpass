@@ -2,6 +2,10 @@
 
 **Screen:** `http://127.0.0.1:3200/workforce.html`. An animated stage (Acme's manager and helpers on the left, AgentPass in the middle, the project on the right, the outside security firm bottom right) with a one-sentence caption under it, progress dots, and on the right the 12 checks, a small Results block and a collapsed Technical log with every raw event. No jargon on screen: agents are "the manager" and "helpers", grants are "passes", purchasing grants are "wallets". Green `$` packets are purchases through AgentPass to the vendor box under it; wallet badges on each node show the wallet and what it spent. Every packet that moves on the diagram is a real call by a separate agent session: one "reads/edits the page" move per helper (not one per file), every refusal (✕ at AgentPass, the locked door shakes), the ask-for-less exchange, and the passes being taken back.
 
+## The 20-second video cut
+
+**Helpers: Design + Security (video)**, Speed Normal: ≈0:19 on screen, 11 checks (the Hosting/Analytics ones are reported as not run, never faked). Design gets a pass and a **$100** wallet, tries to spend $200 (blocked), asks the manager for $200, gets **$120**, buys three photos; it is blocked from the secrets file. The outside security reviewer joins look-only, the manager pays its $160 invoice, it is blocked from editing. Everything is revoked. `npm run demo -- --helpers two` is the same cut in a terminal.
+
 ## Pre-demo checklist (10 minutes before)
 
 - [ ] `npm install && npm --prefix apps/mcp/agentpass-manufact install` done once; run `npm run demo` once so the npm cache is warm (each run copies `demo-project/` to a temp dir and runs `npm install --prefer-offline` there; cold, that is the only slow part).

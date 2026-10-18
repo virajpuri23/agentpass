@@ -171,3 +171,7 @@ summary { cursor: pointer; color: var(--ink-2); font-weight: 600; }
 
 @media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
 @media (max-width: 560px) { .top, main { padding-left: 16px; padding-right: 16px; } .step-title { font-size: 17px; } }
+
+/* two-helper cut: the other helpers, their checks and their phases are hidden */
+body.two #n-analytics, body.two #n-hosting, body.two #r-preview, body.two #r-prod, body.two #r-agg, body.two #r-raw, body.two .wire.ho, body.two .wire.an { display: none; }
+body.two .story li.cut, body.two .dots li.cut { display: none; }

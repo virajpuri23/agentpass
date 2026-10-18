@@ -113,6 +113,8 @@ export async function runWorkflow(input: {
   securityService?: SecurityServiceClient;
   /** When present (and the authority has wallets), the helpers also buy what they need, within budget. */
   budget?: BudgetPlan;
+  /** Which specialists to run; the default is all four. The short video cut runs Design and Hosting only. */
+  helpers?: ('design' | 'security' | 'hosting' | 'analytics')[];
   trace?: Trace;
   /** Live timeline: called for every WorkflowEvent as it is recorded. */
   onEvent?: (event: WorkflowEvent) => void;
@@ -214,7 +216,7 @@ export async function runWorkflow(input: {
    * the manager reads it and answers with a counteroffer (never more than its policy allows, never more
    * than the root wallet) or a rejection; the helper accepts, and the new wallet is a fresh grant.
    */
-  async function askForMore(name: 'hosting' | 'analytics', cents: number, sku_ids: string[], reason: string): Promise<WalletGrant | undefined> {
+  async function askForMore(name: 'design' | 'hosting' | 'analytics', cents: number, sku_ids: string[], reason: string): Promise<WalletGrant | undefined> {
     if (!plan || !budget) return undefined;
     const agent = `${name}-agent`;
     const session = walletOf(name);
@@ -250,21 +252,30 @@ export async function runWorkflow(input: {
     return accepted.data;
   }
 
-  emit('note', 'lead-agent', `Task received: build a polished landing page; improve design, audit security, deploy a preview, analyze signups. Authority: ${authority.source}.${budget ? ` Budget: ${usd(budget.root_cents)} root wallet.` : ''}`);
+  const helpers = new Set(input.helpers ?? ['design', 'security', 'hosting', 'analytics']);
+  emit('note', 'lead-agent', `Task received: build a polished landing page; ${[helpers.has('design') && 'improve design', helpers.has('security') && 'audit security', helpers.has('hosting') && 'deploy a preview', helpers.has('analytics') && 'analyze signups'].filter(Boolean).join(', ')}. Authority: ${authority.source}.${budget ? ` Budget: ${usd(budget.root_cents)} root wallet.` : ''}`);
 
   // 1. Design: a pass for the UI files and a wallet for stock photos. It overreaches once (five photos), then buys two.
-  const design = await spawn('design', credentials.design, { actions: ['repo.read', 'repo.write'], resources: ['src/components/**', 'src/styles/**'] });
-  if (plan) {
-    await giveWallet('design', plan.wallets.design, ['stock-photo']);
-    await buy('design-agent', walletOf('design'), wallets.design!.id, 'stock-photo', 5, 'hero and feature imagery');
-    await buy('design-agent', walletOf('design'), wallets.design!.id, 'stock-photo', 2, 'hero and feature imagery');
+  if (helpers.has('design')) {
+    const design = await spawn('design', credentials.design, { actions: ['repo.read', 'repo.write'], resources: ['src/components/**', 'src/styles/**'] });
+    if (plan) {
+      await giveWallet('design', plan.wallets.design, ['stock-photo']);
+      const five = await buy('design-agent', walletOf('design'), wallets.design!.id, 'stock-photo', 5, 'hero and feature imagery');
+      if (!five && !helpers.has('hosting')) {
+        // The two-helper cut: Design is the one that asks for more. It asks $200, policy allows $120, it buys three photos on the new wallet.
+        const more = await askForMore('design', 20000, ['stock-photo'], `Five hero and feature photos cost $200; this wallet holds ${usd(plan.wallets.design)}`);
+        if (more) await buy('design-agent', walletOf('design'), more.id, 'stock-photo', 3, 'hero and feature imagery, on the top-up wallet');
+      } else if (!five) {
+        await buy('design-agent', walletOf('design'), wallets.design!.id, 'stock-photo', 2, 'hero and feature imagery');
+      }
+    }
+    if (input.specialists.design) result.design = unwrap(await input.specialists.design(design));
   }
-  if (input.specialists.design) result.design = unwrap(await input.specialists.design(design));
 
   // 2. Security (external company; read-only). Either a separate process reached over HTTP, or in-process with its own session.
   const securityScope: TaskScope = { actions: ['repo.read'], resources: ['src/**', 'package.json'] };
   let probeSecurity: (() => Promise<{ status: string; code?: string } | undefined>) | undefined;
-  if (input.securityService) {
+  if (!helpers.has('security')) { /* not in this cut */ } else if (input.securityService) {
     const svc = input.securityService;
     const remote = async (path: string, body: Record<string, unknown>): Promise<any> => {
       const res = await fetch(new URL(path, svc.url), { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(120_000), headers: { 'content-type': 'application/json', 'x-task-token': svc.token }, body: JSON.stringify(body) });
@@ -289,7 +300,7 @@ export async function runWorkflow(input: {
     if (input.specialists.security) result.security = unwrap(await input.specialists.security(security));
   }
   // The outside firm gets no wallet (AgentPass keeps money inside the organization): the manager pays its invoice itself.
-  if (plan) await buy('lead-agent', leadWallet, plan.rootWalletId, 'audit-hour', 2, "Sentinel Sec's review invoice");
+  if (plan && helpers.has('security')) await buy('lead-agent', leadWallet, plan.rootWalletId, 'audit-hour', 2, "Sentinel Sec's review invoice");
   if (result.security) {
     // The lead applies the fix itself: it is the only principal allowed to write src/lib.
     const report = result.security as { findings?: { file: string; rule: string }[] } | undefined;
@@ -306,6 +317,7 @@ export async function runWorkflow(input: {
   }
 
   // 3. Hosting: production will be refused; the lead answers the preview request.
+  if (helpers.has('hosting')) {
   const hosting = await spawn('hosting', credentials.hosting, { actions: ['repo.read'], resources: ['src/**', 'package.json'] });
   if (plan) {
     // Its $100 wallet does not cover two hosting slots ($120): AgentPass refuses, it asks the manager for more
@@ -335,8 +347,10 @@ export async function runWorkflow(input: {
     grants['hosting-preview'] = { ...grants.hosting!, id: result.hosting.negotiation.issued_grant_id, scope: result.hosting.negotiation.offered! };
   }
   if (result.hosting.deployment) emit('deployment_completed', 'hosting-agent', `Preview live at ${result.hosting.deployment.url} (${result.hosting.deployment.provider})`);
+  }
 
   // 4. Analytics
+  if (helpers.has('analytics')) {
   const analytics = await spawn('analytics', credentials.analytics, { actions: ['analytics.aggregate'], resources: ['landing-page'] });
   if (plan) {
     // A $50 wallet for warehouse queries; then it asks for $500 to buy a raw export of people's records: rejected.
@@ -347,6 +361,7 @@ export async function runWorkflow(input: {
   if (input.specialists.analytics) {
     result.analytics = unwrap(await input.specialists.analytics(analytics));
     emit('analytics_analyzed', 'analytics-agent', 'Computed aggregate metrics from the dataset (no raw rows)');
+  }
   }
 
   // Money left on the root wallet, as AgentPass sees it, before anything is revoked.

@@ -17,7 +17,7 @@ const CHECKS = [
   'Publishing asked for a smaller pass', 'Test copy published', 'Numbers computed real totals',
   'Numbers blocked from people’s records', 'All passes taken back at the end', 'Old passes no longer work',
   '$1,000 wallet; helper wallets are slices of it', 'Helpers bought what they needed, with receipts', 'Overspending was blocked',
-  'Publishing asked for more; the manager gave less; it bought', 'Numbers’ request for people’s records was refused', 'Spend within $1,000, matches AgentPass; wallets died with the passes',
+  'A helper asked for more; the manager gave less; it bought', 'Numbers’ request for people’s records was refused', 'Spend within $1,000, matches AgentPass; wallets died with the passes',
 ];
 const PHASES = ['The master pass and the wallet', 'Design', 'Outside security reviewer', 'Publishing', 'Numbers', 'Passes and wallets taken back'];
 const CHECK_PHASE = [2, 2, 3, 3, 4, 4, 4, 4, 5, 5, 6, 6, 2, 5, 4, 4, 5, 6];
@@ -136,7 +136,7 @@ function isBeat(env) {
     case 'authority_delegated': return /^Delegated to security-agent/.test(t);
     case 'wallet_delegated': case 'budget_requested': case 'budget_countered': case 'budget_rejected': case 'deployment_completed': case 'analytics_analyzed': return true;
     case 'budget_exceeded': return true;
-    case 'purchase_made': return e.agent === 'design-agent' || e.agent === 'hosting-agent';
+    case 'purchase_made': return e.agent === 'design-agent' || e.agent === 'hosting-agent' || (play.helpers === 'two' && e.agent === 'lead-agent');
     case 'permission_denied': return (e.agent === 'design-agent' && /\.env/.test(t)) || (e.agent === 'security-agent' && /repo\.write/.test(t)) || /deploy\.production/.test(t);
     case 'authority_revoked': { if (!st.firstRevoke) st.firstRevoke = e; return st.firstRevoke === e; } // the first revocation is the beat; the rest land silently
     default: return false;
@@ -146,13 +146,21 @@ function isBeat(env) {
 // ---- Playback queue ----
 const SPEED = { slow: 2.2, normal: 1, instant: 0 };
 // catchUp: the buffer the server replays on (re)connect is a finished or in-flight run; it renders instantly, only live events are paced.
-const play = { speed: 'normal', queue: [], pumping: false, timer: null, startedAt: 0, catchUp: false };
+const play = { speed: 'normal', helpers: 'all', queue: [], pumping: false, timer: null, startedAt: 0, catchUp: false };
+const CUT_CHECKS = new Set([5, 6, 7, 8, 9, 10, 17]);
+const CUT_PHASES = new Set([4, 5]);
+function applyCut() {
+  document.body.classList.toggle('two', play.helpers === 'two');
+  $('.lede').textContent = play.helpers === 'two' ? 'One AI manager, two AI helpers, one web page. AgentPass hands out passes and wallets and checks every move.' : 'One AI manager, four AI helpers, one web page. AgentPass hands out passes and wallets and checks every move.';
+  [...$('#checks').children].forEach((li, i) => li.classList.toggle('cut', play.helpers === 'two' && CUT_CHECKS.has(i + 1)));
+  [...$('#dots').children].forEach((li, i) => li.classList.toggle('cut', play.helpers === 'two' && CUT_PHASES.has(i + 1)));
+}
 const pace = () => (play.catchUp ? 0 : SPEED[play.speed]);
 function delayFor(env) {
   const f = pace();
   if (!f) return 0;
   const t = env.event.type;
-  const base = t === 'event' ? (isBeat(env) ? 1250 : 0) : t === 'outputs' ? 400 : t === 'check' ? 50 : t === 'meta' ? 800 : 0;
+  const base = t === 'event' ? (isBeat(env) ? (play.helpers === 'two' ? 1550 : 1250) : 0) : t === 'outputs' ? 300 : t === 'check' ? 30 : t === 'meta' ? 700 : 0;
   return base * f;
 }
 function playState() {
@@ -388,7 +396,12 @@ function setPhase(n) {
   [...$('#dots').children].forEach((d, i) => d.classList.toggle('now', i === n - 1));
   [...$('#checks').children].forEach((li, i) => { if (CHECK_PHASE[i] < n) li.classList.add('seen'); });
 }
-const phaseLabel = (n) => (n ? `Step ${n} of ${PHASES.length} · ${PHASES[n - 1]}` : 'Ready');
+const phaseLabel = (n) => {
+  if (!n) return 'Ready';
+  if (play.helpers !== 'two') return `Step ${n} of ${PHASES.length} · ${PHASES[n - 1]}`;
+  const order = [1, 2, 3, 6];
+  return `Step ${order.indexOf(n) + 1} of ${order.length} · ${PHASES[n - 1]}`;
+};
 
 let st;
 function reset() {
@@ -399,6 +412,7 @@ function reset() {
   $('#money').replaceChildren('—', el('ul', 'ledger')); $('#money ul').id = 'ledger';
   $('#checks').replaceChildren(...CHECKS.map((t) => { const li = el('li'); li.append(el('span', 'm', '·'), el('span', '', t)); return li; }));
   $('#dots').replaceChildren(...PHASES.map((t, i) => { const li = el('li', '', String(i + 1)); li.title = t; return li; }));
+  applyCut();
   $('#result').textContent = ''; $('#result').className = 'result';
   caption('Ready', 'Press “Run demo”.', '');
   // diagram
@@ -478,14 +492,14 @@ function onEvent(env) {
   else if (ev.type === 'outputs') { onOutputs(ev.outputs); caption('Results', 'What the helpers made.', 'See the right-hand side.'); }
   else if (ev.type === 'check') {
     const li = $('#checks').children[ev.check.n - 1];
-    if (li) { li.className = ev.check.skipped ? 'seen skip' : ev.check.pass ? 'seen pass' : 'seen fail'; li.querySelector('.m').textContent = ev.check.skipped ? '–' : ev.check.pass ? '✓' : '✕'; li.title = ev.check.detail; }
-    caption('Checking', `Checking ${ev.check.n} of ${CHECKS.length}`, `${ev.check.skipped ? '– not run on the practice mock:' : ev.check.pass ? '✓' : '✕'} ${CHECKS[ev.check.n - 1]}`);
+    if (li) { li.className = `seen ${ev.check.skipped ? 'skip' : ev.check.pass ? 'pass' : 'fail'}${li.classList.contains('cut') ? ' cut' : ''}`; li.querySelector('.m').textContent = ev.check.skipped ? '–' : ev.check.pass ? '✓' : '✕'; li.title = ev.check.detail; }
+    if (!(ev.check.skipped && play.helpers === 'two')) caption('Checking', `Checking ${ev.check.n} of ${CHECKS.length - (play.helpers === 'two' ? CUT_CHECKS.size : 0)}`, `${ev.check.skipped ? '– not run:' : ev.check.pass ? '✓' : '✕'} ${CHECKS[ev.check.n - 1]}`);
   } else if (ev.type === 'done') {
     const n = $('#checks').querySelectorAll('.pass').length, skipped = $('#checks').querySelectorAll('.skip').length;
     const total = CHECKS.length - skipped;
     const shown = play.startedAt ? ` · ${mmss(performance.now() - play.startedAt)} on screen` : '';
     $('#result').className = `result ${ev.passed ? 'pass' : 'fail'}`;
-    $('#result').textContent = `${n} of ${total} checks passed${skipped ? ` (${skipped} not run on the mock)` : ''}${shown}`;
+    $('#result').textContent = `${n} of ${total} checks passed${skipped && play.helpers !== 'two' ? ` (${skipped} not run on the mock)` : ''}${shown}`;
     const dots = [...$('#dots').children];
     dots.forEach((d, i) => {
       d.classList.remove('now');
@@ -509,10 +523,11 @@ document.addEventListener('DOMContentLoaded', () => {
   playState();
   $('#run').addEventListener('click', async () => {
     $('#run').disabled = true;
-    const r = await fetch('/api/workforce/run', { method: 'POST' });
+    const r = await fetch('/api/workforce/run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ helpers: play.helpers }) });
     if (!r.ok) { caption('Could not start', (await r.json()).reason, ''); refresh(); }
   });
   $('#speed').addEventListener('change', (e) => setSpeed(e.target.value));
+  $('#helpers').addEventListener('change', (e) => { play.helpers = e.target.value; applyCut(); });
   const source = new EventSource('/api/events');
   source.addEventListener('reset', (m) => { clearPlayback(); reset(); play.catchUp = JSON.parse(m.data).label === 'current'; });
   source.onmessage = (m) => enqueue(JSON.parse(m.data));
