@@ -18,7 +18,14 @@ import type { RepoGateway } from './gateways/repo.js';
 
 /** The lead's and the external security agent's credentials are provisioned by administrators; a missing
  *  specialist credential means the lead creates that specialist itself (AgentPass provision_child). */
-export interface Credentials { lead: string; security: string; design?: string; hosting?: string; analytics?: string }
+export interface Credentials { lead: string; security?: string; design?: string; hosting?: string; analytics?: string }
+
+/**
+ * The external Security agent running as its own process (apps/workforce/src/security-service.ts).
+ * The lead holds only this per-task token and the service's address, never the auditor's credential;
+ * `authority_url` tells the service which AgentPass to use its own credential against.
+ */
+export interface SecurityServiceClient { url: string; token: string; authority_url: string }
 
 export interface WorkflowEvent {
   at: string;
@@ -66,6 +73,8 @@ export async function runWorkflow(input: {
   rootGrantId: string;
   gateways: { repo: RepoGateway; deploy: DeployGateway; analytics: AnalyticsGateway };
   specialists: Specialists;
+  /** When present, the Security agent is contacted over HTTP instead of running in this process. */
+  securityService?: SecurityServiceClient;
   trace?: Trace;
   /** Live timeline: called for every WorkflowEvent as it is recorded. */
   onEvent?: (event: WorkflowEvent) => void;
@@ -91,9 +100,12 @@ export async function runWorkflow(input: {
   const grants: Record<string, WorkforceGrant> = {};
   const sessions: Record<string, WorkforceSession> = {};
 
-  async function spawn(name: 'design' | 'security' | 'hosting' | 'analytics', cred: string | undefined, scope: Omit<WorkforceScope, 'expires_at' | 'max_delegation_depth'>, external = false) {
+  type TaskScope = Omit<WorkforceScope, 'expires_at' | 'max_delegation_depth'>;
+  const fullScope = (scope: TaskScope): WorkforceScope => ({ ...scope, expires_at: later(30), max_delegation_depth: 0, max_executions: 40 });
+  async function spawn(name: 'design' | 'security' | 'hosting' | 'analytics', cred: string | undefined, scope: TaskScope, external = false) {
     const agent = `${name}-agent`;
-    const full: WorkforceScope = { ...scope, expires_at: later(30), max_delegation_depth: 0, max_executions: 40 };
+    const full = fullScope(scope);
+    if (external && !cred) throw new Error(`${agent} is an external principal: it needs its registered credential or a security service`);
     if (cred) {
       // A registered principal (seeded by an administrator, or an external company's agent): delegate to it.
       sessions[name] = await open(cred);
@@ -125,10 +137,34 @@ export async function runWorkflow(input: {
   const design = await spawn('design', credentials.design, { actions: ['repo.read', 'repo.write'], resources: ['src/components/**', 'src/styles/**'] });
   if (input.specialists.design) result.design = unwrap(await input.specialists.design(design));
 
-  // 2. Security (external company; read-only)
-  const security = await spawn('security', credentials.security, { actions: ['repo.read'], resources: ['src/**', 'package.json'] }, true);
-  if (input.specialists.security) {
-    result.security = unwrap(await input.specialists.security(security));
+  // 2. Security (external company; read-only). Either a separate process reached over HTTP, or in-process with its own session.
+  const securityScope: TaskScope = { actions: ['repo.read'], resources: ['src/**', 'package.json'] };
+  let probeSecurity: (() => Promise<{ status: string; code?: string } | undefined>) | undefined;
+  if (input.securityService) {
+    const svc = input.securityService;
+    const remote = async (path: string, body: Record<string, unknown>): Promise<any> => {
+      const res = await fetch(new URL(path, svc.url), { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(120_000), headers: { 'content-type': 'application/json', 'x-task-token': svc.token }, body: JSON.stringify(body) });
+      try { return await res.json(); } catch { return { status: 'ERROR', code: 'SERVICE_UNAVAILABLE', reason: `HTTP ${res.status}` }; }
+    };
+    const who = await remote('/identify', { authority_url: svc.authority_url });
+    if (who.status !== 'OK') throw new Error(`security service identify failed: ${who.code} ${who.reason ?? ''}`);
+    emit('external_contacted', 'security-agent', `Contacted external security-agent (${who.data.organization_id}) at ${svc.url}: a separate process that authenticates to AgentPass with its own credential; this process never holds it`);
+    const g = await lead.delegate({ parent_grant_id: input.rootGrantId, recipient_principal_id: who.data.principal_id, scope: fullScope(securityScope) });
+    if (isError(g)) throw new Error(`delegate to security-agent failed: ${g.code} ${g.reason}`);
+    grants.security = g.data;
+    emit('authority_delegated', 'lead-agent', `Delegated to security-agent: ${securityScope.actions.join(', ')} on ${securityScope.resources.join(', ')}`);
+    const audit = await remote('/audit', { grant_id: g.data.id, authority_url: svc.authority_url });
+    if (audit.status === 'OK') { for (const line of audit.data.trace ?? []) trace(line); result.security = audit.data.report; }
+    else result.security = audit; // keep the refusal envelope visible in the result
+    probeSecurity = async () => {
+      const r = await remote('/probe', { grant_id: g.data.id, authority_url: svc.authority_url, action: 'repo.read', resource: 'src/x' });
+      return r.status === 'OK' ? r.data : { status: 'ERROR', code: r.code ?? 'SERVICE_UNAVAILABLE' };
+    };
+  } else {
+    const security = await spawn('security', credentials.security, securityScope, true);
+    if (input.specialists.security) result.security = unwrap(await input.specialists.security(security));
+  }
+  if (result.security) {
     // The lead applies the fix itself: it is the only principal allowed to write src/lib.
     const report = result.security as { findings?: { file: string; rule: string }[] } | undefined;
     const xss = report?.findings?.find((f) => f.file === 'src/lib/newsletter.ts');
@@ -180,6 +216,10 @@ export async function runWorkflow(input: {
     const g = grants[name]!;
     const probe = await s.authorize({ grant_id: g.id, action: g.scope.actions[0]!, resource: g.scope.resources[0]!.replace('**', 'x') });
     if (isError(probe)) result.reuse_after_revoke.push({ agent: `${name}-agent`, code: probe.code });
+  }
+  if (probeSecurity) {
+    const probe = await probeSecurity();
+    if (probe && probe.status !== 'OK') result.reuse_after_revoke.push({ agent: 'security-agent', code: probe.code ?? 'SERVICE_UNAVAILABLE' });
   }
   return result;
 }

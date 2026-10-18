@@ -12,6 +12,7 @@ authorization event is replayed or fabricated.
 npm install && npm --prefix apps/mcp/agentpass-manufact install   # once
 npm run demo                                                      # on the REAL AgentPass authority: timeline + 12 checks, exit 1 on failure
 npm run demo -- --authority mock                                  # same workflow on the labeled in-memory mock (fast offline path)
+npm run demo -- --gateway remote                                  # AgentPass → HTTP → B's gateway service; Security agent as a separate process (12 checks)
 npm run dev:activity                                              # then open http://127.0.0.1:3200/workforce.html and press Run demo
 ```
 
@@ -106,7 +107,7 @@ outputs (before/after, findings + fix, preview URL, analytics) · the 12 checks.
 | Design edits, security scan, build + preview server, analytics math, revocation | **Real.** Deterministic code, no LLM calls, separate sessions per agent. |
 | Tool gateways (`apps/workforce/src/gateways/`) | **Real.** The only path to files, deploys and data; `.env` is never readable, writable or listed. |
 | Preview deployment | **Real local build** (`next build` + `next start`), labeled `provider: local-next-start`. No Vercel account was available on the build machine; nothing claims production. |
-| Security agent as an external company | **Real separate principal and org** (`sentinel-sec`) with its own credential and a read-only grant. It runs in-process in this build; a separate HTTP service is a P1 follow-up. |
+| Security agent as an external company | **Real separate principal and org** (`sentinel-sec`) with its own credential and a read-only grant. With `--gateway remote` it is a **separate process** (`apps/workforce/src/security-service.ts`) that alone holds its credential; the lead reaches it over HTTP with a per-task token and never sees the credential (tested). The default run keeps it in-process. |
 | **Authority service** | **Real AgentPass** (Developer A's authority, `docs/11-WORKFORCE-CONTRACT.md`). `apps/workforce/src/real/authority.ts` adapts B's agent contract to A's wire contract; `apps/workforce/src/real/resource-adapter.ts` is the registered `demo-project` resource that AgentPass's execute gateway invokes after validating the live chain, paths and quota. The labeled in-memory mock remains as the fast offline test path (`--authority mock`). |
 | Agent identities | **Real.** Design/Hosting/Analytics are provisioned by the lead via `provision_child` (server-generated ids, fresh credentials, hashes only on the wire); revoking their grant disables the credential (`INVALID_CALLER` on reuse). Security is a registered principal in `sentinel-sec`, delegated to cross-organization. |
 | Agent-to-agent messaging | In-process calls through the orchestrator. Primitive was deliberately not integrated. |
@@ -139,9 +140,78 @@ were not modified.
    path lands on `main` together with A's stack.
 2. **Hosted run.** The workforce demo has not been run against the Manufact deployment
    (which only exposes the purchase-contract tools today); it runs locally.
-3. **Security agent as a separate process.** It is a separate principal/org but shares
-   the demo process; an HTTP service version is a P1 item.
+3. **Security agent as a separate process.** Done locally (`--gateway remote`, see
+   section 8); the hosted run still needs the gateway deployed next to A's server.
 4. **Real preview hosting.** Vercel was not configured on the build machine; previews are
    real local builds and labeled as such.
 5. **A's open PR #14** (self-service onboarding contracts) is waiting on Developer B's
    agreement to the A↔B runner protocol.
+
+## 8. Hosted gateway (B's protected execution service)
+
+A's authority can call B's resource adapter over HTTP instead of in-process
+(docs/11, "Protected execution adapter"). B's side is
+`apps/workforce/src/gateway-service.ts` (Express app) with the entry
+`apps/workforce/src/gateway-main.ts`:
+
+| Route | Auth | Behaviour |
+|---|---|---|
+| `GET /health` | none | `{status:'OK', resource:'demo-project', executions}` |
+| `POST /internal/workforce/execute` | `X-Service-Key` (constant-time compare, 401 otherwise) | body `{execution_id, principal, input}` validated with `workforceActionSchema`; paths re-derived like A's `requestedPaths` and re-resolved with `resolveWorkforcePath` under the gateway's own root (400 on traversal, dotfiles, symlinks, absolute paths); dispatched to `createDemoProjectResource(...).execute`; returns `{status:'OK', data}` |
+
+Deduplication: `execution_id` is the durable idempotency key. The service keeps
+completed results in an in-memory map for the lifetime of the process (a replay
+returns the first result and executes nothing; a concurrent duplicate awaits the
+in-flight call). A multi-instance deployment would move that map to shared
+storage. One JSON log line per request (`method, path, status, ms, service_key:
+valid|invalid|missing, action, replay`); no bodies, paths, file contents or keys.
+
+`npm run demo -- --gateway remote` runs exactly this topology locally: the
+gateway is forked (`node --import tsx`) on a loopback port with a fresh random
+service key, A's authority is configured through `workforceFromEnvironment`, and
+the Security agent is forked as its own process (`security-main.ts`) with an
+allow-listed environment that contains its credential and the task token, never
+the lead's credential. Observed 2026-10-18: **12/12 checks passed**, the gateway
+log shows one `POST /internal/workforce/execute` per protected action, and check
+12 shows `security-agent: GRANT_REVOKED` probed from the separate process.
+
+### Environment A's server needs (all three together)
+
+| Variable | Value |
+|---|---|
+| `WORKFORCE_RESOURCES_JSON` | `[{"resource":"demo-project","organization_id":"buyer-co","owner_principal_id":"owner-1","repo_root":"<canonical project root>","allowed_actions":["repo.read","repo.write","security.audit.run","deploy.preview","analytics.aggregate.read"]}]` |
+| `WORKFORCE_GATEWAY_URL` | the gateway's **HTTPS** URL (loopback HTTP is the only non-TLS form A accepts; redirects are refused) |
+| `WORKFORCE_SERVICE_KEY` | the same secret the gateway holds (set as a secret, never in the repo) |
+
+A keeps validating paths against `repo_root` before every call, so `repo_root`
+must be a real directory on A's host as well as the gateway's.
+
+### Environment the gateway needs
+
+| Variable | Meaning |
+|---|---|
+| `WORKFORCE_SERVICE_KEY` | shared secret A presents as `X-Service-Key` (required) |
+| `WORKFORCE_REPO_ROOT` | project the gateway operates on; realpath'd at startup (required) |
+| `WORKFORCE_ANALYTICS_FILE` | events dataset (default `<root>/data/analytics-events.json`) |
+| `WORKFORCE_ORG`, `WORKFORCE_OWNER` | resource owner identity (default `buyer-co`, `owner-1`) |
+| `PORT`, `WORKFORCE_HOST` | listen port (default 4300) and bind address (default `0.0.0.0`) |
+
+Start command: `node --import tsx apps/workforce/src/gateway-main.ts`.
+
+The Security agent process takes `SECURITY_CREDENTIAL`, `SECURITY_TASK_TOKEN`,
+`SECURITY_REPO_ROOT`, optional `SECURITY_AUTHORITY_URL` (pins which authority it
+will use its credential against), `PORT` and `SECURITY_HOST`. Its routes
+(`POST /identify`, `/audit`, `/probe`, all behind `X-Task-Token`) take the
+authority URL in the body, which must be HTTPS or loopback and match the pin.
+
+### Caveat: file actions need a shared repository root
+
+From docs/11: filesystem registrations need a canonical shared repository root;
+when the authority and the gateway run on different hosts without that shared
+filesystem, file actions (`repo.read`, `repo.write`, `security.audit.run`,
+`deploy.preview`) **fail closed**, because A resolves `repo_root` locally before
+calling the gateway and the gateway resolves it again on its side. On Manufact
+that means the gateway must be co-located with A's server (same container and
+checkout) or only the non-file actions (`analytics.aggregate.read`) would work.
+Nothing has been deployed or configured on Manufact for this; that decision is
+the main session's.
