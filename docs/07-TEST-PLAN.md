@@ -52,3 +52,18 @@ The judge-facing security claim is only as strong as the negative tests. Run all
 ## Priorities when time is short
 
 Minimum non-negotiable: F01–F07; S01, S03, S06, S07, S08, S09, S11, S12, S16. Run the remaining S tests if time permits. Never skip budget/idempotency checks while showing autonomous spending.
+
+## Self-service verification
+
+Run Node 24 root tests/typecheck and nested MCP typecheck/build. Enable disposable
+PostgreSQL suites with `AGENTPASS_TEST_DATABASE_URL` and the isolated runner suite
+with `AGENTPASS_RUNNER_TEST_DATABASE_URL`; never point these at a hosted/customer DB.
+`accounts.test.ts`, `migrations.test.ts`, `consent.test.ts`, `onboarding-flow.test.ts`,
+`agent-control.test.ts`, `oauth.test.ts`, `oauth-hook.test.ts`,
+`supabase-login.test.ts`, and `onboarding-integration.test.ts` cover
+the additive path. OAuth/JWKS/browser-exchange/runner fixtures are explicitly
+FIXTURE evidence, even when they use real HTTP, SDK, persistence and ledger code.
+
+The [rollout gate](21-SELF-SERVICE-ROLLOUT.md) additionally requires real Supabase Auth,
+Vault, B worker and both ChatGPT/Claude staging journeys. Do not substitute green
+fixture tests for these external proofs or reset a connection's allocation on retry.
