@@ -56,6 +56,14 @@ as a JWT; failed JWT verification is never retried as a service key. The opaque
 path receives only an internal SDK gate scope after `/v1/me` succeeds; it does
 not gain human identity or consent. Database and authority failures deny access.
 
+The trusted sign-in form accepts either a numeric email code or the original
+Supabase sign-in link copied from the email without opening it. This supports
+default Supabase email templates without custom SMTP. Links must use the configured
+project origin and verification path; the server sends only the token hash to
+Supabase and checks the verified email against the pending sign-in session. It
+never follows the submitted URL or its redirect. Supabase default email delivery
+restrictions still apply.
+
 For the first-party browser consent client, use a separate verifier configured
 with only its approved client ID. Do not add it to
 `AGENTPASS_OAUTH_CLIENT_IDS` unless it is also meant to use the public MCP

@@ -174,6 +174,49 @@ describe('Supabase identity and OAuth consent UI', () => {
     expect(calls.filter(call => call.path.endsWith('/consent'))).toHaveLength(1);
   });
 
+  async function emailVerification(signInEmail = email) {
+    const start = await fetch(`${baseUrl}/onboarding/identity?authorization_id=authz-fixture`);
+    const sent = await post('/login', cookiePair(start), { csrf: csrfFrom(await start.text()), email: signInEmail });
+    const cookie = cookiePair(sent);
+    const form = await fetch(`${baseUrl}/onboarding/identity/verify`, { headers: { cookie } });
+    return { cookie, csrf: csrfFrom(await form.text()) };
+  }
+
+  it.each(['signup', 'magiclink'])('verifies a default Supabase %s link and keeps consent separate', async type => {
+    const { cookie, csrf } = await emailVerification();
+    const token = `https://project.supabase.co/auth/v1/verify?token=${'a'.repeat(64)}&type=${type}&redirect_to=https%3A%2F%2Fattacker.example`;
+    const response = await post('/verify', cookie, { csrf, token });
+    expect(response.status).toBe(303);
+    expect(response.headers.get('location')).toBe('/onboarding/identity/review');
+    expect(calls.find(call => call.path === '/auth/v1/verify')?.body).toEqual({ token_hash: 'a'.repeat(64), type: 'email' });
+    const review = await fetch(`${baseUrl}/onboarding/identity/review`, { headers: { cookie: cookiePair(response) } });
+    expect(review.status).toBe(200);
+    expect(await review.text()).toContain('Review sign-in request');
+    expect(calls.some(call => call.path.endsWith('/consent'))).toBe(false);
+    expect((db.prepare('SELECT COUNT(*) AS count FROM grants').get() as { count: number }).count).toBe(0);
+    expect((await post('/verify', cookie, { csrf, token })).status).toBe(401);
+  });
+
+  it.each([
+    'https://attacker.example/auth/v1/verify?token=aaaaaaaaaaaaaaaaaaaa&type=magiclink',
+    'https://project.supabase.co/other?token=aaaaaaaaaaaaaaaaaaaa&type=magiclink',
+    'https://project.supabase.co/auth/v1/verify?token=aaaaaaaaaaaaaaaaaaaa&type=recovery',
+    'https://project.supabase.co/auth/v1/verify?token=aaaaaaaaaaaaaaaaaaaa&token=bbbbbbbbbbbbbbbbbbbb&type=magiclink',
+    'https://user:password@project.supabase.co/auth/v1/verify?token=aaaaaaaaaaaaaaaaaaaa&type=magiclink',
+    'https://project.supabase.co/auth/v1/verify?token=aaaaaaaaaaaaaaaaaaaa&type=magiclink#access_token=ignored',
+  ])('rejects an untrusted sign-in link before contacting the provider: %s', async token => {
+    const { cookie, csrf } = await emailVerification();
+    expect((await post('/verify', cookie, { csrf, token })).status).toBe(400);
+    expect(calls.some(call => call.path === '/auth/v1/verify')).toBe(false);
+  });
+
+  it('rejects a valid provider link for a different email address', async () => {
+    const { cookie, csrf } = await emailVerification('other@example.test');
+    const token = `https://project.supabase.co/auth/v1/verify?token=${'a'.repeat(64)}&type=magiclink`;
+    expect((await post('/verify', cookie, { csrf, token })).status).toBe(403);
+    expect(calls.some(call => call.path.includes('/oauth/authorizations/'))).toBe(false);
+  });
+
   it('requires exact Origin and one-use CSRF state before sending an OTP', async () => {
     const start = await fetch(`${baseUrl}/onboarding/identity?authorization_id=authz-fixture`, { redirect: 'manual' });
     const cookie = cookiePair(start), csrf = csrfFrom(await start.text());
