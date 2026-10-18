@@ -107,7 +107,7 @@ describe('activity server', () => {
     expect(events.every((e) => e.recorded === true)).toBe(true);
   }, 40_000);
 
-  it('streams the coding-agent workforce demo end to end (12 real checks)', async () => {
+  it('streams the coding-agent workforce demo end to end (18 real checks, money included)', async () => {
     await untilIdle();
     const stream = collect(240_000, await currentRun());
     expect((await fetch(`${base}/api/workforce/run`, { method: 'POST' })).status).toBe(202);
@@ -124,7 +124,9 @@ describe('activity server', () => {
     expect(outputs?.hosting?.deployment?.provider).toBe('local-next-start');
     expect(outputs?.fix_applied).toBe(true);
     expect(JSON.stringify(outputs)).not.toMatch(/@example\.com|FAKE_FIXTURE/);
-    expect(events.filter((e) => e.event.type === 'check').map((e) => e.event.check.pass)).toEqual(Array(12).fill(true));
+    expect(events.filter((e) => e.event.type === 'check').map((e) => e.event.check.pass)).toEqual(Array(18).fill(true));
+    expect(outputs?.budget?.spent_cents).toBe(38500);
+    expect(outputs?.budget?.remaining_cents).toBe(61500);
     expect(events.at(-1).event).toEqual({ type: 'done', passed: true });
   }, 300_000);
 

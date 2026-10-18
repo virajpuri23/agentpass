@@ -77,6 +77,15 @@ svg { width: 100%; height: auto; display: block; }
 .badge-svg, .badge rect { fill: var(--pill); }
 .badge text { font-size: 11.5px; font-weight: 600; fill: var(--ink); }
 .badge.revoked rect { fill: color-mix(in srgb, var(--critical) 25%, transparent); }
+.badge.money rect { fill: var(--ok-bg); stroke: var(--good); stroke-width: 1; }
+.badge.money text { fill: var(--ink); }
+.badge.money.revoked rect { fill: color-mix(in srgb, var(--critical) 25%, transparent); stroke: none; }
+.node.vendor rect { fill: var(--node); stroke: var(--good); stroke-dasharray: 5 4; }
+.chip.money { background: var(--ok-bg); color: var(--good); border: 1px solid var(--good); }
+.packet.money circle, .packet.money .pill rect { fill: var(--good); }
+.packet.money .pill text { fill: #fff; }
+.ledger { margin: 4px 0 0; padding-left: 16px; font-size: 12px; color: var(--ink-2); }
+.story li.skip { color: var(--muted); } .story li.skip .m { color: var(--muted); }
 .vault { fill: var(--org); stroke: var(--line); }
 .vault-text { font-size: 12px; fill: var(--ink-2); }
 .vault-g.hit .vault { stroke: var(--critical); stroke-width: 2; }

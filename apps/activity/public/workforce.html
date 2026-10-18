@@ -29,12 +29,13 @@
   <main>
     <section class="stage" aria-label="Animated diagram">
       <div class="intro">
-        <div class="intro-text">The <b>manager</b> gets one master pass and gives each <b>helper</b> a smaller one. <b>AgentPass</b> checks every request before anything in the <b>project</b> is touched.</div>
+        <div class="intro-text">The <b>manager</b> gets one master pass and a <b>$1,000 wallet</b>, and gives each <b>helper</b> a smaller pass and a smaller wallet. <b>AgentPass</b> checks every request and every dollar before anything is touched or spent.</div>
         <ul class="legend" aria-label="Legend">
           <li><span class="chip good">✓</span> allowed</li>
           <li><span class="chip bad">✕</span> blocked</li>
           <li><span class="chip warn">!</span> asking</li>
           <li><span class="chip lock">🔒</span> no pass opens it</li>
+          <li><span class="chip money">$</span> wallet / spend</li>
         </ul>
       </div>
 
@@ -74,12 +75,14 @@
           <text x="16" y="26" class="n-title">🧑‍💻 Manager AI</text>
           <text x="16" y="45" class="n-sub" id="s-lead">directs the helpers</text>
           <g class="badge" id="b-lead" transform="translate(16 56)"><rect width="0" height="20" rx="10"/><text x="8" y="14"></text></g>
+          <g class="badge money" id="w-lead" transform="translate(112 56)"><rect width="0" height="20" rx="10"/><text x="8" y="14"></text></g>
         </g>
         <g class="node dim" id="n-design" transform="translate(36 300)">
           <rect width="130" height="112" rx="14"/>
           <text x="12" y="24" class="n-title">🎨 Design</text>
           <text x="12" y="42" class="n-sub" id="s-design">not started</text>
           <g class="badge" id="b-design" transform="translate(12 56)"><rect width="0" height="20" rx="10"/><text x="8" y="14"></text></g>
+          <g class="badge money" id="w-design" transform="translate(12 82)"><rect width="0" height="20" rx="10"/><text x="8" y="14"></text></g>
           <text id="l-design" x="104" y="26" class="lock" opacity="0">🔒</text>
         </g>
         <g class="node dim" id="n-hosting" transform="translate(176 300)">
@@ -87,6 +90,7 @@
           <text x="12" y="24" class="n-title">🚀 Publishing</text>
           <text x="12" y="42" class="n-sub" id="s-hosting">not started</text>
           <g class="badge" id="b-hosting" transform="translate(12 56)"><rect width="0" height="20" rx="10"/><text x="8" y="14"></text></g>
+          <g class="badge money" id="w-hosting" transform="translate(12 82)"><rect width="0" height="20" rx="10"/><text x="8" y="14"></text></g>
           <text id="l-hosting" x="104" y="26" class="lock" opacity="0">🔒</text>
         </g>
         <g class="node dim" id="n-analytics" transform="translate(316 300)">
@@ -94,6 +98,7 @@
           <text x="12" y="24" class="n-title">📊 Numbers</text>
           <text x="12" y="42" class="n-sub" id="s-analytics">not started</text>
           <g class="badge" id="b-analytics" transform="translate(12 56)"><rect width="0" height="20" rx="10"/><text x="8" y="14"></text></g>
+          <g class="badge money" id="w-analytics" transform="translate(12 82)"><rect width="0" height="20" rx="10"/><text x="8" y="14"></text></g>
           <text id="l-analytics" x="104" y="26" class="lock" opacity="0">🔒</text>
         </g>
 
@@ -105,6 +110,15 @@
           <text x="64" y="94" class="n-sub c">checks every</text>
           <text x="64" y="110" class="n-sub c">request</text>
         </g>
+
+        <!-- the vendor the wallets buy from -->
+        <g class="node vendor" id="n-vendor" transform="translate(486 352)">
+          <rect width="156" height="66" rx="14"/>
+          <text x="78" y="24" class="n-title c">🛒 Vendor</text>
+          <text x="78" y="41" class="n-sub c">photos · review hours</text>
+          <text x="78" y="55" class="n-sub c">hosting · data queries</text>
+        </g>
+        <path class="wire faint" d="M564 320 L564 352"/>
 
         <!-- project resources -->
         <g class="node res" id="r-repo" transform="translate(690 56)">
@@ -148,7 +162,7 @@
 
     <aside class="side">
       <section class="card">
-        <h2>The 12 checks</h2>
+        <h2>The 18 checks</h2>
         <ol class="story" id="checks"></ol>
         <p class="result" id="result"></p>
       </section>
@@ -160,6 +174,7 @@
           <dt>Security review</dt><dd id="security">—</dd>
           <dt>Test copy</dt><dd id="preview">—</dd>
           <dt>Visitor numbers</dt><dd id="metrics">—</dd>
+          <dt>Money</dt><dd id="money">—<ul id="ledger" class="ledger"></ul></dd>
         </dl>
       </section>
 

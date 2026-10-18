@@ -69,7 +69,9 @@ export interface WorkforceRequest {
 
 export type ErrorCode =
   | 'INSUFFICIENT_SCOPE' | 'OUTSIDE_PARENT_SCOPE' | 'RESOURCE_DENIED' | 'GRANT_REVOKED' | 'GRANT_EXPIRED'
-  | 'INVALID_CALLER' | 'INVALID_REQUEST' | 'ALREADY_EXECUTED' | 'SERVICE_UNAVAILABLE';
+  | 'INVALID_CALLER' | 'INVALID_REQUEST' | 'ALREADY_EXECUTED' | 'SERVICE_UNAVAILABLE'
+  // money (wallet.ts): AgentPass's purchase path
+  | 'BUDGET_EXCEEDED' | 'QUOTE_EXPIRED' | 'SELLER_POLICY_DENIED';
 
 export interface ApiOK<T> { status: 'OK'; data: T }
 export interface ApiError {

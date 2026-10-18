@@ -43,6 +43,28 @@ principal in another organization (`sentinel-sec`) that the lead delegates to.
 | 13 | Analytics | tries `analytics.raw` | **AUTHORITY_REQUIRED INSUFFICIENT_SCOPE** (no grant carries it) |
 | 14 | lead | revokes all 5 temporary grants; each specialist retries | **GRANT_REVOKED** ×4 |
 
+### Money (added 2026-10-18): the same chain, AgentPass's purchase ledger
+
+The owner also seeds the lead a **$1,000 root wallet** (`grant-root-wallet`: a purchasing grant for the in-process
+`service-vendor`, at most $300 per purchase). AgentPass keeps money and file authority in separate grant families, so
+every in-house specialist holds a pass *and* a wallet; the external auditor gets no wallet (purchasing grants never
+leave the organization) and the lead pays its invoice itself.
+
+| Step | Agent | Real action | AgentPass decision |
+|---|---|---|---|
+| M1 | lead | delegates a **$150** wallet (stock photos) to Design, **$100** (hosting slots) to Hosting, **$50** (data queries) to Analytics | `grant.delegate`, each a subset of the root wallet |
+| M2 | Design | asks to buy 5 stock photos ($200) | **DENIED BUDGET_EXCEEDED** (over the $150 wallet) |
+| M3 | Design | buys 2 stock photos ($80) | quote → purchase, reservation + commit on Design's wallet and the root wallet |
+| M4 | lead | buys 2 review hours ($160) for Sentinel Sec on the root wallet | ALLOW |
+| M5 | Hosting | asks to buy 2 hosting slots ($120) | **DENIED BUDGET_EXCEEDED** (over the $100 wallet) |
+| M6 | Hosting | `request_authority` for **$200** more under the root wallet, with a reason | request filed |
+| M7 | lead | reads the request; policy caps a top-up at 120% of the original wallet → counteroffers **$120** | COUNTEROFFERED → Hosting accepts → new $120 wallet under the root |
+| M8 | Hosting | buys the 2 slots ($120) on the new wallet | ALLOW |
+| M9 | Analytics | buys 1 warehouse query ($25) | ALLOW |
+| M10 | Analytics | asks for **$500** to buy a raw export of visitor records (`raw-dataset`) | lead **REJECTS** (not something this task may buy) |
+| M11 | lead | reads the root balance from AgentPass (`/v1/me` budgets): **$615 left of $1,000** (spent $385) | matches B's own ledger |
+| M12 | lead | revokes the 4 wallets with the passes; each specialist tries its old wallet | **INVALID_CALLER** ×3 (provisioned credentials disabled) |
+
 ## 3. Observed results
 
 ### `npm run demo` (local, 2026-10-18 01:5x UTC, real AgentPass authority)
@@ -78,6 +100,31 @@ Checks
 12/12 checks passed
 ```
 
+With money (2026-10-18, `npm run demo`, real AgentPass authority):
+
+```
+Money  (AgentPass purchase ledger; the vendor is an in-process stub, nothing is paid for real)
+  Root wallet $1,000 → wallets: design $150, hosting $100, analytics $50
+  design-agent     bought 2 × stock-photo for $80
+  lead-agent       bought 2 × audit-hour for $160
+  hosting-agent    bought 2 × hosting-slot for $120
+  analytics-agent  bought 1 × data-query for $25
+  design-agent     refused 5 × stock-photo $200 (BUDGET_EXCEEDED)
+  hosting-agent    refused 2 × hosting-slot $120 (BUDGET_EXCEEDED)
+  hosting-agent    asked $200 for hosting-slot → counteroffer $120 (policy caps a top-up at 120% of the original $100 wallet)
+  analytics-agent  asked $500 for raw-dataset → rejected (raw-dataset is not something this task may buy)
+  Spent $385; AgentPass says $615 left of $1,000
+  PASS  13. Root wallet is $1,000; helper wallets are subsets of it
+  PASS  14. Helpers buy through AgentPass with real receipts
+  PASS  15. Spending over a wallet is refused (BUDGET_EXCEEDED)
+  PASS  16. Hosting asks for more; the manager counteroffers less; hosting accepts and buys
+  PASS  17. A top-up for raw user records is rejected by the manager
+  PASS  18. Spend stays within $1,000, matches AgentPass’s ledger, and wallets die with the passes
+18/18 checks passed
+```
+
+`--authority mock` still passes its 12; the six money checks are reported as **not run** there (the mock has no wallets), never faked.
+
 ### Test commands
 
 ```
@@ -111,6 +158,7 @@ outputs (before/after, findings + fix, preview URL, analytics) · the 12 checks.
 | **Authority service** | **Real AgentPass** (Developer A's authority, `docs/11-WORKFORCE-CONTRACT.md`). `apps/workforce/src/real/authority.ts` adapts B's agent contract to A's wire contract; `apps/workforce/src/real/resource-adapter.ts` is the registered `demo-project` resource that AgentPass's execute gateway invokes after validating the live chain, paths and quota. The labeled in-memory mock remains as the fast offline test path (`--authority mock`). |
 | Agent identities | **Real.** Design/Hosting/Analytics are provisioned by the lead via `provision_child` (server-generated ids, fresh credentials, hashes only on the wire); revoking their grant disables the credential (`INVALID_CALLER` on reuse). Security is a registered principal in `sentinel-sec`, delegated to cross-organization. |
 | Agent-to-agent messaging | In-process calls through the orchestrator. Primitive was deliberately not integrated. |
+| **Money** | **Real AgentPass purchase ledger**: purchasing grants (`$1,000` root wallet → subset wallets), A's quote → purchase path with per-action and chain-wide budget checks, reservation/commit ledger entries, `BUDGET_EXCEEDED`, the budget request → counteroffer → accept flow, wallet revocation and dead-wallet probes (`apps/workforce/src/wallet.ts`, `real/authority.ts`). The **vendor is simulated** (`apps/workforce/src/real/vendor.ts`: fixed catalog, simulated orders, implements A's `SupplierService` in-process); no money moves. |
 
 ## 6. Git summary
 

@@ -16,9 +16,14 @@ const CHECKS = [
   'Reviewer blocked from editing', 'Publishing tried the live site', 'AgentPass blocked the live site',
   'Publishing asked for a smaller pass', 'Test copy published', 'Numbers computed real totals',
   'Numbers blocked from people’s records', 'All passes taken back at the end', 'Old passes no longer work',
+  '$1,000 wallet; helper wallets are slices of it', 'Helpers bought what they needed, with receipts', 'Overspending was blocked',
+  'Publishing asked for more; the manager gave less; it bought', 'Numbers’ request for people’s records was refused', 'Spend within $1,000, matches AgentPass; wallets died with the passes',
 ];
-const PHASES = ['The master pass', 'Design', 'Outside security reviewer', 'Publishing', 'Numbers', 'Passes taken back'];
-const CHECK_PHASE = [2, 2, 3, 3, 4, 4, 4, 4, 5, 5, 6, 6];
+const PHASES = ['The master pass and the wallet', 'Design', 'Outside security reviewer', 'Publishing', 'Numbers', 'Passes and wallets taken back'];
+const CHECK_PHASE = [2, 2, 3, 3, 4, 4, 4, 4, 5, 5, 6, 6, 2, 5, 4, 4, 5, 6];
+const SKU = { 'stock-photo': ['stock photo', 'stock photos'], 'audit-hour': ['security review hour', 'security review hours'], 'hosting-slot': ['hosting slot', 'hosting slots'], 'data-query': ['data query', 'data queries'], 'raw-dataset': ['a raw export of people’s records', 'a raw export of people’s records'] };
+const sku = (id, n = 2) => (SKU[id] ? SKU[id][Number(n) === 1 ? 0 : 1] : id);
+const money = (text, re) => { const m = text.match(re); return m ? m[1] : ''; };
 const WHO = { 'lead-agent': 'the manager', 'design-agent': 'Design', 'security-agent': 'the security reviewer', 'hosting-agent': 'Publishing', 'analytics-agent': 'Numbers' };
 const NODE = { 'lead-agent': 'lead', 'design-agent': 'design', 'security-agent': 'security', 'hosting-agent': 'hosting', 'analytics-agent': 'analytics' };
 const PHASE_OF_AGENT = { 'design-agent': 2, 'security-agent': 3, 'hosting-agent': 4, 'analytics-agent': 5 };
@@ -30,7 +35,9 @@ const P = {
   design: [101, 355], hosting: [241, 355], analytics: [381, 355], security: [830, 417],
   designTop: [101, 300], hostingTop: [241, 300], analyticsTop: [381, 300],
   repo: [690, 78], env: [690, 126], preview: [690, 174], prod: [690, 222], agg: [690, 270], raw: [690, 318],
+  vendor: [564, 352],
 };
+const usd = (cents) => `$${(cents / 100).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
 
 /** Short pass label: "read + edit", "test copy", "see totals". */
 const shortScope = (actions) => {
@@ -68,7 +75,13 @@ function headline(e) {
     case 'deployment_completed': return 'The test copy is live. The real site was never touched.';
     case 'analytics_analyzed': return 'Numbers works out the visitor totals.';
     case 'fix_applied': return 'The manager fixes the bug the reviewer found.';
-    case 'authority_revoked': return 'Job done. The manager takes every pass back.';
+    case 'authority_revoked': return /wallet/.test(e.text) ? 'Job done. The manager takes every wallet back too.' : 'Job done. The manager takes every pass back.';
+    case 'wallet_delegated': { const m = e.text.match(/^Gave ([a-z]+)-agent a (\$[\d,.]+) wallet/); return m ? `The manager gives ${who(`${m[1]}-agent`)} a ${m[2]} wallet.` : 'The manager hands out a wallet.'; }
+    case 'purchase_made': { const m = e.text.match(/^Bought (\d+) × ([a-z-]+) for (\$[\d,.]+)/); if (!m) return `${cap(w)} buys something.`; return e.agent === 'lead-agent' ? `The manager pays the outside firm’s invoice: ${m[3]}.` : `${cap(w)} buys ${m[1]} ${sku(m[2], m[1])} for ${m[3]}.`; }
+    case 'budget_exceeded': { const m = e.text.match(/refused (\$[\d,.]+) for (\d+) × ([a-z-]+)/); return m ? `${cap(w)} tries to spend ${m[1]} on ${m[2]} ${sku(m[3], m[2])}. Blocked.` : `${cap(w)} tries to overspend. Blocked.`; }
+    case 'budget_requested': { const m = e.text.match(/for (\$[\d,.]+) more/); return `${cap(w)} asks the manager for ${m ? m[1] : 'more money'}.`; }
+    case 'budget_countered': { const m = e.text.match(/^Counteroffered (\$[\d,.]+) to ([a-z]+)-agent \(asked (\$[\d,.]+)\)/); return m ? `The manager says: ${m[1]}, not ${m[3]}.` : 'The manager offers less.'; }
+    case 'budget_rejected': { const m = e.text.match(/^Rejected ([a-z]+)-agent's request for (\$[\d,.]+)/); return m ? `The manager says no to ${who(`${m[1]}-agent`)}’s ${m[2]} request.` : 'The manager says no.'; }
     default: return `${cap(w)}: ${e.kind}`;
   }
 }
@@ -95,7 +108,13 @@ function detailFor(e) {
     case 'deployment_completed': return (m = e.text.match(/at (\S+)/)) ? `On this computer at ${m[1]}.` : '';
     case 'analytics_analyzed': return 'Totals only, never individual records.';
     case 'fix_applied': return 'The reviewer could only look; the manager holds the editing pass.';
-    case 'authority_revoked': return (m = e.text.match(/Revoked ([a-z-]+)'s/)) ? `${m[1] === 'hosting-preview' ? 'Publishing’s test-copy pass' : `${cap(who(`${m[1]}-agent`))}’s pass`}: taken back.` : '';
+    case 'authority_revoked': { m = e.text.match(/Revoked ([a-z-]+)'s (grant|wallet)/); if (!m) return ''; const owner = m[1] === 'hosting-preview' ? 'Publishing’s test-copy pass' : m[1] === 'hosting-topup' ? 'Publishing’s top-up wallet' : `${cap(who(`${m[1]}-agent`))}’s ${m[2] === 'wallet' ? 'wallet' : 'pass'}`; return `${owner}: taken back.`; }
+    case 'wallet_delegated': { m = e.text.match(/wallet for ([a-z-]+) \(of the (\$[\d,.]+) root wallet\)/); return m ? `For ${sku(m[1])} only. A slice of the manager’s ${m[2]}.` : ''; }
+    case 'purchase_made': return e.agent === 'lead-agent' ? 'Outside companies never get a wallet from inside; the manager pays from its own.' : 'AgentPass checked the wallet first, then the vendor was paid from it.';
+    case 'budget_exceeded': return 'More than the wallet holds. AgentPass refuses; nothing is spent.';
+    case 'budget_requested': { m = e.text.match(/"(.+)"$/); return m ? `Its reason: “${m[1]}”` : ''; }
+    case 'budget_countered': { m = e.text.match(/\): (.+)$/); return m ? `${cap(m[1])}.` : ''; }
+    case 'budget_rejected': { m = e.text.match(/: (.+)$/); return m ? `${cap(m[1])}.` : ''; }
     default: return '';
   }
 }
@@ -190,7 +209,7 @@ function send(points, kind, label, opts = {}) {
   rect.setAttribute('rx', '11'); rect.setAttribute('height', '22');
   const text = document.createElementNS(SVG, 'text');
   text.setAttribute('x', '10'); text.setAttribute('y', '15');
-  text.textContent = `${kind === 'good' ? '✓' : kind === 'bad' ? '✕' : '!'} ${label}`;
+  text.textContent = `${kind === 'good' ? '✓' : kind === 'bad' ? '✕' : kind === 'money' ? '$' : '!'} ${label}`;
   pill.append(rect, text);
   g.append(dot, pill);
   $('#flows').append(g);
@@ -250,7 +269,7 @@ function animate(env) {
   } else if (ev.type === 'event') {
     const e = ev.event, n = NODE[e.agent];
     switch (e.kind) {
-      case 'note': pulse('n-lead'); break;
+      case 'note': { pulse('n-lead'); const m = e.text.match(/Budget: \$([\d,.]+) root wallet/); if (m) { st.root = Math.round(parseFloat(m[1].replace(/,/g, '')) * 100); send([P.owner, P.leadTop], 'money', `wallet $${m[1]}`); setBadge('w-lead', `$${m[1]} wallet`); } break; }
       case 'subagent_created': node(n, '', 'has its own key'); pulse(`n-${n}`); break;
       case 'external_contacted': node('security', '', 'another company · own key'); pulse('n-security'); break;
       case 'authority_delegated': {
@@ -267,9 +286,14 @@ function animate(env) {
       case 'analytics_analyzed': pulse('r-agg'); node('analytics', 'done', 'totals worked out'); break;
       case 'fix_applied': send([P.lead, P.gate, P.repo], 'good', 'fixes the bug'); node('lead', '', 'fixed the security bug'); break;
       case 'authority_revoked': {
-        const m = e.text.match(/Revoked ([a-z-]+)'s grant/);
+        const m = e.text.match(/Revoked ([a-z-]+)'s (grant|wallet)/);
         if (!m) break;
-        const w = m[1].replace('-preview', '');
+        const w = m[1].replace(/-(preview|topup)$/, '');
+        if (m[2] === 'wallet') {
+          send([P.lead, P.gate], 'warn', `take back ${cap(who(`${w}-agent`))}’s ${m[1].endsWith('-topup') ? 'top-up' : 'wallet'}`, { hold: 150 });
+          setBadge(`w-${w}`, 'wallet taken back', true);
+          break;
+        }
         send([P.lead, P.gate], 'warn', `take back ${cap(who(`${w}-agent`))}’s ${m[1].endsWith('-preview') ? 'test-copy pass' : 'pass'}`, { hold: 150 });
         setBadge(`b-${w}`, 'taken back', true);
         node(w, 'revoked', w === 'security' ? 'pass taken back' : 'key disabled');
@@ -277,6 +301,40 @@ function animate(env) {
         if (lock) lock.setAttribute('opacity', '1');
         break;
       }
+      case 'wallet_delegated': {
+        const m = e.text.match(/^Gave ([a-z]+)-agent a (\$[\d,.]+) wallet/);
+        if (!m) break;
+        st.wallet[m[1]] = { total: m[2], spent: 0 };
+        send([P.leadBottom, P[`${m[1]}Top`]], 'money', `wallet ${m[2]}`);
+        setBadge(`w-${m[1]}`, `${m[2]} wallet`);
+        break;
+      }
+      case 'purchase_made': {
+        const m = e.text.match(/^Bought (\d+) × ([a-z-]+) for \$([\d,.]+)/);
+        if (!m) break;
+        const cents = Math.round(parseFloat(m[3].replace(/,/g, '')) * 100);
+        st.spent += cents;
+        send([n === 'lead' ? P.lead : P[n], P.gate, P.vendor], 'money', n === 'lead' ? `pays invoice $${m[3]}` : `buys ${m[1]} ${sku(m[2], m[1])} · $${m[3]}`);
+        pulse('n-vendor');
+        if (n !== 'lead' && st.wallet[n]) { st.wallet[n].spent += cents; setBadge(`w-${n}`, `${st.wallet[n].total} · spent ${usd(st.wallet[n].spent)}`); }
+        if (st.root) setBadge('w-lead', `${usd(st.root)} · ${usd(st.root - st.spent)} left`);
+        break;
+      }
+      case 'budget_exceeded': {
+        const m = e.text.match(/refused (\$[\d,.]+)/);
+        send([P[n], P.gate], 'bad', `spend ${m ? m[1] : 'more'}`, { burstAt: P.gate });
+        setTimeout(() => pulse(`n-${n}`), 450 * (pace() || 1));
+        break;
+      }
+      case 'budget_requested': { const m = e.text.match(/for (\$[\d,.]+) more/); send([P[`${n}Top`], P.leadBottom], 'warn', `may I have ${m ? m[1] : 'more'}?`); node(n, '', 'asking for money'); break; }
+      case 'budget_countered': {
+        const m = e.text.match(/^Counteroffered (\$[\d,.]+) to ([a-z]+)-agent/);
+        if (!m) break;
+        send([P.leadBottom, P[`${m[2]}Top`]], 'money', `${m[1]}, no more`);
+        if (st.wallet[m[2]]) { const add = Math.round(parseFloat(m[1].replace(/[$,]/g, '')) * 100); st.wallet[m[2]].total = usd(Math.round(parseFloat(st.wallet[m[2]].total.replace(/[$,]/g, '')) * 100) + add); setBadge(`w-${m[2]}`, `${st.wallet[m[2]].total} · spent ${usd(st.wallet[m[2]].spent)}`); }
+        break;
+      }
+      case 'budget_rejected': { const m = e.text.match(/^Rejected ([a-z]+)-agent/); if (m) { send([P.leadBottom, P[`${m[1]}Top`]], 'bad', 'no'); node(m[1], '', 'request refused'); } break; }
     }
   } else if (ev.type === 'trace') {
     const n = NODE[ev.agent];
@@ -311,6 +369,8 @@ function phaseOf(env) {
     if (e.kind === 'narrower_requested' || e.kind === 'permission_granted' || e.kind === 'deployment_completed') return 4;
     if (e.kind === 'analytics_analyzed') return 5;
     if (e.kind === 'authority_delegated') { const m = e.text.match(/^Delegated to ([a-z-]+)/); return m ? PHASE_OF_AGENT[m[1]] || 0 : 0; }
+    if (e.kind === 'wallet_delegated' || e.kind === 'budget_countered' || e.kind === 'budget_rejected') { const m = e.text.match(/([a-z]+)-agent/); return m ? PHASE_OF_AGENT[`${m[1]}-agent`] || 0 : 0; }
+    if (e.kind === 'purchase_made' && e.agent === 'lead-agent') return 3;
     return PHASE_OF_AGENT[e.agent] || 0;
   }
   if (ev.type === 'trace') return PHASE_OF_AGENT[ev.agent] || 0;
@@ -326,10 +386,11 @@ const phaseLabel = (n) => (n ? `Step ${n} of ${PHASES.length} · ${PHASES[n - 1]
 
 let st;
 function reset() {
-  st = { count: 0, phase: 0 };
+  st = { count: 0, phase: 0, root: 0, spent: 0, wallet: {} };
   $('#timeline').replaceChildren(el('li', 'empty', 'Press “Run demo”.'));
   $('#count').textContent = '';
   for (const id of ['hero', 'security', 'preview', 'metrics']) $(`#${id}`).textContent = '—';
+  $('#money').replaceChildren('—', el('ul', 'ledger')); $('#money ul').id = 'ledger';
   $('#checks').replaceChildren(...CHECKS.map((t) => { const li = el('li'); li.append(el('span', 'm', '·'), el('span', '', t)); return li; }));
   $('#dots').replaceChildren(...PHASES.map((t, i) => { const li = el('li', '', String(i + 1)); li.title = t; return li; }));
   $('#result').textContent = ''; $('#result').className = 'result';
@@ -340,9 +401,10 @@ function reset() {
     const g = document.getElementById(`n-${n}`); g.className.baseVal = `node dim${n === 'security' ? ' external' : ''}`;
     document.getElementById(`s-${n}`).textContent = n === 'security' ? 'not called in yet · may look, never edit' : 'not started';
     setBadge(`b-${n}`, '');
+    if (n !== 'security') setBadge(`w-${n}`, '');
     const lock = document.getElementById(`l-${n}`); if (lock) lock.setAttribute('opacity', '0');
   }
-  document.getElementById('n-lead').className.baseVal = 'node'; $('#s-lead').textContent = 'directs the helpers'; setBadge('b-lead', '');
+  document.getElementById('n-lead').className.baseVal = 'node'; $('#s-lead').textContent = 'directs the helpers'; setBadge('b-lead', ''); setBadge('w-lead', '');
   for (const v of document.querySelectorAll('.vault-g')) v.classList.remove('hit');
 }
 
@@ -360,7 +422,7 @@ function row(cls, at, agent, whatNodes) {
 
 function onWorkflowEvent(e) {
   caption(undefined, headline(e), detailFor(e));
-  row('event', e.at, e.agent, [el('span', `tag ${e.kind === 'permission_denied' ? 'bad' : 'ok'}`, e.kind + (e.code ? ` ${e.code}` : '')), document.createTextNode(e.text)]);
+  row('event', e.at, e.agent, [el('span', `tag ${/denied|exceeded|rejected/.test(e.kind) ? 'bad' : 'ok'}`, e.kind + (e.code ? ` ${e.code}` : '')), document.createTextNode(e.text)]);
 }
 function onTrace(e) {
   if (e.kind === 'denied') row('trace', e.at, e.agent, [el('span', 'tag bad', e.code || 'denied'), document.createTextNode(e.text)]);
@@ -382,6 +444,14 @@ function onOutputs(o) {
   } else if (h) { $('#preview').textContent = 'Nothing published'; }
   const an = o.analytics;
   if (an && an.summary) $('#metrics').textContent = `${an.summary.page_views.toLocaleString()} visits · ${an.summary.signups} signups · ${(an.summary.conversion_rate * 100).toFixed(1)}% signed up`;
+  const b = o.budget;
+  if (b) {
+    const list = el('ul', 'ledger');
+    list.id = 'ledger';
+    for (const l of b.ledger) list.append(el('li', '', `${l.agent === 'lead-agent' ? 'Manager' : cap(who(l.agent))}: ${l.quantity} ${sku(l.sku_id, l.quantity)}, ${usd(l.amount_cents)}`));
+    for (const t of b.topups) list.append(el('li', '', `${cap(who(t.agent))} asked for ${usd(t.requested_cents)} more: ${t.decision === 'COUNTEROFFER' ? `got ${usd(t.offered_cents)}` : 'refused'}`));
+    $('#money').replaceChildren(`${usd(b.root_cents)} wallet · ${usd(b.spent_cents)} spent · ${b.remaining_cents === null ? '?' : usd(b.remaining_cents)} left (AgentPass’s own ledger)`, list);
+  }
 }
 
 const mmss = (ms) => { const s = Math.round(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
@@ -402,21 +472,22 @@ function onEvent(env) {
   else if (ev.type === 'outputs') { onOutputs(ev.outputs); caption('Results', 'What the helpers made.', 'See the right-hand side.'); }
   else if (ev.type === 'check') {
     const li = $('#checks').children[ev.check.n - 1];
-    if (li) { li.className = ev.check.pass ? 'seen pass' : 'seen fail'; li.querySelector('.m').textContent = ev.check.pass ? '✓' : '✕'; li.title = ev.check.detail; }
-    caption('Checking', `Checking ${ev.check.n} of ${CHECKS.length}`, `${ev.check.pass ? '✓' : '✕'} ${CHECKS[ev.check.n - 1]}`);
+    if (li) { li.className = ev.check.skipped ? 'seen skip' : ev.check.pass ? 'seen pass' : 'seen fail'; li.querySelector('.m').textContent = ev.check.skipped ? '–' : ev.check.pass ? '✓' : '✕'; li.title = ev.check.detail; }
+    caption('Checking', `Checking ${ev.check.n} of ${CHECKS.length}`, `${ev.check.skipped ? '– not run on the practice mock:' : ev.check.pass ? '✓' : '✕'} ${CHECKS[ev.check.n - 1]}`);
   } else if (ev.type === 'done') {
-    const n = $('#checks').querySelectorAll('.pass').length;
+    const n = $('#checks').querySelectorAll('.pass').length, skipped = $('#checks').querySelectorAll('.skip').length;
+    const total = CHECKS.length - skipped;
     const shown = play.startedAt ? ` · ${mmss(performance.now() - play.startedAt)} on screen` : '';
     $('#result').className = `result ${ev.passed ? 'pass' : 'fail'}`;
-    $('#result').textContent = `${n} of ${CHECKS.length} checks passed${shown}`;
+    $('#result').textContent = `${n} of ${total} checks passed${skipped ? ` (${skipped} not run on the mock)` : ''}${shown}`;
     const dots = [...$('#dots').children];
     dots.forEach((d, i) => {
       d.classList.remove('now');
       const mine = [...$('#checks').children].filter((_, j) => CHECK_PHASE[j] === i + 1);
-      const ok = i === 0 ? ev.passed : mine.length > 0 && mine.every((li) => li.classList.contains('pass'));
+      const ok = i === 0 ? ev.passed : mine.length > 0 && mine.every((li) => li.classList.contains('pass') || li.classList.contains('skip'));
       d.className = ok ? 'pass' : 'fail'; d.textContent = ok ? '✓' : '✕';
     });
-    caption('Done', ev.passed ? `Every rule held: ${n} of ${CHECKS.length}.` : `Some checks failed: ${n} of ${CHECKS.length} passed.`, 'Every ✓ and ✕ you saw was a real AgentPass decision.');
+    caption('Done', ev.passed ? `Every rule held: ${n} of ${total}.` : `Some checks failed: ${n} of ${total} passed.`, 'Every ✓, ✕ and $ you saw was a real AgentPass decision.');
     refresh();
   }
   animate(env);

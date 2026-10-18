@@ -14,12 +14,14 @@ import { workforceDecisionSchema, type WorkforceAction as AAction, type Workforc
 import type {
   ApiError, ApiResult, AuditEvent, Authorization, WorkforceAction, WorkforceAuthority, WorkforceGrant, WorkforceRequest, WorkforceScope, WorkforceSession,
 } from '../contract.js';
+import type { Quote, Receipt, SpendScope, WalletGrant, WalletRequest, WalletSession } from '../wallet.js';
 import { DEMO_RESOURCE } from './resource-adapter.js';
+import { VENDOR_ID } from './vendor.js';
 
 export interface ResourceIdentity { resource?: string; organization_id: string; owner_principal_id: string }
 
-/** A session that can also run protected actions through AgentPass's gateway and provision children. */
-export interface RealSession extends WorkforceSession {
+/** A session that can also run protected actions through AgentPass's gateway, provision children, and hold wallets. */
+export interface RealSession extends WorkforceSession, WalletSession {
   execute(input: { grant_id: string; action: WorkforceAction; resource: string; parameters: Record<string, unknown>; idempotency_key: string }): Promise<ApiResult<{ execution_id: string; result: Record<string, unknown> }>>;
   provisionChild(input: { parent_grant_id: string; scope: WorkforceScope; credential_hash: string; idempotency_key: string }): Promise<ApiResult<{ principal: { id: string }; grant: WorkforceGrant }>>;
 }
@@ -64,6 +66,21 @@ export function fromAScope(scope: AScope): WorkforceScope {
 }
 
 const isAScope = (s: unknown): s is AScope => !!s && typeof s === 'object' && Array.isArray((s as AScope).resources);
+
+// ---- Money: B's SpendScope <-> A's purchasing scope (the other family of the AuthorityScope union) ----
+const SPEND_ACTIONS = ['supplier.quote.request', 'supplier.purchase.execute'];
+const toASpend = (s: SpendScope) => ({
+  actions: SPEND_ACTIONS, supplier_ids: [s.vendor_id], sku_ids: s.sku_ids,
+  max_per_action_cents: s.max_per_action_cents, total_budget_cents: s.total_budget_cents,
+  expires_at: s.expires_at, max_delegation_depth: s.max_delegation_depth,
+});
+const fromASpend = (s: any): SpendScope => ({
+  vendor_id: s?.supplier_ids?.[0] ?? '', sku_ids: s?.sku_ids ?? [],
+  total_budget_cents: Number(s?.total_budget_cents ?? 0), max_per_action_cents: Number(s?.max_per_action_cents ?? 0),
+  expires_at: s?.expires_at ?? '', max_delegation_depth: Number(s?.max_delegation_depth ?? 0),
+});
+const mapWallet = (g: any): WalletGrant => ({ id: g.id, issuer_principal_id: g.issuer_principal_id, subject_principal_id: g.subject_principal_id, parent_grant_id: g.parent_grant_id ?? null, organization_id: g.organization_id, scope: fromASpend(g.scope), revoked_at: g.revoked_at ?? null });
+const mapWalletRequest = (r: any): WalletRequest => ({ id: r.id, requester_principal_id: r.requester_principal_id, parent_grant_id: r.parent_grant_id, requested_scope: fromASpend(r.requested_scope), offered_scope: r.offered_scope ? fromASpend(r.offered_scope) : undefined, reason: r.reason, status: r.status, issued_grant_id: r.issued_grant_id });
 function mapGrant(g: any): WorkforceGrant {
   return { id: g.id, issuer_principal_id: g.issuer_principal_id, subject_principal_id: g.subject_principal_id, parent_grant_id: g.parent_grant_id ?? null, organization_id: g.organization_id, scope: isAScope(g.scope) ? fromAScope(g.scope) : { actions: [], resources: [], expires_at: g.scope?.expires_at ?? '', max_delegation_depth: 0 }, revoked_at: g.revoked_at ?? null };
 }
@@ -90,6 +107,8 @@ export interface RealAuthorityOptions {
   /** Owner credential for reading AgentPass's own audit trail (optional). */
   ownerCredential?: string;
   defaultMaxExecutions?: number;
+  /** The vendor wallets buy from (A's supplier_id); the demo's in-process service vendor by default. */
+  vendorId?: string;
 }
 
 export class RealWorkforceAuthority implements WorkforceAuthority {
@@ -137,6 +156,7 @@ export class RealWorkforceAuthority implements WorkforceAuthority {
     const call = (path: string, body?: unknown) => self.call(credential, path, body);
     const toA = (scope: WorkforceScope) => toAScope(scope, self.opts.identity, { max_executions: self.opts.defaultMaxExecutions ?? 40 });
     const resourceId = self.opts.identity.resource ?? DEMO_RESOURCE;
+    const vendorId = self.opts.vendorId ?? VENDOR_ID;
 
     async function decide(path: string, input: WorkforceActionInput, bAction: WorkforceAction, bResource: string): Promise<{ decision?: WorkforceDecision; error?: ApiError }> {
       const raw = await call(path, input);
@@ -222,6 +242,44 @@ export class RealWorkforceAuthority implements WorkforceAuthority {
         self.record(principal_id, 'principal.provision', undefined, r.status === 'OK' ? 'ISSUED' : 'DENY', { grant_id: r.status === 'OK' ? r.data.grant.id : parent_grant_id, reason_code: r.status === 'OK' ? undefined : r.code });
         return r;
       },
+
+      // ---- wallets: AgentPass's purchasing family, same endpoints, money scope ----
+      delegateWallet: async ({ parent_grant_id, recipient_principal_id, scope }) => {
+        const r = self.envelope(await call(`/v1/grants/${encodeURIComponent(parent_grant_id)}/delegate`, { recipient_principal_id, scope: toASpend(scope) }), mapWallet);
+        self.record(principal_id, 'wallet.delegate', recipient_principal_id, r.status === 'OK' ? 'ISSUED' : 'DENY', { grant_id: r.status === 'OK' ? r.data.id : parent_grant_id, reason_code: r.status === 'OK' ? undefined : r.code });
+        return r;
+      },
+      quote: async ({ grant_id, sku_id, quantity, idempotency_key }) => {
+        const r = self.envelope(await call('/v1/actions/execute', { grant_id, action: 'supplier.quote.request', supplier_id: vendorId, sku_id, quantity, idempotency_key }), (d): Quote => ({ quote_id: d.quote_id, sku_id: d.sku_id, quantity: d.quantity, unit_price_cents: d.unit_price_cents, total_cents: d.total_cents, expires_at: d.expires_at }));
+        self.record(principal_id, 'supplier.quote.request', sku_id, r.status === 'OK' ? 'ALLOW' : 'DENY', { grant_id, reason_code: r.status === 'OK' ? undefined : r.code });
+        return r;
+      },
+      purchase: async ({ grant_id, sku_id, quote_id, idempotency_key }) => {
+        const r = self.envelope(await call('/v1/actions/execute', { grant_id, action: 'supplier.purchase.execute', supplier_id: vendorId, sku_id, quote_id, idempotency_key }), (d): Receipt => ({ receipt_id: d.receipt_id, order_id: d.order_id, sku_id: d.sku_id, quantity: d.quantity, amount_cents: d.amount_cents, grant_id: d.grant_id }));
+        self.record(principal_id, 'supplier.purchase.execute', sku_id, r.status === 'OK' ? 'ALLOW' : 'DENY', { grant_id, reason_code: r.status === 'OK' ? undefined : r.code, request_id: r.status === 'OK' ? r.data.receipt_id : undefined });
+        return r;
+      },
+      requestBudget: async ({ parent_grant_id, requested_scope, reason }) => {
+        const r = self.envelope(await call('/v1/authority/requests', { parent_grant_id, requested_scope: toASpend(requested_scope), reason }), (d) => ({ request_id: d.request_id as string, status: (d.status ?? 'PENDING') as WorkforceRequest['status'] }));
+        self.record(principal_id, 'budget.request', undefined, r.status === 'OK' ? 'REQUESTED' : 'DENY', { grant_id: parent_grant_id, request_id: r.status === 'OK' ? r.data.request_id : undefined, reason_code: r.status === 'OK' ? undefined : r.code });
+        return r;
+      },
+      getBudgetRequest: async (request_id) => self.envelope(await call(`/v1/authority/requests/${encodeURIComponent(request_id)}`), mapWalletRequest),
+      respondBudget: async ({ request_id, decision, offered_scope }) => {
+        const body = decision === 'COUNTEROFFER' ? { decision, offered_scope: offered_scope ? toASpend(offered_scope) : undefined } : { decision };
+        const r = self.envelope(await call(`/v1/authority/requests/${encodeURIComponent(request_id)}/respond`, body), mapWalletRequest);
+        self.record(principal_id, 'budget.respond', undefined, r.status === 'OK' ? (decision === 'COUNTEROFFER' ? 'COUNTEROFFERED' : 'REJECTED') : 'DENY', { request_id, reason_code: r.status === 'OK' ? undefined : r.code });
+        return r;
+      },
+      acceptBudget: async ({ request_id, idempotency_key }) => {
+        const r = self.envelope(await call(`/v1/authority/requests/${encodeURIComponent(request_id)}/accept`, { idempotency_key }), mapWallet);
+        self.record(principal_id, 'budget.accept', undefined, r.status === 'OK' ? 'ACCEPTED' : 'DENY', { request_id, grant_id: r.status === 'OK' ? r.data.id : undefined, reason_code: r.status === 'OK' ? undefined : r.code });
+        return r;
+      },
+      balance: async (grant_id) => self.envelope(await call('/v1/me'), (d) => {
+        const b = (d.inspector?.budgets ?? []).find((x: any) => x.grant_id === grant_id);
+        return { remaining_cents: b ? (b.remaining_budget_cents as number | null) : null };
+      }),
     };
   }
 }
