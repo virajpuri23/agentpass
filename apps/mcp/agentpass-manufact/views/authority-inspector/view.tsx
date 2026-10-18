@@ -3,7 +3,7 @@ import { useCallTool, useHostContext, useOpenExternal, useToolContext } from "mc
 import { z } from "zod";
 import "./view.css";
 
-const grantSchema = z.object({
+export const grantSchema = z.object({
   id: z.string(), organization_id: z.string(), issuer_principal_id: z.string(),
   subject_principal_id: z.string(), parent_grant_id: z.string().nullable(),
   scope: z.object({
@@ -32,11 +32,11 @@ type Grant = z.infer<typeof grantSchema>;
 type Meta = z.infer<typeof metaSchema>;
 type Output = { status?: unknown; data?: unknown; code?: unknown; reason?: unknown; next_action?: unknown };
 
-const money = (cents: number | null | undefined) => cents == null ? "Unavailable" : `$${(cents / 100).toFixed(2)}`;
-const date = (value: string | null | undefined) => value && !Number.isNaN(Date.parse(value)) ? new Date(value).toLocaleString() : "Unavailable";
+export const money = (cents: number | null | undefined) => cents == null ? "Unavailable" : `$${(cents / 100).toFixed(2)}`;
+export const date = (value: string | null | undefined) => value && !Number.isNaN(Date.parse(value)) ? new Date(value).toLocaleString() : "Unavailable";
 const label = (value: unknown, fallback = "Unavailable") => typeof value === "string" && value ? value : fallback;
 
-function GrantCard({ grant, grants, budgets }: { grant: Grant; grants: Grant[]; budgets: Map<string, Meta["inspector"]["budgets"][number]> }) {
+export function GrantCard({ grant, grants, budgets }: { grant: Grant; grants: Grant[]; budgets: Map<string, Meta["inspector"]["budgets"][number]> }) {
   const children = grants.filter((candidate) => candidate.parent_grant_id === grant.id).map((candidate) => candidate.id);
   const budget = budgets.get(grant.id);
   const state = budget?.authority_code === "ACTIVE" ? "Active"
@@ -44,7 +44,7 @@ function GrantCard({ grant, grants, budgets }: { grant: Grant; grants: Grant[]; 
       : budget?.authority_code === "GRANT_EXPIRED" ? "Expired" : "Unavailable";
   return <article className="grant" aria-labelledby={`grant-${grant.id}`}>
     <header><div><span className="eyebrow">Grant</span><h3 id={`grant-${grant.id}`}><code>{grant.id}</code></h3></div><strong className={`state state--${state.toLowerCase()}`}>{state}</strong></header>
-    <p className="relationship">Parent: <code>{grant.parent_grant_id ?? "root"}</code> · Children visible: {children.length ? children.join(", ") : "none"}</p>
+    <p className="relationship">{grant.issuer_principal_id} → {grant.subject_principal_id}<br/>Parent: <code>{grant.parent_grant_id ?? "root"}</code> · Children visible: {children.length ? children.join(", ") : "none"}</p>
     <dl>
       <div><dt>Actions</dt><dd>{grant.scope.actions.join(", ") || "None"}</dd></div>
       <div><dt>Suppliers</dt><dd>{grant.scope.supplier_ids.join(", ") || "None"}</dd></div>
