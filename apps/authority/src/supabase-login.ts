@@ -90,7 +90,7 @@ export function createSupabaseLoginRouter(
     res.set({
       'cache-control': 'no-store',
       'content-security-policy': "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
-      'referrer-policy': 'no-referrer',
+      'referrer-policy': 'same-origin',
       'x-content-type-options': 'nosniff',
     });
     next();

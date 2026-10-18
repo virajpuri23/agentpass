@@ -22,7 +22,7 @@ export function createConsentRouter(engine:AuthorityEngine,config:ConsentBrowser
   const cookie=(id:string)=>`agentpass_consent=${id}; HttpOnly; Secure; SameSite=Lax; Path=/onboarding; Max-Age=${id?'300':'0'}`;
   const sessionId=(req:express.Request)=>req.headers.cookie?.split(';').map(x=>x.trim()).find(x=>x.startsWith('agentpass_consent='))?.slice(18)??'';
   const route=(fn:(req:express.Request,res:express.Response)=>Promise<unknown>)=>async(req:express.Request,res:express.Response,next:express.NextFunction)=>{try{await fn(req,res);}catch(error){next(error);}};
-  router.use((_req,res,next)=>{res.set({'cache-control':'no-store','content-security-policy':"default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",'referrer-policy':'no-referrer','x-content-type-options':'nosniff'});next();});
+  router.use((_req,res,next)=>{res.set({'cache-control':'no-store','content-security-policy':"default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",'referrer-policy':'same-origin','x-content-type-options':'nosniff'});next();});
   router.use(express.urlencoded({extended:false,limit:'2kb'}));
   router.get('/',route(async(req,res)=>{
     const connection=z.string().min(1).max(128).regex(/^[A-Za-z0-9][A-Za-z0-9:_-]*$/).parse(req.query.connection),state=randomBytes(32).toString('base64url'),verifier=randomBytes(32).toString('base64url');
