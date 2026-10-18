@@ -218,6 +218,13 @@ reviews revocation impact. See [startup, verification and OAuth handoff](docs/15
 OAuth and hosted console deployment remain unverified; no production settings are
 changed by the local demo.
 
+### Per-run inspection
+
+The console can select individual recorded runs. Agents can inspect the same
+caller-scoped evidence with `list_runs`, `get_run`, or `npm run agent:runs`.
+Use `npm run demo:walkthrough -- <local-mcp-url>` for a deterministic simulated
+walkthrough. See [run inspection and Developer B integration](docs/22-RUN-INSPECTION.md).
+
 ### Headless agent onboarding
 
 MCP is the primary interface; the UI is optional inspection. An agent with its own

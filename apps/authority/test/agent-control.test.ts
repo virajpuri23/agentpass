@@ -5,6 +5,7 @@ import { openDatabase } from '../../../db/database.js';
 import { migrateStore } from '../../../db/migrations.js';
 import { sqliteStore } from '../../../db/store.js';
 import { AccountService } from '../src/accounts.js';
+import { createAuthorityApp } from '../src/app.js';
 import { ConsentService } from '../src/consent.js';
 import { AgentControl,mountAgentControl,agentControlFromEnvironment,type RunnerAdmission } from '../src/agent-control.js';
 import { AuthorityEngine,Denial } from '../src/engine.js';
@@ -42,6 +43,13 @@ describe('managed agent control (FIXTURE credential store and runner)',()=>{
   });
   afterEach(()=>db.close());
   async function delivered(){const agent=await control.provision(parent,input());const claim=(await control.claim(runner,{idempotency_key:randomUUID()})).job!;const delivery=await control.deliver(runner,claim.job_id,{claim_id:claim.claim_id});return {agent,claim,delivery};}
+  async function authorityHttp(){
+    const server=createAuthorityApp({db:sqliteStore(db),supplier:engine.supplier,now:()=>new Date(now),agentControl:control.options}).listen(0,'127.0.0.1');
+    await new Promise<void>((resolve,reject)=>{server.once('listening',resolve);server.once('error',reject);});
+    const url=`http://127.0.0.1:${(server.address() as any).port}`;
+    const post=(path:string,body:unknown,token=runnerSecret)=>fetch(url+path,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify(body)});
+    return {post,close:()=>new Promise<void>(resolve=>server.close(()=>resolve()))};
+  }
 
   it('persists one child/job across concurrent retries; only its credential can mark readiness and execute',async()=>{
     const request=input();const agents=await Promise.all([control.provision(parent,request),control.provision(parent,request)]);
@@ -136,6 +144,36 @@ describe('managed agent control (FIXTURE credential store and runner)',()=>{
     expect(await control.result(runner,claim.job_id,result)).toEqual(await control.result(runner,claim.job_id,result));
     await expect(control.result(runner,claim.job_id,{...result,summary:'changed'})).rejects.toMatchObject({result:{code:'ALREADY_EXECUTED'}});
     expect(JSON.stringify(db.prepare('SELECT * FROM agent_jobs').all())).not.toContain('safe');
+  });
+  it('records failed results over HTTP and replays only the identical result for the live claim',async()=>{
+    const {agent,claim}=await delivered(),http=await authorityHttp(),result={claim_id:claim.claim_id,outcome:'FAILED' as const,summary:'fixture failed'};
+    try{
+      const firstResponse=await http.post(`/internal/agent-jobs/${claim.job_id}/result`,result);
+      expect(firstResponse.status).toBe(200);const first=await firstResponse.json();
+      expect(first).toMatchObject({status:'OK',data:{agent_id:agent.agent_id,state:'FAILED',execution_state:'FAILED'}});
+      const replay=await http.post(`/internal/agent-jobs/${claim.job_id}/result`,result);
+      expect(replay.status).toBe(200);expect(await replay.json()).toEqual(first);
+      const changed=await http.post(`/internal/agent-jobs/${claim.job_id}/result`,{...result,summary:'changed'});
+      expect(changed.status).toBe(409);expect(await changed.json()).toMatchObject({code:'ALREADY_EXECUTED'});
+      const crossClaim=await http.post(`/internal/agent-jobs/${claim.job_id}/result`,{...result,claim_id:'another-claim'});
+      expect(crossClaim.status).toBe(404);expect(await crossClaim.json()).toMatchObject({code:'INVALID_CALLER'});
+      now+=31000;
+      const expired=await http.post(`/internal/agent-jobs/${claim.job_id}/result`,result);
+      expect(expired.status).toBe(403);expect(await expired.json()).toMatchObject({code:'INVALID_CALLER'});
+    }finally{await http.close();}
+  });
+  it('denies failed-result replay after the managed agent is revoked over HTTP',async()=>{
+    const {agent,claim}=await delivered(),http=await authorityHttp(),result={claim_id:claim.claim_id,outcome:'FAILED' as const,summary:'fixture failed'};
+    const parentCredential='fixture-parent-http-key';
+    db.prepare('INSERT INTO principal_keys(key_id,principal_id,key_hash) VALUES(?,?,?)').run(randomUUID(),parent.id,key(parentCredential));
+    try{
+      const failed=await http.post(`/internal/agent-jobs/${claim.job_id}/result`,result);
+      expect(failed.status).toBe(200);
+      const revoked=await http.post(`/v1/agents/${agent.agent_id}/revoke`,{reason:'fixture revoke',idempotency_key:'fixture-revoke'},parentCredential);
+      expect(revoked.status).toBe(200);expect(await revoked.json()).toMatchObject({status:'OK',data:{state:'REVOKED'}});
+      const replay=await http.post(`/internal/agent-jobs/${claim.job_id}/result`,result);
+      expect(replay.status).toBe(403);expect(await replay.json()).toMatchObject({code:'INVALID_CALLER'});
+    }finally{await http.close();}
   });
   it('bounds pending launches, lifetimes, attempts and cleans expired pending secrets',async()=>{
     await expect(control.provision(parent,{...input(),requested_scope:{...scope,expires_at:new Date(now+3600001).toISOString()}})).rejects.toMatchObject({result:{code:'OUTSIDE_PARENT_SCOPE'}});

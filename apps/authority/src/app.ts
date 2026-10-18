@@ -1,5 +1,5 @@
 import express from 'express';
-import { consoleSnapshot } from './console.js';
+import { consoleSnapshot, listRuns } from './console.js';
 import { randomUUID } from 'node:crypto';
 import { auditContext, setAuditContext } from './audit.js';
 import { SupplierPolicyDenial } from './supplier.js';
@@ -28,8 +28,10 @@ export function createAuthorityApp(options: { db: Database.Database | AuthorityS
     if(options.agentControl)await assertManagedPrincipalLive(db,principal,(options.now??(()=>new Date()))());
   }:undefined);
   app.disable('x-powered-by');
-  app.use((_req,_res,next) => {
-    auditContext.run({traceId:randomUUID(),requestId:randomUUID(),action:'http.request'},next);
+  app.use((req,_res,next) => {
+    const runId=req.header('x-agentpass-run-id');
+    if(runId && !/^run-[a-zA-Z0-9_-]{1,80}$/.test(runId)) return next(new Denial({status:'DENIED',code:'INVALID_REQUEST',reason:'Invalid run correlation ID'},400));
+    auditContext.run({runId,traceId:randomUUID(),requestId:randomUUID(),action:'http.request'},next);
   });
   app.use(express.json({limit:'32kb'}));
   app.get('/health',async (_req,res) => { await db.prepare('SELECT 1').get(); res.json({status:'OK'}); });
@@ -66,15 +68,22 @@ export function createAuthorityApp(options: { db: Database.Database | AuthorityS
     return new ConsentService(engine,policy,options.now).revoke(context.account_id,context.connection.id);
   }));
   app.get('/v1/console',route(p => consoleSnapshot(engine,p)));
+  app.get('/v1/runs',route(p => listRuns(engine,p)));
+  app.get('/v1/runs/:id',route((p,req) => {
+    const runId=z.string().regex(/^run-[a-zA-Z0-9_-]{1,80}$/).parse(req.params.id);
+    return consoleSnapshot(engine,p,runId);
+  }));
   app.post('/v1/grants/:id/delegate',route((p,req) => {
     const body = z.object({recipient_principal_id:id,scope:scopeSchema}).strict().parse(req.body);
     setAuditContext({action:'grant.delegate',grantId:id.parse(req.params.id)});
     return engine.delegate(p,String(req.params.id),body.recipient_principal_id,body.scope);
   }));
   app.post('/v1/grants/:id/provision-child',route((p,req) => {
+    if((req.res as express.Response).locals.account_context){setAuditContext({action:'principal.provision'});throw new Denial({status:'DENIED',code:'INVALID_REQUEST',reason:'Human OAuth connections must use provision_agent for managed provisioning',next_action:'contact_owner'},403);}
     const body = z.object({scope:scopeSchema,credential_hash:z.string().regex(/^[a-f0-9]{64}$/),idempotency_key:id}).strict().parse(req.body);
-    setAuditContext({action:'principal.provision',grantId:id.parse(req.params.id)});
-    return engine.provisionChild(p,String(req.params.id),body.scope,body.credential_hash,body.idempotency_key);
+    const grantId=id.parse(req.params.id);
+    setAuditContext({action:'principal.provision',grantId});
+    return engine.provisionChild(p,grantId,body.scope,body.credential_hash,body.idempotency_key);
   }));
   app.post('/v1/grants/:id/revoke',route((p,req) => {
     z.object({reason:z.string().min(1).max(2000)}).strict().parse(req.body);

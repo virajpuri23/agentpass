@@ -65,6 +65,21 @@ describe('FIXTURE self-service browser and private runner lifecycle',()=>{
     expect(db.prepare('SELECT * FROM grants').all()).toHaveLength(1);expect(db.prepare('SELECT * FROM consent_approvals').all()).toHaveLength(1);
     expect(JSON.stringify(context)).not.toContain('fixture-client-secret');
   });
+  it('denies legacy child issuance to a consented human and keeps managed provisioning available',async()=>{
+    const context=(await json('/v1/onboarding/context')).data;
+    expect((await approve(context.connection.id)).response.status).toBe(200);
+    const active=(await json('/v1/onboarding/context')).data;runnerOrganizations.push(active.organization.id);
+    const counts=()=>['principals','principal_keys','grants','child_provisionings','managed_agents','agent_jobs'].map(table=>(db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as {n:number}).n);
+    const before=counts(),secret=randomBytes(32).toString('base64url');
+    const legacy=await json(`/v1/grants/${active.connection.grant_id}/provision-child`,{scope:{...active.connection.scope,max_delegation_depth:1},credential_hash:createHash('sha256').update(secret).digest('hex'),idempotency_key:'legacy-human'});
+    expect(legacy).toMatchObject({http:403,status:'DENIED',code:'INVALID_REQUEST',reason:'Human OAuth connections must use provision_agent for managed provisioning',next_action:'contact_owner'});
+    const alternate=await json(`/v1/grants/${active.connection.grant_id}/provision-child`,{scope:{},credential_hash:'model-selected',idempotency_key:'alternate-human',template_id:'attacker-picked'});
+    expect(alternate).toMatchObject({http:403,status:'DENIED',reason:'Human OAuth connections must use provision_agent for managed provisioning',next_action:'contact_owner'});
+    expect(counts()).toEqual(before);
+    const managed=await json('/v1/agents',{display_name:'Managed fixture child',task:'Request one quote',requested_scope:{...active.connection.scope,max_per_action_cents:1000,total_budget_cents:1000,max_delegation_depth:1},template_id:'sourcing-v1',idempotency_key:'managed-human'});
+    expect(managed).toMatchObject({http:200,status:'OK',data:{state:'PROVISIONING'}});
+    expect(counts()).toEqual(before.map(count=>count+1));
+  });
   it('rejects login state mismatch, cross-account consent, CSRF and over-policy budget',async()=>{
     const context=(await json('/v1/onboarding/context')).data;
     const start=await browser(`/onboarding?connection=${context.connection.id}`);
@@ -118,14 +133,15 @@ describe('FIXTURE self-service browser and private runner lifecycle',()=>{
   });
   it('denies a connection and its child immediately after persisted membership removal',async()=>{
     const context=(await json('/v1/onboarding/context')).data;expect((await approve(context.connection.id,'0')).response.status).toBe(200);
-    const active=(await json('/v1/onboarding/context')).data,scope={...active.connection.scope,max_delegation_depth:1};
-    const secret=randomBytes(32).toString('base64url');
-    const child=(await json(`/v1/grants/${active.connection.grant_id}/provision-child`,{scope,credential_hash:createHash('sha256').update(secret).digest('hex'),idempotency_key:'child'})).data;
+    const active=(await json('/v1/onboarding/context')).data;runnerOrganizations.push(active.organization.id);
+    const child=(await json('/v1/agents',{display_name:'Membership fixture child',task:'Request a quote',requested_scope:{...active.connection.scope,max_delegation_depth:1},template_id:'sourcing-v1',idempotency_key:'membership-child'})).data;
+    const claim=(await json('/internal/agent-jobs/claim',{idempotency_key:'membership-claim'},'fixture-runner-key')).data.job;
+    const secret=(await json(`/internal/agent-jobs/${claim.job_id}/credential`,{claim_id:claim.claim_id},'fixture-runner-key')).data.credential;
     expect((await json('/v1/me',undefined,secret)).status).toBe('OK');
     const accounts=new AccountService(sqliteStore(db));const account=await accounts.accountForIdentity(identity);
     db.prepare("UPDATE memberships SET state='INACTIVE' WHERE id=?").run(account!.membership_id);
     expect((await json('/v1/me')).http).toBe(401);
-    expect((await json('/v1/actions/execute',{grant_id:child.grant.id,action:'supplier.quote.request',supplier_id:'supplier-co',sku_id:'PACK-500',quantity:1,idempotency_key:'after-removal'},secret)).status).toBe('DENIED');
+    expect((await json('/v1/actions/execute',{grant_id:child.authority.grant_id,action:'supplier.quote.request',supplier_id:'supplier-co',sku_id:'PACK-500',quantity:1,idempotency_key:'after-removal'},secret)).status).toBe('DENIED');
   });
   it('fails closed for an invalid token or unavailable account persistence',async()=>{
     expect((await json('/v1/onboarding/context',undefined,'forged.human.token')).http).toBe(401);

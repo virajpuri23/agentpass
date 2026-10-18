@@ -12,12 +12,15 @@
     "demo:run": "tsx --env-file=.env scripts/run-e2e.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
+    "check:openapi": "vitest run apps/authority/test/openapi.test.ts",
     "start": "tsx apps/remote/src/server.ts",
     "setup:postgres": "tsx db/setup-postgres.ts",
     "db:migrate": "node --import tsx db/migrate.ts",
     "pretest": "AUTHORITY_URL=https://authority.invalid npm --prefix apps/mcp/agentpass-manufact run build",
     "dev:dashboard": "tsx apps/dashboard/src/server.ts",
     "demo:console": "tsx apps/dashboard/src/demo.ts",
+    "agent:runs": "node --import tsx apps/cli/src/runs.ts",
+    "demo:walkthrough": "node --import tsx apps/cli/src/walkthrough.ts",
     "agent:onboard": "node --import tsx apps/cli/src/onboard.ts",
     "agent:provision": "node --import tsx apps/cli/src/provision.ts"
   },
@@ -31,6 +34,7 @@
     "tsx": "^4.23.15"
   },
   "devDependencies": {
+    "@apidevtools/swagger-parser": "^12.1.0",
     "@types/better-sqlite3": "^9.6.0",
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.5",

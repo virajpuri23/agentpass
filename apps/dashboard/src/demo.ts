@@ -1,5 +1,5 @@
 import { createServer, type Server, type RequestListener } from 'node:http';
-import { mkdtempSync } from 'node:fs';
+import { mkdirSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -14,7 +14,8 @@ import { sqliteStore } from '../../supplier/src/store.js';
 
 // Public fixture credentials apply only to this fresh, loopback-only simulated environment.
 const keys={'owner-1':'console-fixture-owner','buyer-agent':'console-fixture-buyer','sourcing-agent':'console-fixture-sourcing','supplier-agent':'console-fixture-supplier'};
-const directory=mkdtempSync(join(tmpdir(),'agentpass-console-'));
+const directory=process.env.CONSOLE_DEMO_DIR??mkdtempSync(join(tmpdir(),'agentpass-console-'));
+mkdirSync(directory,{recursive:true,mode:0o700});
 const db=openDatabase(join(directory,'authority.sqlite'));seedDatabase(db,keys);
 const store=sqliteStore(join(directory,'supplier.sqlite'));
 const servers:Server[]=[];
