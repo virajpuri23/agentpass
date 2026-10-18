@@ -56,7 +56,11 @@ as a JWT; failed JWT verification is never retried as a service key. The opaque
 path receives only an internal SDK gate scope after `/v1/me` succeeds; it does
 not gain human identity or consent. Database and authority failures deny access.
 
-The trusted sign-in form accepts either a numeric email code or the original
+Sign-in requests use the exact `/onboarding/identity/email-return` callback,
+which must be in the Supabase redirect allowlist. Opening an email link in the
+same browser returns its session through a same-origin, CSRF-bound POST. The
+callback removes the URL fragment and never stores tokens in browser storage.
+The trusted sign-in form also accepts a numeric email code or the original
 Supabase sign-in link copied from the email without opening it. This supports
 default Supabase email templates without custom SMTP. Links must use the configured
 project origin and verification path; the server sends only the token hash to
