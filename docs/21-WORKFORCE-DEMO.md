@@ -1,5 +1,11 @@
 # Coding-agent workforce demo (Developer B submission package)
 
+> Current entry point: [all demo modes and visuals](25-EXPERIENCES.md). The full
+> real-authority run now has 18 checks including wallets. The 12-check results and
+> old branch/merge blockers below are historical; the authority integration is in
+> `main`. Hosted workforce execution and provider preview hosting remain separate
+> verification gates. Use [the stage runbook](24-WORKFORCE-DEMO-RUNBOOK.md) to present.
+
 **What it shows:** a lead coding agent gets a landing page built by four specialist
 agents (Design, Security, Hosting, Analytics). AgentPass visibly controls what each
 one may touch, blocks what it may not, and lets one agent negotiate a permitted

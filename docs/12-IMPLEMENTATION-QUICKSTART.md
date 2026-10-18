@@ -1,92 +1,108 @@
-# Implementation Quickstart — What to Type First
+# Local quickstart
 
-**This repository kit contains design specs and schemas, not an already-running application.** The commands below are a build plan for the team to implement.
+The authority, supplier, MCP adapters, agents and browser views are implemented.
+Use Node **24**. Run from the repository root; keep all credentials and `.env`
+private. For all site/demo choices, see [the experience catalog](25-EXPERIENCES.md).
 
-## Decide runtime before starting
+## Install and validate
 
-- Node.js 20 or newer, TypeScript, ESM.
-- Official MCP TypeScript SDK v2 (`@modelcontextprotocol/server`) and Zod 4.2+ for tool registration.
-- SQLite for local demo DBs; use a maintained Node SQLite binding (and SQLite transactions).
-- Lightweight HTTP framework (Hono or Express) for internal API.
-- Two shell processes or independently configured MCP agent clients, each with its own identity/key.
-- Environment loaded from untracked `.env` based on `.env.example`.
-
-If Manufact deployment becomes the top priority, use its supported `mcp-use` scaffold instead of writing a custom deployment adapter. Keep authorization business logic framework-agnostic.
-
-## Developer A — first working iteration
-
-1. Create `apps/authority/src/server.ts` exposing `/health` and `/v1/me`.
-2. Load `db/schema.sql` into `AUTHORITY_DB_PATH`.
-3. Seed principals and root grant from `fixtures/seed-scenario.json`.
-4. Implement a function `evaluate({authenticatedPrincipal, grantId, action, supplierId, skuId, amountCents})` returning one typed `ApiResult`.
-5. Implement `delegate` and `request/respond/accept` flows.
-6. Implement quote gateway before purchase ledger.
-7. Register MCP tool schemas that call the identical authority services.
-8. Add purchase reservation/idempotency tests and execute purchase last.
-
-Useful MCP v2 pattern (illustrative registration, **not a complete auth server**):
-
-```ts
-import { McpServer } from '@modelcontextprotocol/server';
-import * as z from 'zod/v4';
-
-const server = new McpServer({ name: 'agentpass', version: '0.1.0' });
-server.registerTool('describe_authority', {
-  description: 'Discover which scopes are supported and how to request missing authority.',
-  inputSchema: z.object({})
-}, async () => ({
-  content: [{type: 'text', text: 'Actions: supplier.quote.request, supplier.purchase.execute. Call request_authority for missing scope.'}]
-}));
+```sh
+npm ci
+npm --prefix apps/mcp/agentpass-manufact ci
+npm run typecheck
+AUTHORITY_URL=https://authority.invalid npm --prefix apps/mcp/agentpass-manufact run typecheck
 ```
 
-Identity must be established by the MCP host or authenticated transport, **never** a tool argument like `agent_id`. Test with an external MCP client, not just unit tests.
+The placeholder authority URL is only for build/registration validation. Never
+use it as a runtime deployment target. If native SQLite dependencies were installed
+under a different Node major, run `npm rebuild better-sqlite3` after switching.
 
-## Developer B — first working iteration
+## Run the workforce demo
 
-1. Create `apps/supplier/src/server.ts` `/health`, `/internal/quote`, `/internal/quotes/:id`, `/internal/fulfill`.
-2. Load `db/supplier.sql` into a **different** SQLite file.
-3. Seed `PACK-500` at 170 cents/unit, 500 requested → $850 trusted quote. Keep `internal_unit_cost_cents` private.
-4. Implement seller-side `allowOperation(principal, action, resource)` which explicitly denies margin reads and arbitrary SKU operations.
-5. Create mocked AgentPass client matching `fixtures/response-authority-required.json` and `/v1/authority` contracts.
-6. Have buyer agent create sourcing process with separate principal credentials; child follows the request/counteroffer/accept state machine.
-7. Build CLI `scripts/run-e2e.ts` that produces the trace and assertions.
-8. Only then build a one-screen dashboard fed by persisted audit events.
-
-## Suggested npm scripts **to implement** in the resulting app
-
-```json
-{
-  "scripts": {
-    "dev:authority": "tsx apps/authority/src/server.ts",
-    "dev:supplier": "tsx apps/supplier/src/server.ts",
-    "dev:mcp": "tsx apps/mcp/src/server.ts",
-    "demo:reset": "tsx scripts/seed-demo.ts",
-    "demo:run": "tsx scripts/run-e2e.ts",
-    "test": "vitest run",
-    "typecheck": "tsc --noEmit"
-  }
-}
+```sh
+npm run demo
+npm run dev:activity
 ```
 
-These scripts are targets; `tsx`, `typescript`, and `vitest` need to be added as dev dependencies and their corresponding files implemented.
+Open [the workforce stage](http://127.0.0.1:3200/workforce.html). Each run creates
+fresh authority state and a temporary copy of `demo-project`; the first fixture
+install/build needs npm registry access. The default uses real local authority
+checks and simulated purchases. [Modes and expectations](25-EXPERIENCES.md#workforce-demo).
 
-## Minimum mock for independent parallel work
+## Run an isolated buyer/supplier process demo
 
-Developer B does not need a working authority server for initial iteration. Implement a local `AuthorityClient` interface with methods matching the frozen HTTP endpoints; return known fixture responses from a `FakeAuthorityClient`. Swap the adapter to `HttpAuthorityClient` after A exposes the server. The agent's state machine should not care which adapter it uses.
+On a fresh checkout with no configured environment, provision the local demo keys
+and SQLite seed once:
 
-Conversely Developer A can use `FakeSupplierService` that returns the seeded $850 quote, rejects margin reads, and returns one stable order ID; swap it to `HttpSupplierService` after B exposes supplier backend.
+```sh
+npm run seed:authority
+npm run demo:run
+```
 
-## Sponsor integration path (only after P0)
+The seed command preserves existing keys and grant/ledger state and adds missing
+keys to the untracked `.env`. It is local setup, not production root issuance.
+With default isolated mode, `demo:run` creates separate temporary real authority
+and simulated supplier services and independent buyer/sourcing processes. It does
+not use an existing database or need separately started services.
 
-1. Test MCP tool calls locally using official Inspector or a connected MCP client.
-2. Manufact: `mcp-use deploy --no-github --name agentpass` when supported by the project scaffold and persistent storage exists; refer to https://docs.manufact.com/cli/deploy for actual flags.
-3. Primitive: follow https://docs.primitive.dev/docs/sending and the relevant receiving docs; attach message correlation ID to `authority_request.id`. Webhook signatures must be verified.
-4. Stripe: use **test-mode only** for a properly scoped purchase; never introduce real-money charges into the hackathon demo.
+For the HTTP MCP transport, build the nested app first:
 
-## First integration smoke test
+```sh
+AUTHORITY_URL=https://authority.invalid npm --prefix apps/mcp/agentpass-manufact run build
+npm run demo:run -- --via-http
+```
 
-- GET `http://localhost:4100/health` returns OK.
-- GET `http://localhost:4200/health` returns OK.
-- Authenticated `/v1/me` for child returns `sourcing-agent`, not `buyer-agent`.
-- A's gateway calls B's quote endpoint, returns $850 and no supplier private costs.
-- End-to-end `AUTHORITY_REQUIRED` → parent counteroffer → child accept → purchase succeeds exactly once.
+## Inspect persistent local history
+
+```sh
+AUTHORITY_URL=https://authority.invalid npm --prefix apps/mcp/agentpass-manufact run build
+CONSOLE_PORT=3112 npm run demo:console
+```
+
+In a second terminal:
+
+```sh
+npm run demo:walkthrough -- http://127.0.0.1:3112/mcp
+```
+
+Use the printed connection URL and the local fixture identities from
+[run inspection](22-RUN-INSPECTION.md). The console demo never loads `.env` or
+hosted databases. It retains its temporary directory for inspection. To reopen
+the same history, set `CONSOLE_DEMO_DIR` to that directory. A repeated walkthrough
+preserves spent budgets; it does not manufacture another successful purchase.
+
+## Separately running local services
+
+This is optional; isolated mode above needs fewer steps. Configure loopback
+`AUTHORITY_URL`, `SUPPLIER_URL`, separate SQLite paths, provisioned keys and a
+private `SUPPLIER_SERVICE_KEY` in `.env`, using [.env.example](../.env.example).
+Do not populate local-reset configuration with hosted database URLs.
+
+```sh
+npm run dev:supplier
+npm run dev:authority
+```
+
+Run those in separate terminals, then `npm run demo:run -- --services` in a third.
+`npm run dev:mcp` is the stdio adapter for an individually configured agent.
+The optional `demo:reset` command deletes the configured local authority SQLite
+state and resets the configured supplier store, including PostgreSQL if selected.
+Use it only for an explicitly disposable fixture, with both services stopped.
+Isolated demos and console fixtures do not require it.
+
+## Verify
+
+```sh
+npm test
+node --test sites/authority-story/test/scenario.check.mjs
+```
+
+`npm test` builds the MCP app. The optional PostgreSQL suite truncates tables and
+requires a disposable **local** database ending in `_test`; see
+[operations](26-OPERATIONS.md#verification-and-data-targets). The static-site tests
+exercise a scripted illustration and do not prove live authorization.
+
+For headless/child credentials, hosted persistence, Inspector setup and deployment,
+use [operations](26-OPERATIONS.md), [provisioning](16-CHILD-PROVISIONING.md) and
+[the private plugin guide](../apps/mcp/plugins/README.md). Never put parent keys in
+child tool arguments or treat a model-supplied identity as authentication.

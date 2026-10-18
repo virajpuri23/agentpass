@@ -1,5 +1,10 @@
 # Authority console and MCP onboarding
 
+> Historical implementation/verification record. Branch names, OAuth state and
+> deployment IDs below apply to that milestone. For the consolidated inventory
+> and latest documented handoff, see [experiences](25-EXPERIENCES.md) and
+> [operations](26-OPERATIONS.md#current-oauth-sign-in-handoff).
+
 The console is a browser client of the canonical authority service. It adds no policy
 engine and changes no shared contract types. Protected supplier and authority routes
 stay private when the console is mounted on the MCP service.

@@ -1,6 +1,6 @@
 # AgentPass Manufact MCP App
 
-The official `mcp-apps` scaffold, adapted to the existing AgentPass authority API. See the repository [Manufact setup](../../../README.md#manufact-mcp-app-v2) for installation, authentication, Supabase persistence, deployment, client configuration, and demo verification.
+The official `mcp-apps` scaffold, adapted to the existing AgentPass authority API. See the repository [Manufact setup](../../../docs/26-OPERATIONS.md) for installation, authentication, Supabase persistence, deployment, client configuration, and demo verification.
 
 This adapter uses published `mcp-use@2.8.2`. The scaffold generated on October 17 pinned an unpublished `2.10.1`; npm's `latest` tag pointed to an accidental `3.0.0-canary` release. The app deliberately pins a published v2 release.
 

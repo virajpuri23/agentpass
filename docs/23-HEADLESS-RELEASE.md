@@ -1,5 +1,10 @@
 # Headless agent-credential release status
 
+> Historical implementation/verification record. Branch names, OAuth state and
+> deployment IDs below apply to that milestone. For the consolidated inventory
+> and latest documented handoff, see [experiences](25-EXPERIENCES.md) and
+> [operations](26-OPERATIONS.md#current-oauth-sign-in-handoff).
+
 Updated October 18, 2026 UTC (October 17, 2026 Pacific).
 
 ## Current state
