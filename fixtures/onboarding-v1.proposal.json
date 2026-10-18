@@ -1,0 +1,56 @@
+{
+  "evidence": "FIXTURE: A9 contract review only; no OAuth or worker runtime",
+  "context": {
+    "account_id": "account-fixture-one",
+    "organization": { "id": "buyer-co", "name": "Fixture personal workspace" },
+    "connection": {
+      "id": "connection-fixture-one",
+      "principal_id": "buyer-agent",
+      "state": "ACTIVE",
+      "grant_id": "grant-root-buyer",
+      "scope": {
+        "actions": ["supplier.quote.request", "supplier.purchase.execute"],
+        "supplier_ids": ["supplier-co"], "sku_ids": ["PACK-500"],
+        "max_per_action_cents": 100000, "total_budget_cents": 100000,
+        "expires_at": "2026-10-18T22:00:00.000Z", "max_delegation_depth": 2
+      }
+    },
+    "simulated": true
+  },
+  "provision": {
+    "display_name": "Packaging sourcing agent",
+    "task": "Request a quote for 500 PACK-500 units. Do not purchase.",
+    "requested_scope": {
+      "actions": ["supplier.quote.request"],
+      "supplier_ids": ["supplier-co"], "sku_ids": ["PACK-500"],
+      "max_per_action_cents": 0, "total_budget_cents": 0,
+      "expires_at": "2026-10-17T23:00:00.000Z", "max_delegation_depth": 0
+    },
+    "template_id": "sourcing-v1",
+    "idempotency_key": "fixture-provision-one"
+  },
+  "agent": {
+    "agent_id": "agent-instance-fixture-one",
+    "organization_id": "buyer-co", "connection_id": "connection-fixture-one",
+    "requester_account_id": "account-fixture-one",
+    "display_name": "Packaging sourcing agent", "template_id": "sourcing-v1",
+    "authority": { "principal_id": "principal-fixture-child", "grant_id": "grant-fixture-child", "scope": {
+      "actions": ["supplier.quote.request"],
+      "supplier_ids": ["supplier-co"], "sku_ids": ["PACK-500"],
+      "max_per_action_cents": 0, "total_budget_cents": 0,
+      "expires_at": "2026-10-17T23:00:00.000Z", "max_delegation_depth": 0
+    } },
+    "state": "PROVISIONING", "execution_state": "NOT_STARTED", "simulated": true
+  },
+  "claim": {
+    "job": {
+      "job_id": "job-fixture-one", "agent_id": "agent-instance-fixture-one",
+      "claim_id": "claim-fixture-one", "launch_id": "launch-fixture-one",
+      "template_id": "sourcing-v1", "task": "Request a quote for 500 PACK-500 units. Do not purchase.",
+      "grant_id": "grant-fixture-child", "lease_expires_at": "2026-10-17T22:00:30.000Z"
+    }
+  },
+  "ready": { "claim_id": "claim-fixture-one" },
+  "result": { "claim_id": "claim-fixture-one", "outcome": "COMPLETED", "summary": "Fixture quote result; no purchase." },
+  "revoke": { "agent_id": "agent-instance-fixture-one", "reason": "Fixture complete", "idempotency_key": "fixture-revoke-one" }
+}

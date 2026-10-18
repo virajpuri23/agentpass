@@ -1,21 +1,29 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { createServer, type AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-const port = 3290 + Math.floor(Math.random() * 60);
-const base = `http://127.0.0.1:${port}`;
+let base: string;
 let server: ChildProcess;
 
 beforeAll(async () => {
+  const probe = createServer();
+  await new Promise<void>(resolve => probe.listen(0, '127.0.0.1', resolve));
+  const port = (probe.address() as AddressInfo).port;
+  await new Promise<void>(resolve => probe.close(() => resolve()));
+  base = `http://127.0.0.1:${port}`;
+  let stderr = '';
   // No .env: hosted mode must stay disabled in tests.
   server = spawn(process.execPath, ['--import', 'tsx', 'apps/activity/src/server.ts'], {
-    env: { PATH: process.env.PATH, ACTIVITY_PORT: String(port) },
-    stdio: 'ignore',
+    env: { PATH: process.env.PATH, ACTIVITY_PORT: String(port), npm_config_registry: process.env.npm_config_registry },
+    stdio: ['ignore', 'ignore', 'pipe'],
   });
+  server.stderr?.on('data', data => { stderr += String(data); });
   for (let i = 0; i < 80; i++) {
+    if (server.exitCode !== null) throw new Error(`Activity server exited: ${stderr}`);
     if (await fetch(`${base}/api/status`).then((r) => r.ok, () => false)) return;
     await new Promise((r) => setTimeout(r, 100));
   }
-  throw new Error('activity server did not start');
+  throw new Error(`Activity server did not start: ${stderr}`);
 }, 20_000);
 
 afterAll(() => { server?.kill('SIGTERM'); });

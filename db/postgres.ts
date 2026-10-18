@@ -16,6 +16,7 @@ export function postgresStore(connectionString: string) {
     return (transaction.getStore() ?? pool).query(text, params);
   }
   const store: AuthorityStore = {
+    exec: async sql => { await query(sql); },
     prepare(sql) {
       return {
         get: async (...params) => (await query(sql,params)).rows[0],

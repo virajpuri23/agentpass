@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMcpServer } from '../src/server.js';
 
 const expectedTools = [
-  'provision_child',
+  'list_runs','get_run','provision_child',
   'describe_authority',
   'get_my_grants',
   'request_authority',
@@ -13,8 +13,28 @@ const expectedTools = [
   'accept_authority_offer',
   'delegate_authority',
   'execute_action',
+  'verify_authority',
   'revoke_authority',
 ];
+
+const workforceScope = {
+  actions: ['deploy.preview'],
+  supplier_ids: [],
+  sku_ids: [],
+  max_per_action_cents: 0,
+  total_budget_cents: 0,
+  expires_at: '2026-10-18T17:30:00Z',
+  max_delegation_depth: 0,
+  resources: [{ resource: 'demo-project', organization_id: 'buyer-co', owner_principal_id: 'owner-1', paths: [] }],
+  max_executions: 1,
+};
+const workforceAction = {
+  grant_id: 'grant-workforce',
+  action: 'deploy.preview',
+  resource: 'demo-project',
+  parameters: { environment: 'preview', artifact_digest: 'a'.repeat(64) },
+  idempotency_key: 'preview-1',
+};
 
 const grant = {
   id: 'grant-sourcing-quote',
@@ -63,6 +83,23 @@ beforeEach(async () => {
         reason: 'Requested scope exceeds the parent grant.',
       }), { status: 403, headers: { 'content-type': 'application/json' } });
     }
+    if (init?.method === 'POST' && url.pathname === '/v1/actions/verify') {
+      return new Response(JSON.stringify({
+        status: 'DENY', code: 'INSUFFICIENT_SCOPE', reason: 'Production is outside the current grant.',
+        suggested_action: 'deploy.preview',
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (init?.method === 'POST' && url.pathname === '/v1/authority/requests') {
+      return new Response(JSON.stringify({ status: 'OK', data: { request_id: 'request-workforce', status: 'PENDING' } }), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      });
+    }
+    if (init?.method === 'POST' && url.pathname === '/v1/actions/execute') {
+      return new Response(JSON.stringify({
+        status: 'ALLOW', code: 'EXECUTED', reason: 'Preview deployment completed.', execution_id: 'exec-1',
+        result: { environment: 'preview' },
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
     return new Response(JSON.stringify({ error: 'unmocked authority route' }), {
       status: 404,
       headers: { 'content-type': 'application/json' },
@@ -87,7 +124,7 @@ describe('AgentPass MCP server', () => {
     const listed = await client.listTools();
     expect(listed.tools.map((tool) => tool.name).sort()).toEqual([...expectedTools].sort());
     for (const tool of listed.tools) {
-      expect((tool.inputSchema.properties as Record<string, unknown>).agent_id).toBeUndefined();
+      expect(JSON.stringify(tool.inputSchema)).not.toContain('agent_id');
     }
 
     const result = await client.callTool({ name: 'get_my_grants', arguments: {} });
@@ -150,10 +187,49 @@ describe('AgentPass MCP server', () => {
       const result = await stdioClient.callTool({ name: 'describe_authority', arguments: {} });
       expect(result.structuredContent).toMatchObject({
         status: 'OK',
-        data: { actions: ['supplier.quote.request', 'supplier.purchase.execute', 'supplier.margin.read'] },
+        data: { actions: expect.arrayContaining(['supplier.quote.request', 'supplier.purchase.execute', 'supplier.margin.read', 'repo.read', 'deploy.production']) },
       });
     } finally {
       await stdioClient.close();
     }
+  });
+
+  it('forwards workforce verification and execution decisions without wrapping them', async () => {
+    const requested = await client.callTool({ name: 'request_authority', arguments: {
+      parent_grant_id: 'grant-parent', requested_scope: workforceScope, reason: 'Need preview deployment',
+    } });
+    expect(requested.structuredContent).toEqual({ status: 'OK', data: { request_id: 'request-workforce', status: 'PENDING' } });
+    expect(requests.at(-1)).toMatchObject({
+      path: '/v1/authority/requests', body: { parent_grant_id: 'grant-parent', requested_scope: workforceScope, reason: 'Need preview deployment' },
+    });
+
+    const verified = await client.callTool({ name: 'verify_authority', arguments: workforceAction });
+    expect(verified.structuredContent).toEqual({
+      status: 'DENY', code: 'INSUFFICIENT_SCOPE', reason: 'Production is outside the current grant.',
+      suggested_action: 'deploy.preview',
+    });
+    expect(requests.at(-1)).toMatchObject({
+      method: 'POST', path: '/v1/actions/verify', authorization: 'Bearer test-sourcing-agent-key', body: workforceAction,
+    });
+
+    const executed = await client.callTool({ name: 'execute_action', arguments: workforceAction });
+    expect(executed.structuredContent).toEqual({
+      status: 'ALLOW', code: 'EXECUTED', reason: 'Preview deployment completed.', execution_id: 'exec-1',
+      result: { environment: 'preview' },
+    });
+    expect(requests.at(-1)).toMatchObject({ method: 'POST', path: '/v1/actions/execute', body: workforceAction });
+  });
+
+  it('keeps verify_authority limited to workforce actions', async () => {
+    const before = requests.length;
+    const result = await client.callTool({
+      name: 'verify_authority',
+      arguments: {
+        grant_id: 'grant-sourcing-quote', action: 'supplier.quote.request', supplier_id: 'supplier-co',
+        sku_id: 'PACK-500', quantity: 1, idempotency_key: 'quote-1',
+      },
+    });
+    expect(result.isError).toBe(true);
+    expect(requests).toHaveLength(before);
   });
 });

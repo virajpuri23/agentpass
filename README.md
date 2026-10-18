@@ -1,6 +1,10 @@
 # AgentPass — YC Make Something Agents Want, October 17–18, 2026
 
-> **Status: hackathon implementation specification, not a completed app.**
+> **Status:** The core authority demo and headless service-agent provisioning are deployed. Hosted
+> provisioning/no-purchase, after-restart revocation, independent audit, and fixture cleanup passed.
+> Human OAuth remains disabled and Developer B's worker is
+> deferred; see [current headless release status](docs/23-HEADLESS-RELEASE.md) and the
+> [historical rollout evidence](docs/21-SELF-SERVICE-ROLLOUT.md).
 > **Submission:** Sunday October 18, 2026, **10:00 AM Pacific**. Everything here is designed to be put in a Git repository and shared with two developers.
 
 ## The 20-second pitch
@@ -22,6 +26,13 @@ All purchases are **simulated**. No live inventory or payment is touched.
 7. Use [`docs/09-SUBMISSION-SPONSORS.md`](docs/09-SUBMISSION-SPONSORS.md) for the prize-track strategy.
 
 `AGENTS.md` has repository instructions for Codex/other coding agents. `contracts/` provides wire examples; `packages/contracts/src/index.ts` defines stable shared types. `db/schema.sql` is a SQLite-oriented starting schema, **not a production-ready migration**.
+
+**Developer A self-service onboarding:** the [implementation plan](docs/17-SELF-SERVICE-ONBOARDING-PLAN.md),
+[headless release status](docs/23-HEADLESS-RELEASE.md), and [October 17 rollout evidence](docs/21-SELF-SERVICE-ROLLOUT.md)
+describe the A-owned logic and its gates. Existing service-agent credentials can provision bounded
+child credentials without a UI; hosted provisioning/no-purchase, after-restart revocation,
+independent audit, and fixture cleanup passed. No purchase was executed and no rollback was tested.
+Human OAuth remains disabled, and Developer B's worker is deferred.
 
 ## Coding-agent workforce demo (Developer B)
 
@@ -89,7 +100,10 @@ agentpass/
     run-e2e.ts
 ```
 
-> **Important:** This kit supplies specifications, contracts, schema, fixtures, and repo coordination documents; it is **not** claiming the application is implemented or deployed.
+> **Important:** This repository includes specifications, contracts, schema,
+> fixtures and application code. The core demo and existing-agent headless
+> provisioning are deployed; human OAuth onboarding remains disabled pending its
+> separate provider and host gates.
 
 ## Implementation quickstart
 
@@ -97,13 +111,20 @@ Read [`docs/12-IMPLEMENTATION-QUICKSTART.md`](docs/12-IMPLEMENTATION-QUICKSTART.
 
 ## Manufact MCP App v2
 
-**Current verification:** all 69 local tests pass, including the embedded MCP → authority → Developer B supplier workflow with durable PostgreSQL. The v2 app is deployed and the complete workflow passes through independent hosted MCP clients: trusted $850 quote, actionable authority denial, $1200 → $900 negotiation, $850 purchase/replay, revocation, expiry, caller isolation, and concurrent ancestor-budget enforcement. Both private schemas use Supabase project `ebkcaqaybuklllefvuyv` (`https://ebkcaqaybuklllefvuyv.supabase.co`). See [hosted verification evidence](docs/14-MANUFACT-VERIFICATION.md).
+The earlier hosted core-demo verification is recorded in [14](docs/14-MANUFACT-VERIFICATION.md); it predates self-service
+onboarding. PR #14 is merged as `c7e0d3cd054ac47b55e5a397103de1ec09854d46`; the running production deployment
+includes headless service-agent provisioning. Its application source matches tested revision `e61f958`. The root suite passed
+199 tests, a separate run passed 201 tests, and TypeScript checks and the nested MCP production build passed.
+Hosted provisioning/no-purchase and after-restart revocation checks passed;
+the independent audit and fixture cleanup also passed. No purchase was executed and no rollback was tested.
+Human OAuth remains disabled and Developer B's worker is deferred.
+See the [current release status](docs/23-HEADLESS-RELEASE.md) and [October 17 rollout evidence](docs/21-SELF-SERVICE-ROLLOUT.md).
 
 - MCP URL: https://fast-steel-94x84.run.mcp-use.com/mcp
 - Dashboard: https://manufact.com/cloud/org-ab91b9e3-2lgi6/servers/f01e0537-092c-48c0-b6a6-66132aa93099/overview
 - Server ID: `f01e0537-092c-48c0-b6a6-66132aa93099`
-- First verified v2 deployment: `0600457a-b145-4c48-9ede-896997b13fdd` at `49739cba5296b5fff3afe304eb08becd674a5407`. Later commits may create new deployments; consult the dashboard for the active ID.
-- The failed v2 preview `7236c64a-319e-4405-9d5e-9e7beab68cd2` was blocked before building by the free plan's preview restriction. With user approval, production now targets `feat/authority-core`. The build context must be the repository root because the MCP adapter imports shared authority and supplier modules; the start command selects the nested MCP App.
+- Hosted verification deployments: `7923e871-f0ac-4bf9-9579-ccb2695b967d` (initial provisioning) and `4421a18e-49e8-4946-bd73-cd0300800350` (after-restart identity/revocation), both at merged revision `c7e0d3cd054ac47b55e5a397103de1ec09854d46`. These are verification IDs, not a claim about the active deployment after docs changes; consult the dashboard for the current runtime.
+- Earlier failed v2/onboarding preview records are historical; the user kept the current plan and paused preview rollout. The production release is not a preview or separate staging data plane. The build context remains the repository root because the MCP adapter imports shared authority and supplier modules; the start command selects the nested MCP App.
 
 Use Node **22.22.2+** for the MCP App (Node 24 recommended). If dependencies were installed under a different Node major, run `npm rebuild better-sqlite3` after switching. The existing stdio adapter remains available for headless per-agent processes. The nested app was generated with the required official `mcp-apps` template and pins published `mcp-use@2.8.2`.
 
@@ -146,7 +167,7 @@ npx mcp-use client sourcing tools call get_my_grants
 
 The CLI stores connection headers in its local user configuration; keep that configuration private and outside Git. Supply keys through each client's private configuration, never a model prompt. The sourcing client must never receive the buyer/owner key.
 
-Discovered tools: `provision_child`, `describe_authority`, `get_my_grants`, `request_authority`, `get_authority_request`, `respond_authority_request`, `accept_authority_offer`, `delegate_authority`, `execute_action`, `revoke_authority`. All return structured envelopes with text fallbacks; all core workflows work without rendering the view.
+Discovered tools: `provision_child`, `describe_authority`, `get_my_grants`, `request_authority`, `get_authority_request`, `respond_authority_request`, `accept_authority_offer`, `delegate_authority`, `execute_action`, `verify_authority`, `revoke_authority`. The remote Manufact adapter also retains its six human onboarding tools. The additive [workforce contract](docs/11-WORKFORCE-CONTRACT.md) covers generic resources, protected gateways and recovery. All return structured envelopes with text fallbacks; all core workflows work without rendering the view.
 
 ### Supabase persistence and hosted authority
 
@@ -224,6 +245,13 @@ reviews revocation impact. See [startup, verification and OAuth handoff](docs/15
 OAuth and hosted console deployment remain unverified; no production settings are
 changed by the local demo.
 
+### Per-run inspection
+
+The console can select individual recorded runs. Agents can inspect the same
+caller-scoped evidence with `list_runs`, `get_run`, or `npm run agent:runs`.
+Use `npm run demo:walkthrough -- <local-mcp-url>` for a deterministic simulated
+walkthrough. See [run inspection and Developer B integration](docs/22-RUN-INSPECTION.md).
+
 ### Headless agent onboarding
 
 MCP is the primary interface; the UI is optional inspection. An agent with its own
@@ -258,3 +286,15 @@ child file explicitly, even if a parent key remains in the inherited environment
 Retry provisioning with the same files; never regenerate a credential after an
 uncertain response. See [trusted provisioning](docs/16-CHILD-PROVISIONING.md) for
 scope, expiry, revocation, private-file rules, and the required schema rollout.
+
+### Self-service from a conversational host
+
+The additive remote MCP path resolves a verified person to a personal workspace
+and separate client connection, then requires explicit bounded consent before
+provisioning children. The backend handles credentials privately; people do not
+enter organization/principal IDs or copy child keys. The implementation and local
+fixture evidence are in [the rollout runbook](docs/21-SELF-SERVICE-ROLLOUT.md).
+The deployed service-agent path and its remaining limits are documented in
+[the headless release note](docs/23-HEADLESS-RELEASE.md). Hosted provisioning/no-purchase,
+after-restart revocation, independent audit, and fixture cleanup passed. No purchase was
+executed and no rollback was tested. Human OAuth remains disabled, and the B worker is deferred.

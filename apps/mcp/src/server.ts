@@ -3,16 +3,18 @@ import { pathToFileURL } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import * as z from 'zod/v4';
+import { WORKFORCE_ACTIONS, workforceActionSchema, workforceDecisionSchema, workforceScopeSchema } from '../../../packages/contracts/src/workforce.js';
 import type { AgentAction, AuthorityScope } from '../../../packages/contracts/src/index.js';
 
-const ACTIONS = [
+const SUPPLIER_ACTIONS = [
   'supplier.quote.request',
   'supplier.purchase.execute',
   'supplier.margin.read',
-] as const satisfies readonly AgentAction[];
+] as const;
+const ACTIONS = [...SUPPLIER_ACTIONS, ...WORKFORCE_ACTIONS] as const satisfies readonly AgentAction[];
 
-const scopeSchema = z.object({
-  actions: z.array(z.enum(ACTIONS)),
+const supplierScopeSchema = z.object({
+  actions: z.array(z.enum(SUPPLIER_ACTIONS)),
   supplier_ids: z.array(z.string().min(1)),
   sku_ids: z.array(z.string().min(1)),
   max_per_action_cents: z.number().int().nonnegative(),
@@ -20,6 +22,7 @@ const scopeSchema = z.object({
   expires_at: z.iso.datetime({ offset: true }),
   max_delegation_depth: z.number().int().nonnegative(),
 }).strict();
+const scopeSchema = z.union([supplierScopeSchema, workforceScopeSchema]);
 
 const errorSchema = z.object({
   status: z.enum(['AUTHORITY_REQUIRED', 'DENIED', 'ERROR']),
@@ -34,9 +37,11 @@ const successSchema = z.object({
   data: z.record(z.string(), z.unknown()),
 }).passthrough();
 
-const envelopeSchema = z.union([successSchema, errorSchema]);
+
+
+const envelopeSchema = z.union([successSchema, workforceDecisionSchema, errorSchema]);
 type Envelope = z.infer<typeof envelopeSchema>;
-type Config = { authorityUrl: string; agentApiKey: string };
+type Config = { authorityUrl: string; agentApiKey: string; runId?: string };
 
 const invalidCaller = (reason: string): Envelope => ({
   status: 'DENIED',
@@ -80,6 +85,7 @@ function createAuthorityClient(config: Config) {
         signal: AbortSignal.timeout(5000),
         headers: {
           authorization: `Bearer ${config.agentApiKey}`,
+          ...(config.runId ? {'x-agentpass-run-id':config.runId} : {}),
           ...(body === undefined ? {} : { 'content-type': 'application/json' }),
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -123,10 +129,13 @@ export function createMcpServer(config: Config): McpServer {
     status: 'OK',
     data: {
       actions: ACTIONS,
-      scope_limits: ['actions', 'supplier_ids', 'sku_ids', 'max_per_action_cents', 'total_budget_cents', 'expires_at', 'max_delegation_depth'],
+      scope_limits: ['actions', 'supplier_ids', 'sku_ids', 'max_per_action_cents', 'total_budget_cents', 'expires_at', 'max_delegation_depth', 'resources', 'max_executions'],
       recovery_tools: ['request_authority', 'get_authority_request', 'accept_authority_offer'],
     },
   }));
+
+  server.registerTool('list_runs',{description:'List persisted runs visible to this authenticated caller.',inputSchema:z.object({}).strict()},async()=>toolResult(await callAuthority('GET','v1/runs')));
+  server.registerTool('get_run',{description:'Read caller-visible run events, current grant/request snapshots and simulated receipts. A run ID never grants access.',inputSchema:z.object({run_id:z.string().regex(/^run-[a-zA-Z0-9_-]{1,80}$/)}).strict()},async({run_id})=>toolResult(await callAuthority('GET',`v1/runs/${encodeURIComponent(run_id)}`)));
 
   server.registerTool('get_my_grants', {
     description: 'Return grants belonging to the authenticated caller.',
@@ -198,17 +207,22 @@ export function createMcpServer(config: Config): McpServer {
   )));
 
   server.registerTool('execute_action', {
-    description: 'Request a supplier quote or execute a simulated purchase within the authenticated caller’s grant.',
-    inputSchema: z.object({
+    description: 'Request a supplier quote, execute a simulated purchase, or run an authorized workforce action.',
+    inputSchema: z.union([z.object({
       grant_id: z.string().min(1),
-      action: z.enum(ACTIONS),
+      action: z.enum(SUPPLIER_ACTIONS),
       supplier_id: z.string().min(1),
       sku_id: z.string().min(1),
       quantity: z.number().int().positive().optional(),
       quote_id: z.string().min(1).optional(),
       idempotency_key: z.string().min(1),
-    }).strict(),
+    }).strict(), workforceActionSchema]),
   }, async (input) => toolResult(await callAuthority('POST', 'v1/actions/execute', input)));
+
+  server.registerTool('verify_authority', {
+    description: 'Check whether the authenticated caller may perform a workforce action. The decision cannot authorize later execution.',
+    inputSchema: workforceActionSchema,
+  }, async (input) => toolResult(await callAuthority('POST', 'v1/actions/verify', input)));
 
   server.registerTool('revoke_authority', {
     description: 'Revoke a grant as its authorized issuer or owner.',
@@ -231,7 +245,7 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
     process.exitCode = 1;
   } else {
     try {
-      serveStdio(() => createMcpServer({ authorityUrl, agentApiKey }), {
+      serveStdio(() => createMcpServer({ authorityUrl, agentApiKey, runId:process.env.AGENTPASS_RUN_ID }), {
         onerror: () => console.error('AgentPass MCP transport error.'),
       });
     } catch {

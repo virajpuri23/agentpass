@@ -2,23 +2,35 @@ import { createConsoleHandler } from '../../dashboard/src/handler.js';
 import { MCPServer, type RequestContext } from 'mcp-use';
 import { z } from 'zod';
 import { authorityEndpoint } from './src/backend.js';
-import { ACTIONS, scopeSchema, envelopeSchema, createAuthorityClient, toolResult } from './src/authority-client.js';
+import { ACTIONS, SUPPLIER_ACTIONS, scopeSchema, envelopeSchema, createAuthorityClient, toolResult } from './src/authority-client.js';
+import { workforceActionSchema } from '../../../packages/contracts/src/workforce.js';
+import { createAgentPassOAuthProvider, humanOAuthConfigFromEnv, type AgentPassOAuthUser } from './src/oauth.js';
+import { createOnboardingProxy } from './src/onboarding-proxy.js';
+import { onboardingSchemas } from '../../../packages/contracts/src/index.js';
 
+const oauthConfig = humanOAuthConfigFromEnv();
 const authorityUrl = await authorityEndpoint();
 const target = new URL(authorityUrl);
 if (target.protocol !== 'https:' && !((process.env.NODE_ENV !== 'production' || process.env.DATABASE_URL) && ['127.0.0.1', 'localhost', '[::1]'].includes(target.hostname))) {
   throw new Error('A hosted authority service must use HTTPS.');
 }
 
-const server = new MCPServer({
+const serverConfig = {
   name: 'agentpass',
   title: 'AgentPass Authority Inspector',
   version: '2.0.0',
   description: 'Scoped authority negotiation and simulated supplier purchases.',
-  instructions: 'Agent onboarding requires no browser. Authenticate using your own credential provisioned by a trusted owner or orchestrator; never borrow a parent credential or self-assign identity. Call describe_authority, then get_my_grants. A parent may use provision_child with a runtime-generated credential verifier and bounded scope. With no grants, obtain initial delegation from a trusted parent. The UI is optional inspection. On AUTHORITY_REQUIRED, use request_authority, poll get_authority_request, then accept_authority_offer. All purchases are simulated.',
-});
+  instructions: 'Authenticate with your own verified Supabase OAuth connection or provisioned agent credential; never borrow a parent credential or self-assign identity. Human connections begin without spending authority. Use get_onboarding_context and follow its trusted consent link when required; after consent, use provision_agent, list_agents, get_agent, and revoke_agent to manage narrowly scoped children. Service agents may use provision_child only within their live grant. Use describe_authority and get_my_grants to inspect direct authority. On AUTHORITY_REQUIRED, use request_authority, poll get_authority_request, then accept_authority_offer. All purchases are simulated.',
+};
+const oauth = oauthConfig ? createAgentPassOAuthProvider(oauthConfig, authorityUrl) : undefined;
+const server = oauth
+  ? new MCPServer({ ...serverConfig, oauth })
+  : new MCPServer(serverConfig);
 
 server.get('/health', (c) => c.json({ status: 'OK' }));
+
+const onboardingProxy = createOnboardingProxy(authorityUrl);
+for (const path of ['/onboarding', '/onboarding/*']) server.all(path, c => onboardingProxy(c.req.raw));
 
 // Explicit public origin prevents accepting arbitrary Host/proxy headers as a trusted origin.
 if (process.env.CONSOLE_ORIGIN && process.env.MCP_PUBLIC_URL) {
@@ -30,10 +42,10 @@ function caller(request: Request) {
   const header = request.headers.get('authorization');
   return header?.match(/^Bearer ([^\s]+)$/)?.[1];
 }
-function authority(ctx: RequestContext) {
+function authority(ctx: RequestContext<AgentPassOAuthUser, 'optional'>) {
   const token = ctx.request && caller(ctx.request.raw);
   if (!token) throw new Error('Authenticated request required.');
-  return createAuthorityClient({ authorityUrl: authorityUrl!, agentApiKey: token });
+  return createAuthorityClient({ authorityUrl: authorityUrl!, agentApiKey: token, runId:ctx.request?.raw.headers.get('x-agentpass-run-id')??undefined });
 }
 
 // Validate every HTTP MCP request; no principal or credential survives between callers.
@@ -48,15 +60,64 @@ server.use('/mcp', async (c, next) => {
 const readOnly = { readOnlyHint: true, destructiveHint: false, openWorldHint: false };
 const write = { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
 const id = z.string().min(1);
+const onboardingErrorSchema = z.object({
+  status: z.enum(['AUTHORITY_REQUIRED', 'DENIED', 'ERROR']),
+  code: z.string().min(1),
+  reason: z.string().min(1),
+  next_action: z.enum(['request_authority', 'retry', 'contact_owner']).optional(),
+  required_scope: scopeSchema.optional(),
+}).passthrough();
+const onboardingOutput = <T extends z.ZodType>(data: T) => z.union([
+  z.object({ status: z.literal('OK'), data }).strict(),
+  onboardingErrorSchema,
+]);
+function onboardingResult<T extends z.ZodType>(value: unknown, schema: T): {
+  content: Array<{ type: 'text'; text: string }>;
+  structuredContent: z.output<T>;
+} {
+  const parsed = schema.safeParse(value);
+  const fallback = {
+    status: 'ERROR' as const,
+    code: 'SERVICE_UNAVAILABLE',
+    reason: 'Authority onboarding response did not match its contract.',
+    next_action: 'retry' as const,
+  };
+  const result = (parsed.success ? parsed.data : schema.parse(fallback)) as z.output<T>;
+  return { content: [{ type: 'text' as const, text: JSON.stringify(result) }], structuredContent: result };
+}
+function consentLink(connectionId: string) {
+  if (!process.env.MCP_PUBLIC_URL) return undefined;
+  try {
+    const endpoint = new URL(process.env.MCP_PUBLIC_URL);
+    const localHttp = endpoint.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(endpoint.hostname);
+    if ((endpoint.protocol !== 'https:' && !localHttp) || endpoint.pathname !== '/mcp' || endpoint.username || endpoint.password || endpoint.search || endpoint.hash) return undefined;
+    const link = new URL('/onboarding', endpoint);
+    link.searchParams.set('connection', connectionId);
+    return link.href;
+  } catch {
+    return undefined;
+  }
+}
 
 export const describeAuthority = server.tool({
   name: 'describe_authority', description: 'Describe supported actions, scope limits and repair tools.',
   inputSchema: z.object({}).strict(), outputSchema: envelopeSchema, annotations: readOnly,
 }, async () => toolResult({ status: 'OK', data: {
   actions: ACTIONS,
-  scope_limits: Object.keys(scopeSchema.shape),
+  scope_limits: ['actions', 'supplier_ids', 'sku_ids', 'max_per_action_cents', 'total_budget_cents', 'expires_at', 'max_delegation_depth', 'resources', 'max_executions'],
   recovery_tools: ['request_authority', 'get_authority_request', 'accept_authority_offer'],
 } }));
+
+export const listRuns = server.tool({
+  name:'list_runs',description:'List persisted run IDs visible to the authenticated caller. Run IDs are correlation metadata, never authority.',
+  inputSchema:z.object({}).strict(),outputSchema:envelopeSchema,annotations:readOnly,
+},async(_input,ctx)=>toolResult(await authority(ctx)('GET','v1/runs')));
+
+export const getRun = server.tool({
+  name:'get_run',description:'Inspect a persisted run: caller-visible events, related grants, private-to-parties requests and simulated receipts. Grant budgets and request states are current snapshots; events are historical. Missing or inaccessible runs return the same error.',
+  inputSchema:z.object({run_id:z.string().regex(/^run-[a-zA-Z0-9_-]{1,80}$/)}).strict(),outputSchema:envelopeSchema,annotations:readOnly,
+  view:{name:'run-inspector',description:'Read-only run grants, negotiation, historical decisions and simulated receipts.'},
+},async({run_id},ctx)=>toolResult(await authority(ctx)('GET',`v1/runs/${encodeURIComponent(run_id)}`)));
 
 export const getMyGrants = server.tool({
   name: 'get_my_grants', description: 'Inspect only the authenticated caller’s delegated authority.',
@@ -69,6 +130,55 @@ export const getMyGrants = server.tool({
   return { ...toolResult({ status: 'OK', data: { grants: result.data.grants } }),
     _meta: { principal_id: result.data.principal_id, organization_id: result.data.organization_id, inspector: result.data.inspector, ...(process.env.CONSOLE_ORIGIN && process.env.MCP_PUBLIC_URL ? {console_url:new URL('/connect',process.env.CONSOLE_ORIGIN).href} : {}) } };
 });
+
+const contextOutput = onboardingOutput(onboardingSchemas.context_data);
+export const getOnboardingContext = server.tool({
+  name: 'get_onboarding_context', description: 'Inspect the authenticated human connection, organization and consent state. It never creates authority.',
+  inputSchema: onboardingSchemas.context_request, outputSchema: contextOutput, annotations: readOnly,
+}, async (_input, ctx) => {
+  const result = onboardingResult(await authority(ctx)('GET', 'v1/onboarding/context'), contextOutput);
+  const data = result.structuredContent;
+  if (data.status !== 'OK' || data.data.connection.state !== 'CONSENT_REQUIRED') return result;
+  const link = consentLink(data.data.connection.id);
+  if (!link) return result;
+  return { ...result, content: [...result.content, { type: 'text' as const, text: `Trusted owner consent is required before this connection can create agents. Review the bounded simulated authority here: ${link}` }] };
+});
+
+const agentOutput = onboardingOutput(onboardingSchemas.agent_data);
+export const provisionAgent = server.tool({
+  name: 'provision_agent', description: 'Request a narrowly scoped child agent under the authenticated, consented connection. Provisioning uses the trusted runtime and never accepts credentials or organization identity from the model.',
+  inputSchema: onboardingSchemas.provision_request, outputSchema: agentOutput, annotations: write,
+}, async (input, ctx) => onboardingResult(await authority(ctx)('POST', 'v1/agents', input), agentOutput));
+
+const agentListOutput = onboardingOutput(onboardingSchemas.list_data);
+export const listAgents = server.tool({
+  name: 'list_agents', description: 'List agents belonging only to the authenticated connection.',
+  inputSchema: onboardingSchemas.list_request, outputSchema: agentListOutput, annotations: readOnly,
+}, async (input, ctx) => {
+  const query = new URLSearchParams();
+  if (input.cursor) query.set('cursor', input.cursor);
+  if (input.limit !== undefined) query.set('limit', String(input.limit));
+  const suffix = query.toString();
+  return onboardingResult(await authority(ctx)('GET', `v1/agents${suffix ? `?${suffix}` : ''}`), agentListOutput);
+});
+
+const getAgentInput = onboardingSchemas.get_request;
+export const getAgent = server.tool({
+  name: 'get_agent', description: 'Inspect one agent owned by the authenticated connection.',
+  inputSchema: getAgentInput, outputSchema: agentOutput, annotations: readOnly,
+}, async ({ agent_id }, ctx) => onboardingResult(await authority(ctx)('GET', `v1/agents/${encodeURIComponent(agent_id)}`), agentOutput));
+
+const revokeAgentInput = onboardingSchemas.revoke_agent_request;
+export const revokeAgent = server.tool({
+  name: 'revoke_agent', description: 'Stop one agent and revoke its delegated authority.',
+  inputSchema: revokeAgentInput, outputSchema: agentOutput, annotations: { ...write, destructiveHint: true },
+}, async ({ agent_id, ...body }, ctx) => onboardingResult(await authority(ctx)('POST', `v1/agents/${encodeURIComponent(agent_id)}/revoke`, body), agentOutput));
+
+const revokeConnectionOutput = onboardingOutput(onboardingSchemas.revoke_connection_data);
+export const revokeConnection = server.tool({
+  name: 'revoke_connection', description: 'Revoke this authenticated assistant connection and its authority.',
+  inputSchema: onboardingSchemas.revoke_connection_request, outputSchema: revokeConnectionOutput, annotations: { ...write, destructiveHint: true },
+}, async (input, ctx) => onboardingResult(await authority(ctx)('POST', 'v1/onboarding/connection/revoke', input), revokeConnectionOutput));
 
 export const requestAuthority = server.tool({
   name: 'request_authority', description: 'Request additional scoped authority from an existing parent.',
@@ -105,10 +215,15 @@ export const delegateAuthority = server.tool({
 }, async ({ parent_grant_id, ...body }, ctx) => toolResult(await authority(ctx)('POST', `v1/grants/${encodeURIComponent(parent_grant_id)}/delegate`, body)));
 
 export const executeAction = server.tool({
-  name: 'execute_action', description: 'Request a trusted supplier quote or execute an authorized simulated purchase. Purchase prices come from quote_id.',
-  inputSchema: z.object({ grant_id: id, action: z.enum(ACTIONS), supplier_id: id, sku_id: id, quantity: z.number().int().positive().optional(), quote_id: id.optional(), idempotency_key: id }).strict(),
+  name: 'execute_action', description: 'Request a trusted supplier quote, execute a simulated purchase, or run an authorized workforce action.',
+  inputSchema: z.union([z.object({ grant_id: id, action: z.enum(SUPPLIER_ACTIONS), supplier_id: id, sku_id: id, quantity: z.number().int().positive().optional(), quote_id: id.optional(), idempotency_key: id }).strict(), workforceActionSchema]),
   outputSchema: envelopeSchema, annotations: write,
 }, async (input, ctx) => toolResult(await authority(ctx)('POST', 'v1/actions/execute', input)));
+
+export const verifyAuthority = server.tool({
+  name: 'verify_authority', description: 'Check whether the authenticated caller may perform a workforce action. The decision cannot authorize later execution.',
+  inputSchema: workforceActionSchema, outputSchema: envelopeSchema, annotations: readOnly,
+}, async (input, ctx) => toolResult(await authority(ctx)('POST', 'v1/actions/verify', input)));
 
 export const revokeAuthority = server.tool({
   name: 'revoke_authority', description: 'Revoke authority as its issuer or organization owner.',
