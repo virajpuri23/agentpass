@@ -1,6 +1,6 @@
 import { createHash,randomBytes,randomUUID } from 'node:crypto';
 import express from 'express';
-import { afterEach,beforeEach,describe,it,expect } from 'vitest';
+import { afterEach,beforeEach,describe,it,expect,vi } from 'vitest';
 import { openDatabase } from '../../../db/database.js';
 import { migrateStore } from '../../../db/migrations.js';
 import { sqliteStore } from '../../../db/store.js';
@@ -95,6 +95,25 @@ describe('managed agent control (FIXTURE credential store and runner)',()=>{
     await expect(engine.authenticate(delivery.credential)).rejects.toMatchObject({result:{code:'INVALID_CALLER'}});
     expect((await control.get(parent,agent.agent_id)).state).toBe('FAILED');expect(secrets.secrets.size).toBe(0);
     expect(await control.claim(runner,{idempotency_key:'new-runner-attempt'})).toEqual({job:null});
+  });
+  it('recovers pending work at startup and cleans expired delivery without polling',async()=>{
+    secrets.failAfterCreate=true;const agent=await control.provision(parent,input());expect(agent.state).toBe('PENDING');
+    secrets.failAfterCreate=false;
+    vi.useFakeTimers();
+    const stop=await control.startReconciliation();
+    try{
+      expect((db.prepare('SELECT state FROM managed_agents WHERE id=?').get(agent.agent_id) as any).state).toBe('PROVISIONING');
+      const claim=(await control.claim(runner,{idempotency_key:'background-claim'})).job!;
+      const delivery=await control.deliver(runner,claim.job_id,{claim_id:claim.claim_id});
+      expect(await engine.authenticate(delivery.credential)).toBeDefined();
+      const remove=secrets.remove.bind(secrets);secrets.remove=async()=>{throw new Error('FIXTURE cleanup unavailable');};
+      now+=31000;await vi.advanceTimersByTimeAsync(10000);
+      expect((db.prepare('SELECT state FROM managed_agents WHERE id=?').get(agent.agent_id) as any).state).toBe('FAILED');
+      expect(secrets.secrets.size).toBe(1);secrets.remove=remove;
+      await vi.advanceTimersByTimeAsync(10000);
+      expect(secrets.secrets.size).toBe(0);
+      await expect(engine.authenticate(delivery.credential)).rejects.toMatchObject({result:{code:'INVALID_CALLER'}});
+    }finally{await stop();vi.useRealTimers();}
   });
   it('revocation is terminal, removes the secret, and blocks late child readiness/result',async()=>{
     const {agent,claim,delivery}=await delivered();const child=await engine.authenticate(delivery.credential);

@@ -1,5 +1,6 @@
 import { createHash,randomUUID,timingSafeEqual } from 'node:crypto';
 import type { Express,Request,Response,NextFunction } from 'express';
+import type { AuthorityStore } from '../../../db/store.js';
 import { z } from 'zod';
 import { onboardingSchemas as schemas,type AgentInstance,type Principal,type ProvisionAgentInput } from '../../../packages/contracts/src/index.js';
 import { AccountService } from './accounts.js';
@@ -12,7 +13,15 @@ type AgentRow={id:string;connection_id:string;organization_id:string;requester_a
 type JobRow={id:string;agent_id:string;launch_id:string;runner_id:string|null;claim_id:string|null;claim_key:string|null;lease_expires_at:string|null;attempts:number;delivered:number;outcome:'COMPLETED'|'FAILED'|null;result_fingerprint:string|null};
 const hash=(value:string)=>createHash('sha256').update(value).digest('hex');
 
+export async function assertManagedPrincipalLive(db:AuthorityStore,p:Principal,now:Date){
+  const row=await db.prepare('SELECT a.state,j.id AS job_id,j.delivered,j.outcome,j.lease_expires_at FROM managed_agents a LEFT JOIN agent_jobs j ON j.agent_id=a.id WHERE a.child_principal_id=?').get(p.id);
+  if(!row)return;
+  const expiry=Date.parse(row.lease_expires_at);
+  if(!row.job_id||['FAILED','REVOKED'].includes(row.state)||(row.delivered===1&&!row.outcome&&(!Number.isFinite(expiry)||expiry<=now.getTime())))deny('INVALID_CALLER','Managed child authority is no longer live',401);
+}
+
 export class AgentControl {
+  private reconciliationCursor='';
   constructor(readonly engine:AuthorityEngine,readonly options:AgentControlOptions){
     if(options.onboardingRunnerId&&!options.runners.some(r=>r.id===options.onboardingRunnerId))throw new Error('Trusted onboarding runner must be configured');
   }
@@ -52,6 +61,24 @@ export class AgentControl {
     if(!row?.cleanup_pending||!this.options.credentials)return;
     try{await this.options.credentials.remove(row.secret_reference);}catch{return;}
     await this.db.prepare('UPDATE managed_agents SET cleanup_pending=0 WHERE id=?').run(id);
+  }
+  async reconcileBatch(){
+    const rows=await this.db.prepare("SELECT id FROM managed_agents WHERE (state NOT IN ('FAILED','REVOKED') OR cleanup_pending=1) AND id>? ORDER BY id LIMIT 25").all(this.reconciliationCursor);
+    if(!rows.length){this.reconciliationCursor='';return;}
+    for(const row of rows){
+      this.reconciliationCursor=row.id;
+      try{await this.advance(row.id);}catch{/* Durable state is retried on the next pass. */}
+    }
+    if(rows.length<25)this.reconciliationCursor='';
+  }
+  async startReconciliation(){
+    await this.reconcileBatch();
+    let running:Promise<void>|undefined;
+    const timer=setInterval(()=>{
+      if(!running)running=this.reconcileBatch().catch(()=>{}).finally(()=>{running=undefined;});
+    },10000);
+    timer.unref();
+    return async()=>{clearInterval(timer);await running;};
   }
   async advance(id:string){
     let row=await this.db.transaction(async()=>this.reconcile((await this.row(id))!)).immediate();

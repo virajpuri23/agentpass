@@ -29,7 +29,9 @@ export async function authorityEndpoint(): Promise<string> {
   const db = postgresStore(process.env.DATABASE_URL);
   let supplierStore: ReturnType<typeof supplierPostgresStore> | undefined;
   const servers: Server[] = [];
+  let stopReconciliation:(()=>Promise<void>)|undefined;
   const close = async () => {
+    await stopReconciliation?.();
     await Promise.all(servers.map(server => new Promise<void>(resolve => server.close(() => resolve()))));
     await Promise.all([db.close(), supplierStore?.close()]);
   };
@@ -43,7 +45,9 @@ export async function authorityEndpoint(): Promise<string> {
       servers.push(supplier.server);
       supplierUrl = supplier.url;
     }
-    const authority = await listen(createAuthorityApp({db:db.store,supplier:new HttpSupplierService(supplierUrl,serviceKey),...onboarding}));
+    const app=createAuthorityApp({db:db.store,supplier:new HttpSupplierService(supplierUrl,serviceKey),...onboarding});
+    stopReconciliation=await app.locals.agentControl?.startReconciliation();
+    const authority = await listen(app);
     servers.push(authority.server);
     process.once('SIGTERM', () => {void close();});process.once('SIGINT', () => {void close();});
     return authority.url;
