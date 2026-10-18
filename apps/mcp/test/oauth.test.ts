@@ -161,6 +161,8 @@ describe('OAuth environment validation', () => {
   it('keeps legacy bearer-only startup when OAuth is absent and rejects partial/unsafe config', () => {
     expect(humanOAuthConfigFromEnv({})).toBeUndefined();
     expect(createHumanTokenVerifierFromEnv({})).toBeUndefined();
+    expect(humanOAuthConfigFromEnv({ MCP_PUBLIC_URL: resource })).toBeUndefined();
+    expect(createHumanTokenVerifierFromEnv({ MCP_PUBLIC_URL: resource })).toBeUndefined();
     expect(() => humanOAuthConfigFromEnv({ MCP_USE_OAUTH_AUTH0_DOMAIN: issuer })).toThrow(/together/);
     expect(() => humanOAuthConfigFromEnv({
       MCP_USE_OAUTH_AUTH0_DOMAIN: issuer,

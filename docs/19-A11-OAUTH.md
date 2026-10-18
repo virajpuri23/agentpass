@@ -1,4 +1,4 @@
-# A11 — MCP OAuth ingress
+# A11 — MCP OAuth ingress and trusted consent links
 
 The remote MCP app accepts Auth0 user access tokens when all of these variables
 are configured:
@@ -6,14 +6,17 @@ are configured:
 | Variable | Requirement |
 |---|---|
 | `MCP_USE_OAUTH_AUTH0_DOMAIN` | Auth0 tenant issuer/domain configured to publish its JWKS. |
-| `MCP_PUBLIC_URL` | Canonical HTTPS URL of the MCP endpoint, including `/mcp`. Localhost HTTP is allowed only for development. |
+| `MCP_PUBLIC_URL` | Canonical HTTPS URL of the MCP endpoint, including `/mcp`. Localhost HTTP is allowed only for development. This existing setting alone does not enable OAuth. |
 | `AGENTPASS_OAUTH_CLIENT_IDS` | Comma-separated exact client IDs approved for the MCP connection, configured by an operator. |
 | `MCP_USE_OAUTH_AUTH0_AUDIENCE` | Optional compatibility alias. If set, it must identify the same canonical resource as `MCP_PUBLIC_URL`. Leave it unset otherwise. |
 
 Set all three required values together. A partial or unsafe configuration fails
-startup. With all OAuth values absent, legacy opaque agent credentials continue
-to work. Never derive the MCP resource from the inbound `Host` or forwarded-host
-headers.
+startup. When the Auth0 domain, client allowlist and audience are all absent,
+`MCP_PUBLIC_URL` by itself leaves legacy opaque-agent authentication enabled.
+Never derive the MCP resource from the inbound `Host` or forwarded-host headers.
+The embedded PostgreSQL authority checks onboarding migration checksums before
+opening listeners when OAuth is enabled; it does not apply migrations at
+startup.
 
 Configure the Auth0 API audience to the exact `MCP_PUBLIC_URL` and grant the
 `agentpass:connect` API permission to each approved client. The scope identifies
@@ -42,9 +45,28 @@ authority failures deny access.
 For the first-party browser consent client, use a separate verifier configured
 with only its approved client ID. Do not add it to
 `AGENTPASS_OAUTH_CLIENT_IDS` unless it is also meant to use the public MCP
-connection flow. Consent still requires the one-use, CSRF-bound browser state
-described in [A9](18-A9-ONBOARDING-CONTRACTS.md); a valid OAuth token alone is
-not consent to issue authority.
+connection flow. Configure `AGENTPASS_CONSENT_CLIENT_ID`,
+`AGENTPASS_CONSENT_CLIENT_SECRET`, and a 64-character hex
+`AGENTPASS_CONSENT_SESSION_KEY` together. Set the policy with
+`AGENTPASS_ONBOARDING_SUPPLIER_IDS`, `AGENTPASS_ONBOARDING_SKU_IDS`,
+`AGENTPASS_ONBOARDING_MAX_BUDGET_CENTS`, and
+`AGENTPASS_ONBOARDING_MAX_PER_ACTION_CENTS`. Consent still requires the
+one-use, CSRF-bound browser state described in
+[A9](18-A9-ONBOARDING-CONTRACTS.md); a valid OAuth token alone is not consent
+to issue authority.
+
+The MCP server exposes the six account-onboarding tools from the shared A9
+contract: `get_onboarding_context`, `provision_agent`, `list_agents`,
+`get_agent`, `revoke_agent`, and `revoke_connection`. Context inspection adds a
+trusted `/onboarding?connection=...` link as a separate text block when the
+persisted connection requires consent. The link uses `MCP_PUBLIC_URL`; the
+connection ID comes from the authority response, and the consent form remains
+hosted by the authority service. The MCP server proxies only GET and POST
+requests under `/onboarding`, caps request bodies at 2 KiB, forwards only cookie,
+origin and content-type, and never forwards the MCP bearer token. These tools
+use the authenticated HTTP MCP request; private runner claim, credential,
+heartbeat and result endpoints are not published as MCP tools. The existing
+CLI opaque-agent onboarding path remains available.
 
 Keep client IDs and provider settings in the deployment's private environment
 configuration. Do not commit provider secrets. Provider revocation notifications
@@ -58,7 +80,9 @@ The automated OAuth tests use a local test signing key and local JWKS fixture.
 They cover valid signatures and resource binding, invalid issuer/audience/signature,
 expiry and token lifetime, client allowlisting/conflicts, missing scope, Auth0
 machine subjects, service-key compatibility, and the no-JWT-fallback rule. They
-do not use a real Auth0 tenant, ChatGPT/Claude registration, user consent browser,
-or hosted database. Real host login, refresh, and revocation behavior remain
-unverified until private provider configuration and callback registration are
-available.
+do not use a real Auth0 tenant, ChatGPT/Claude registration, or hosted database.
+The consent proxy has local positive and negative tests for its header allowlist,
+redirect/cookie preservation, method restriction and 2 KiB body limit. The MCP
+onboarding fixture exercises the public tool routes with a local authority. Real
+host login, refresh, and revocation behavior remain unverified until private
+provider configuration and callback registration are available.

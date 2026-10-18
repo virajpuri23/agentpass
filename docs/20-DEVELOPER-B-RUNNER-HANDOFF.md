@@ -103,6 +103,9 @@ Relevant private deployment settings:
   enabled in production. Missing storage returns `SERVICE_UNAVAILABLE`.
 - `AGENTPASS_RUNNERS_JSON`: array of `{id,keyHash,organizationIds}` admissions.
   Supply hashes privately; never commit real runner credentials or tenant IDs.
+  A newly created workspace must be explicitly admitted before a runner can claim
+  its jobs. Public automatic runner enrollment is not implemented; without admission
+  provisioning stays PROVISIONING and must not be presented as a running worker.
 - Apply the ordered account and runner migrations with the seed-free migration
   command before compatible application code. Do not reset demo keys or ledgers.
 - OAuth/consent values and host setup are in `19-A11-OAUTH.md` and the coordinating

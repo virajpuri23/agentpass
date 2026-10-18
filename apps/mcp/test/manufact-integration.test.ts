@@ -17,7 +17,7 @@ import { seedPostgres } from '../../../db/seed-postgres.js';
 import { createAuthorityApp } from '../../authority/src/app.js';
 import { HttpSupplierService } from '../../authority/src/supplier.js';
 
-const tools = ['provision_child','describe_authority','get_my_grants','request_authority','get_authority_request','respond_authority_request','accept_authority_offer','delegate_authority','execute_action','revoke_authority'];
+const tools = ['provision_child','describe_authority','get_my_grants','get_onboarding_context','provision_agent','list_agents','get_agent','revoke_agent','revoke_connection','request_authority','get_authority_request','respond_authority_request','accept_authority_offer','delegate_authority','execute_action','revoke_authority'];
 const keys = {'owner-1':'manufact-fixture-owner','buyer-agent':'manufact-fixture-buyer','sourcing-agent':'manufact-fixture-sourcing','supplier-agent':'manufact-fixture-supplier'};
 async function listen(server: Server) {
   server.listen(0,'127.0.0.1');
@@ -75,6 +75,7 @@ for (const backend of ['sqlite','postgres'] as const) describe(`Manufact HTTP MC
       const listed=await buyer.listTools();expect(listed.tools.map(t=>t.name).sort()).toEqual([...tools].sort());expect(listed.tools.every(t=>t.outputSchema)).toBe(true);
       async function call(client:Client,name:string,args:Record<string,unknown>={}) {return await client.callTool({name,arguments:args});}
       async function ok(client:Client,name:string,args:Record<string,unknown>={}) {const r=await call(client,name,args);expect(r.structuredContent,JSON.stringify(r.structuredContent)).toMatchObject({status:'OK'});return (r.structuredContent as any).data;}
+      expect((await call(buyer,'get_onboarding_context')).structuredContent).toMatchObject({status:'DENIED',code:'INVALID_CALLER'});
       const description=await ok(buyer,'describe_authority');expect(description.actions).toContain('supplier.purchase.execute');
       expect((await ok(buyer,'get_my_grants')).grants[0].scope.total_budget_cents).toBe(100000);
       expect((await ok(sourcing,'get_my_grants')).grants).toEqual([]);

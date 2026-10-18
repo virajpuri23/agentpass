@@ -57,8 +57,11 @@ function normalizedConfig(config: HumanOAuthConfig): { issuer: URL; resource: UR
 
 export function humanOAuthConfigFromEnv(env: OAuthEnvironment = process.env): HumanOAuthConfig | undefined {
   const keys = ['MCP_USE_OAUTH_AUTH0_DOMAIN', 'MCP_PUBLIC_URL', 'AGENTPASS_OAUTH_CLIENT_IDS'] as const;
+  const oauthConfigured = env.MCP_USE_OAUTH_AUTH0_DOMAIN !== undefined
+    || env.AGENTPASS_OAUTH_CLIENT_IDS !== undefined
+    || env.MCP_USE_OAUTH_AUTH0_AUDIENCE !== undefined;
+  if (!oauthConfigured) return undefined;
   const present = keys.filter((key) => env[key] !== undefined);
-  if (present.length === 0 && env.MCP_USE_OAUTH_AUTH0_AUDIENCE === undefined) return undefined;
   if (present.length !== keys.length) throw new Error('Configure MCP_USE_OAUTH_AUTH0_DOMAIN, MCP_PUBLIC_URL, and AGENTPASS_OAUTH_CLIENT_IDS together.');
 
   const resource = parseUrl(env.MCP_PUBLIC_URL!, 'MCP_PUBLIC_URL');
