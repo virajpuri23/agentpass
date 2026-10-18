@@ -1,11 +1,10 @@
 # Self-service onboarding implementation and rollout
 
-October 17, 2026. Stack: Manufact hosting, Supabase Auth, PostgreSQL and Vault.
-The user selected this stack after the initial Auth0 adapter was drafted; Auth0 is
-not required by the current path. Work is on `codex/onboarding-contracts`, draft
-[PR #14](https://github.com/virajpuri23/agentpass/pull/14), based on
-`feat/authority-core`. This document distinguishes local implementation from the
-external gates that still prevent a public release.
+**Historical snapshot — October 17, 2026.** This record preserves the then-current
+Supabase/Manufact configuration, database migration, Vault and preview evidence.
+It predates PR #14's merge. For current deployment and hosted provisioning results,
+see the [headless release status](23-HEADLESS-RELEASE.md). Any pending gate or rollout
+status below reflects October 17 only.
 
 ## Implemented local behavior
 
