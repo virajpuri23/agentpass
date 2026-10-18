@@ -137,6 +137,7 @@ export function createSupabaseLoginRouter(
       },
       ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
     });
+    if (response.status === 429 && path.startsWith('otp?')) throw new LoginError(429, 'The sign-in email limit has been reached. Wait for the sender limit to reset, then restart sign-in from Manufact and open the new email within five minutes.');
     if (!response.ok) throw new LoginError(503, 'Supabase authentication could not be completed.');
     try { return await response.json() as unknown; }
     catch { throw new LoginError(503, 'Supabase authentication returned an invalid response.'); }
