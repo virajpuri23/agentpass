@@ -196,12 +196,24 @@ not a hosted Supabase Auth, model-worker, ChatGPT or Claude success claim.
 PostgreSQL. Full suite/typecheck/build results and exact revision are recorded
 after final integration verification below.
 
-Final local code revision: `3f46288` (documentation-only updates follow). Node 24:
+Final local code revision: `7e9af22` (documentation-only updates follow). Node 24:
 root TypeScript check, nested MCP TypeScript check and production build passed.
-All **186 tests passed, none skipped, across 28 files**, with both disposable
+All **191 tests passed, none skipped, across 28 files**, with both disposable
 PostgreSQL variables enabled and files run serially. This includes the original
 golden path, official SDK MCP lifecycle, ES256 JWT checks, trusted OTP/consent,
 resource hook, assignment restart, revocation, isolation and shared-budget races.
+The A-only readiness follow-up also reproduced and fixed expired-lease access
+without control polling: principal and ancestor checks now reject delivered
+children with expired or invalid leases before any protected action. A bounded
+25-row reconciliation pass runs at startup and every ten seconds in both authority
+entry points, recovers pending issuance and retries private-secret cleanup; shutdown
+waits for an active pass. Tests cover child and descendant denial, startup recovery,
+and cleanup failure/retry. Authorization does not depend on that timer firing.
+
+OAuth startup now requires the complete trusted consent/login configuration.
+Runner/Vault settings without OAuth fail instead of silently enabling legacy mode.
+The old `MCP_USE_OAUTH_SUPABASE_JWT_SECRET` setting is rejected: the installed
+provider would otherwise select shared-secret verification rather than ES256/JWKS.
 Documentation links and `git diff --check` also pass. No GitHub Actions workflow
 is configured in this checkout; local checks are the available automated evidence.
 
@@ -225,3 +237,10 @@ required checks before any production merge; the A target auto-deploys.
 
 See [the B runtime handoff](20-DEVELOPER-B-RUNNER-HANDOFF.md). A15/A16 remain open
 until these real integration gates pass.
+
+The user's current scope is **Developer A only**. The A-owned implementation and
+local fixture gates are complete; B's worker is deferred rather than implemented
+by A. Full A11/A16 release acceptance still needs a running compatible deployment,
+Supabase OAuth/client/hook and email configuration, and the real ChatGPT/Claude
+login, refresh, reconnect, isolation and revocation evidence. The user has paused
+the hosted preview rollout, so these are pending release gates, not local passes.

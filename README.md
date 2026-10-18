@@ -1,6 +1,8 @@
 # AgentPass — YC Make Something Agents Want, October 17–18, 2026
 
-> **Status: hackathon implementation specification, not a completed app.**
+> **Status:** The core authority demo is implemented and deployed. Developer A's
+> self-service onboarding logic is implemented and locally verified, but public
+> OAuth onboarding is not configured or released; see [current rollout status](docs/21-SELF-SERVICE-ROLLOUT.md).
 > **Submission:** Sunday October 18, 2026, **10:00 AM Pacific**. Everything here is designed to be put in a Git repository and shared with two developers.
 
 ## The 20-second pitch
@@ -23,11 +25,13 @@ All purchases are **simulated**. No live inventory or payment is touched.
 
 `AGENTS.md` has repository instructions for Codex/other coding agents. `contracts/` provides wire examples; `packages/contracts/src/index.ts` defines stable shared types. `db/schema.sql` is a SQLite-oriented starting schema, **not a production-ready migration**.
 
-**Next planned Developer A work:** [self-service MCP onboarding plan](docs/17-SELF-SERVICE-ONBOARDING-PLAN.md)
-covers verified human sign-in, automatic personal workspaces, consented assistant
-connections, private child credential delivery and the Developer B worker handoff.
-It records the implemented baseline, file ownership, proposed contracts, tests and
-rollout gates. These self-service capabilities are planned, not shipped.
+**Developer A self-service onboarding:** the [implementation plan](docs/17-SELF-SERVICE-ONBOARDING-PLAN.md)
+and [rollout status](docs/21-SELF-SERVICE-ROLLOUT.md) describe verified identity
+logic, personal workspaces, bounded consent, conversational MCP tools, private
+child credential delivery and durable runner control. The A-owned application
+logic is implemented; live OAuth and host journeys remain unverified, and hosted
+preview rollout is paused. The optional Developer B worker is outside the current
+Developer A scope.
 
 ## Scope promise
 
@@ -77,7 +81,9 @@ agentpass/
     run-e2e.ts
 ```
 
-> **Important:** This kit supplies specifications, contracts, schema, fixtures, and repo coordination documents; it is **not** claiming the application is implemented or deployed.
+> **Important:** This repository includes specifications, contracts, schema,
+> fixtures and application code. The core demo is deployed; self-service
+> onboarding remains unreleased pending live OAuth and host verification.
 
 ## Implementation quickstart
 
@@ -85,13 +91,13 @@ Read [`docs/12-IMPLEMENTATION-QUICKSTART.md`](docs/12-IMPLEMENTATION-QUICKSTART.
 
 ## Manufact MCP App v2
 
-**Current verification:** all 69 local tests pass, including the embedded MCP → authority → Developer B supplier workflow with durable PostgreSQL. The v2 app is deployed and the complete workflow passes through independent hosted MCP clients: trusted $850 quote, actionable authority denial, $1200 → $900 negotiation, $850 purchase/replay, revocation, expiry, caller isolation, and concurrent ancestor-budget enforcement. Both private schemas use Supabase project `ebkcaqaybuklllefvuyv` (`https://ebkcaqaybuklllefvuyv.supabase.co`). See [hosted verification evidence](docs/14-MANUFACT-VERIFICATION.md).
+The earlier hosted core-demo verification is recorded in [14](docs/14-MANUFACT-VERIFICATION.md); it predates self-service onboarding. At code revision `7e9af22`, the A implementation passed **191 local tests**, root and nested typechecks, and the nested MCP production build. The four additive Supabase migrations, all 13 onboarding/control-table RLS settings and a bounded Vault round-trip were separately verified; no pre-existing row counts changed. See the [current rollout record](docs/21-SELF-SERVICE-ROLLOUT.md). The onboarding code has not been deployed: Manufact rejected its preview before build under the current plan, and hosted preview rollout is paused. OAuth remains off; real OAuth, ChatGPT/Claude journeys and B worker integration are unverified.
 
 - MCP URL: https://fast-steel-94x84.run.mcp-use.com/mcp
 - Dashboard: https://manufact.com/cloud/org-ab91b9e3-2lgi6/servers/f01e0537-092c-48c0-b6a6-66132aa93099/overview
 - Server ID: `f01e0537-092c-48c0-b6a6-66132aa93099`
 - First verified v2 deployment: `0600457a-b145-4c48-9ede-896997b13fdd` at `49739cba5296b5fff3afe304eb08becd674a5407`. Later commits may create new deployments; consult the dashboard for the active ID.
-- The failed v2 preview `7236c64a-319e-4405-9d5e-9e7beab68cd2` was blocked before building by the free plan's preview restriction. With user approval, production now targets `feat/authority-core`. The build context must be the repository root because the MCP adapter imports shared authority and supplier modules; the start command selects the nested MCP App.
+- The earlier failed v2 preview `7236c64a-319e-4405-9d5e-9e7beab68cd2` was blocked before building by the free-plan restriction. The later onboarding preview was also blocked before build; its ID and the user's decision to pause are recorded in [21](docs/21-SELF-SERVICE-ROLLOUT.md). Production remains on `feat/authority-core`; the A onboarding implementation has not been deployed. The build context must be the repository root because the MCP adapter imports shared authority and supplier modules; the start command selects the nested MCP App.
 
 Use Node **22.22.2+** for the MCP App (Node 24 recommended). If dependencies were installed under a different Node major, run `npm rebuild better-sqlite3` after switching. The existing stdio adapter remains available for headless per-agent processes. The nested app was generated with the required official `mcp-apps` template and pins published `mcp-use@2.8.2`.
 
@@ -254,5 +260,6 @@ and separate client connection, then requires explicit bounded consent before
 provisioning children. The backend handles credentials privately; people do not
 enter organization/principal IDs or copy child keys. The implementation and local
 fixture evidence are in [the rollout runbook](docs/21-SELF-SERVICE-ROLLOUT.md).
-Real Supabase Auth/Vault, B's worker and ChatGPT/Claude staging gates remain open; this is
-not yet a released public onboarding service.
+The hosted Vault check has passed, but real Supabase OAuth and ChatGPT/Claude
+staging gates remain open. This is not yet a released public onboarding service;
+the B worker remains outside the current Developer A scope.

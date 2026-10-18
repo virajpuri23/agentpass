@@ -6,6 +6,8 @@ model-provider configuration and the live demo runner. All orders remain simulat
 The additive A9 protocol was accepted by B through the user's confirmation in the
 coordinating chat. Schemas are exported as `onboardingSchemas` from
 `packages/contracts/src/index.ts`; reuse these rather than inventing payloads.
+The A-owned implementation and fixture tests are complete. B's worker remains
+unimplemented in this checkout and is outside the current A-only task.
 
 ## Existing B baseline
 
@@ -133,13 +135,15 @@ Relevant private deployment settings:
   a trusted policy cap and explicit human consent/allocation; reconnect must not
   replenish it. Existing hosted budgets must be read before selecting the demo.
 
-Before enabling Vault, verify extension availability and use a dedicated backend
-role. Revoke PUBLIC/anon/authenticated/worker access to Vault secrets/decrypted views
-and creation/deletion functions; keep Vault out of public Data API exposure. SQL
-parameter/body logging must not capture secret arguments. A's adapter uses
-parameterized `vault.create_secret` and `vault.decrypted_secrets`; actual Vault
-storage/privileges are UNVERIFIED until a dedicated staging test passes. See the
-[official Vault documentation](https://supabase.com/docs/guides/database/vault).
+The approved hosted Supabase project has passed a bounded Vault adapter round-trip
+and privilege checks: `anon` and `authenticated` cannot read ciphertext or
+plaintext, and the random fixture secret was removed. See [current rollout
+evidence](21-SELF-SERVICE-ROLLOUT.md). This does not verify credential delivery to
+a worker. Before enabling the store in a new environment, verify extension
+availability and use a dedicated backend role. Keep Vault out of public Data API
+exposure and ensure SQL parameter/body logging cannot capture secret arguments.
+The adapter uses parameterized `vault.create_secret` and `vault.decrypted_secrets`.
+See the [official Vault documentation](https://supabase.com/docs/guides/database/vault).
 
 ## Supplier recovery dependency, separate from normal happy-path execution
 
@@ -174,6 +178,8 @@ B's integrated gate must prove:
   connection/agent/job/claim/receipt/audit IDs and outcomes are recorded. Test both
   real ChatGPT and Claude hosts before claiming either host journey complete.
 
-Production rollout, actual Auth0/Vault configuration and both real host journeys
-remain coordinated staging gates. Do not merge into an auto-deploying branch or
-run hosted migrations as an incidental test.
+The selected provider is Supabase; the earlier Auth0 draft is superseded. Hosted
+Supabase OAuth is still disabled, the Manufact preview is paused, and real
+ChatGPT/Claude journeys remain unverified. Do not merge into the auto-deploying
+production branch or run further hosted migrations as incidental tests. See the
+[current A rollout status](21-SELF-SERVICE-ROLLOUT.md).

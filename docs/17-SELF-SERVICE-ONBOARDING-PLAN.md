@@ -1,6 +1,6 @@
 # Self-service MCP onboarding — Developer A implementation plan
 
-**Status:** A9 agreement recorded; A10–A15 local implementation and fixture verification are complete. The selected stack is Manufact + Supabase. Real provider, Vault, B worker and host rollout gates remain open. See [current rollout status](21-SELF-SERVICE-ROLLOUT.md). No deployment is authorized by this document.
+**Status:** Developer A's A9–A15 application logic is implemented, and its local fixture gates passed; A16's runbook is updated. At code revision `7e9af22`, 191 local tests, both typechecks and the MCP production build passed. The four additive Supabase migrations, 13-table RLS check and private Vault round-trip also passed. Supabase OAuth remains off; real ChatGPT/Claude journeys are unverified. Manufact preview rollout is paused after a free-plan rejection. Developer B's worker is outside the current A-only scope. See [current rollout status](21-SELF-SERVICE-ROLLOUT.md); this is not a production-readiness claim.
 **Planning baseline:** October 17, 2026, commit `4620555` on
 `codex/agent-onboarding`, [PR #11](https://github.com/virajpuri23/agentpass/pull/11).
 **Goal:** a person connects AgentPass from ChatGPT, Claude, or another compatible
@@ -22,13 +22,13 @@ engine, supplier policy, ledger, bearer clients and frozen scope contract.
 | MCP adapters | Current branch exposes ten tools, including `provision_child`; no OAuth account connection yet. |
 | Headless onboarding and child provisioning | Implemented on PR #11; private runtime credential file, verifier-only registration, atomic creation and inherited revocation. See [16](16-CHILD-PROVISIONING.md). |
 | Human inspection | Local console and embedded inspector verified; hosted console/OAuth remain unverified. See [15](15-AUTHORITY-CONSOLE.md). |
-| Latest completed validation | 97 tests passed with SQLite and disposable local PostgreSQL; root/nested typechecks and MCP build passed. Separate real local simulated-supplier proof: provision, $850 purchase within $900, revoke. These are not live LLM worker or ChatGPT/Claude OAuth proofs. |
+| Latest validation at the planning baseline | 97 tests passed with SQLite and disposable local PostgreSQL; root/nested typechecks and MCP build passed. Separate real local simulated-supplier proof: provision, $850 purchase within $900, revoke. This historical baseline is superseded by the current 191-test evidence in [21](21-SELF-SERVICE-ROLLOUT.md); neither run proves a live LLM worker or ChatGPT/Claude OAuth journey. |
 | Public self-service accounts | Missing: OAuth configuration, external identities, memberships, connection consent and automatic personal workspaces. |
 | Hosted agents | Missing in this checkout: private runtime credential delivery, durable launch/control integration and an actual worker journey. A successful tool call does not launch a model by itself. |
 
-PR #11 was not incorporated into `feat/authority-core` at planning time. Recheck
-the remote before implementation. The target branch auto-deploys; do not merge a
-schema-dependent change there before its rollout gate.
+PR #11 and the table above are planning history. The current A implementation is
+in draft PR #14. `feat/authority-core` auto-deploys; the onboarding code has not
+been merged or deployed, and the user has paused hosted preview rollout. See [21](21-SELF-SERVICE-ROLLOUT.md) before any future rollout work.
 
 ## 2. First-release scope and assumptions
 
@@ -154,28 +154,30 @@ the real provider/host/worker gates.
 ### A9 — Freeze the additive design and fixture contracts
 
 Current decision/contract pack: [A9 onboarding review](18-A9-ONBOARDING-CONTRACTS.md).
-A-side validators/fixtures are implemented; B acceptance was confirmed by the
-user and the contract was promoted. The user then selected Manufact + Supabase,
-replacing the initial Auth0 target with Supabase Auth. Supabase Auth and Vault are integration
-targets, not configured or hosted-verified services.
+A-side validators, fixtures and implementation are complete. Developer B accepted
+the shared proposal, as confirmed by the user. Manufact + Supabase is the selected
+stack; Supabase replaced the initial Auth0 draft. The four approved migrations,
+all 13 RLS settings and private Vault round-trip are hosted-verified. Supabase
+OAuth remains unconfigured and disabled; the provider/host gate is still open.
 
 **Reach:** this plan, [02](02-API-CONTRACTS.md), agreed shared types/fixtures,
 provider and secret-store configuration inventory. Record decisions without secrets.
 
-- Choose a provider supporting the required MCP discovery/client/PKCE flow and a
-  private secret store available to the intended runner. Inspect installed exports.
-- Inventory issuer/discovery/JWKS URLs, canonical MCP resource/audience, allowed
-  clients/redirects, session/refresh limits, and runner/secret-store access. Record
-  non-secret settings in the runbook; configure private values only through the
-  deployment secret manager, never chat, model prompts or tracked files.
-- Agree connection selection/binding, internal auth propagation, consent flow,
-  user-visible state meanings, runner contract and initial policy limits with B.
-- Identify the schema-only migration command and staging deployment path; today's
-  `setup:postgres` also seeds demo principals and requires their keys.
-- **Gate:** valid fixture lifecycle accepted by both sides; forged identity and
-  widened-scope fixtures rejected. Contracts have recorded A/B agreement.
-- **Cutoff:** no handler implementation against guessed endpoints, new shared
-  types, fake OAuth or a runner B has not agreed to provide.
+- Selected Supabase Auth/Vault with Manufact hosting and the installed MCP OAuth
+  provider. Auth0 was an early draft and is superseded.
+- Recorded issuer, JWKS, MCP resource/audience, approved client/redirect rules,
+  consent, session limits and private configuration in [19](19-A11-OAUTH.md) and
+  [21](21-SELF-SERVICE-ROLLOUT.md); no secrets are stored in the docs.
+- Agreed connection binding, consent behavior, runner boundary and shared contract
+  with B. The user confirmed B's acceptance; see [18](18-A9-ONBOARDING-CONTRACTS.md).
+- Added the seed-free migration command and ordered migration inventory; see [21](21-SELF-SERVICE-ROLLOUT.md).
+- **Gate:** accepted fixture lifecycle, rejection of forged identity and widened
+  scope, and recorded A/B contract agreement.
+- **Cutoff:** no handlers against guessed endpoints, new shared types, fake OAuth
+  or an unapproved runner.
+
+**A-side status:** accepted contract and executable source are implemented; local
+contract/security tests pass. Hosted OAuth is not enabled.
 
 ### A10 — Persist accounts, membership and connections
 
@@ -191,8 +193,12 @@ provider and secret-store configuration inventory. Record decisions without secr
 - **Gate:** concurrent first sign-ins yield one account/workspace; two organizations
   remain isolated; reconnect preserves policy/usage; migration preserves baseline
   data on SQLite and disposable PostgreSQL. Existing bearer suites stay green.
-- **Cutoff:** no hosted schema write, invitations, SSO, email-based account merging
-  or generalized RBAC engine.
+- **Cutoff:** no invitations, SSO, email-based account merging or generalized RBAC
+  engine. The four additive hosted migrations were applied under separate user
+  approval; checksums and unchanged legacy row counts are recorded in [21](21-SELF-SERVICE-ROLLOUT.md).
+
+**A-side status:** persistence, migration runner and account/membership/connection
+logic are implemented and locally verified; hosted migrations and RLS checks pass.
 
 ### A11 — Implement real OAuth ingress and connection binding
 
@@ -214,6 +220,11 @@ provider and secret-store configuration inventory. Record decisions without secr
 - **Cutoff:** if private provider configuration is unavailable, continue independent
   fixture work and report real OAuth as BLOCKED/UNVERIFIED; do not fake success.
 
+**A-side status:** Supabase JWT/resource validation and first-party login/consent
+source are implemented and fixture-tested. Live Supabase OAuth/client/hook setup,
+login, refresh and revocation remain UNVERIFIED; OAuth is off while preview rollout
+is paused.
+
 ### A12 — Implement personal workspace bootstrap and consent
 
 **Reach:** authority-owned account/consent routes, grant bootstrap, persistence/tests.
@@ -231,6 +242,10 @@ provider and secret-store configuration inventory. Record decisions without secr
 - **Cutoff:** no company self-claim, invitation flow, dashboard redesign or public
   root-grant minting tool.
 
+**A-side status:** personal-workspace bootstrap, bounded consent and replay-safe
+allocation are implemented and fixture-tested. A real provider login is still
+unverified.
+
 ### A13 — Add the conversational MCP control tools
 
 **Reach:** authority services/routes, MCP adapters, contracts agreed in A9 and tests.
@@ -245,6 +260,9 @@ provider and secret-store configuration inventory. Record decisions without secr
   All existing tools and headless CLI flows remain compatible.
 - **Cutoff:** `PENDING` is not `READY`; missing runner/secret delivery cannot be
   described as a launched agent.
+
+**A-side status:** the six remote MCP tools and connection-bound access controls
+are implemented and fixture-tested. They have not been deployed to the hosted MCP.
 
 ### A14 — Implement private delivery and durable runner control
 
@@ -269,6 +287,10 @@ B consumes the agreed contract without A modifying B's worker source.
   and sandbox implementation remain B's deliverable; cross-host enrollment and
   credential rotation are later work.
 
+**A-side status:** durable jobs, leases, private credential delivery and recovery
+are implemented and fixture-tested; the hosted Vault adapter round-trip passed.
+No actual worker delivery or model launch has been verified.
+
 ### A15 — Complete provenance, revocation and A/B integration
 
 **Reach:** authority audit/auth/control paths, agreed audit types, A integration
@@ -286,6 +308,10 @@ tests; B owns the actual fixed-template worker and live demo runner.
   descendant and correlate real audit/ledger rows with sanitized runtime events.
 - **Cutoff:** A can finish fixture coverage independently, but cannot mark this
   integrated gate passed until B's actual runner works. No real payments.
+
+**A-side status:** provenance and revocation enforcement are implemented and
+fixture-tested. The B-runner integration gate is deliberately deferred from this
+A-only task and remains unverified.
 
 ### A16 — Verify both hosts and perform the staged rollout
 
@@ -308,6 +334,10 @@ explicit rollout authorization. B supplies the worker deployment and UI handoff.
 - **Cutoff:** no production merge/deploy, provider configuration mutation, hosted
   migration or allocation reset as an incidental part of local implementation.
 
+**A-side status:** rollout instructions and evidence are current, but A16's live
+OAuth and ChatGPT/Claude gates are UNVERIFIED. Manufact preview rollout is paused;
+no production-ready claim is made.
+
 ## 7. Developer B handoff and overall definition of done
 
 A supplies the agreed wire fixtures, lifecycle semantics, authenticated private
@@ -324,9 +354,10 @@ by persisted authority and supplier policy. Tests must prove retries, restart
 recovery, tenant isolation, no budget replenishment and no secret disclosure.
 
 Use `PASSED`, `FAILED`, `BLOCKED`, `FIXTURE` and `UNVERIFIED` literally in handoffs.
-The overall self-service feature is unfinished while real OAuth, the B worker or
-either promised host journey remains unverified, even if A's independent slice is
-complete. Re-run the original golden path; never trade its safety gates for signup.
+The A-owned implementation is complete, but the overall self-service release is
+unfinished while real OAuth or either promised host journey remains unverified.
+The B worker gate is outside the current A-only scope and also remains open. Re-run
+the original golden path; never trade its safety gates for signup.
 
 ## 8. Implementation documentation and sources
 
