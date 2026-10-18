@@ -1,5 +1,10 @@
 # Inspect each local product run
 
+> Historical implementation/verification record. Branch names, OAuth state and
+> deployment IDs below apply to that milestone. For the consolidated inventory
+> and latest documented handoff, see [experiences](25-EXPERIENCES.md) and
+> [operations](26-OPERATIONS.md#current-oauth-sign-in-handoff).
+
 A run is a correlated sequence of real authority calls, not proof that a model or
 Developer B worker is running. Events and simulated receipts come from persisted
 authority data. No new policy engine, scope type or grant semantics are added.

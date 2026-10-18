@@ -1,5 +1,11 @@
 # AgentPass private plugin
 
+For all related sites, demos, views and screenshots, see the repository
+[experience catalog](../../../docs/25-EXPERIENCES.md). The verification notes below
+record the bearer-plugin milestone. Later server OAuth work is tracked in
+[the operations handoff](../../../docs/26-OPERATIONS.md#current-oauth-sign-in-handoff);
+it does not change this package's bearer manifest or establish new-host readiness.
+
 `agentpass/` is a portable Agent Plugins 1.0 package for the existing hosted MCP
 service. It contains one authority workflow skill, a bearer-authenticated remote
 MCP connection and an icon. It contains no credentials or server runtime.

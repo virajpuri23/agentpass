@@ -1,5 +1,10 @@
 # Manufact v2 deployment verification — October 17, 2026
 
+> Historical implementation/verification record. Branch names, OAuth state and
+> deployment IDs below apply to that milestone. For the consolidated inventory
+> and latest documented handoff, see [experiences](25-EXPERIENCES.md) and
+> [operations](26-OPERATIONS.md#current-oauth-sign-in-handoff).
+
 The hosted MCP → authority → Developer B supplier flow passed through independent SDK clients. The official mcp-use CLI also connected distinct buyer/sourcing clients and discovered the exact nine contracted tools.
 
 - MCP: https://fast-steel-94x84.run.mcp-use.com/mcp

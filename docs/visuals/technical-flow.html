@@ -1,0 +1,180 @@
+<div id="agentpass-technical-flow">
+  <div class="ap-heading">
+    <div><div class="text-small text-muted">AGENTPASS · TECHNICAL WALKTHROUGH</div><h2 id="ap-title">One authority layer. Any agent client.</h2></div>
+  </div>
+  <div class="viz-controls" aria-label="Walkthrough sections">
+    <button type="button" class="btn" data-step="0" aria-pressed="true">1 · System</button>
+    <button type="button" class="btn" data-step="1" aria-pressed="false">2 · Grants</button>
+    <button type="button" class="btn" data-step="2" aria-pressed="false">3 · Negotiate</button>
+    <button type="button" class="btn" data-step="3" aria-pressed="false">4 · Execute</button>
+    <button type="button" class="btn" data-step="4" aria-pressed="false">5 · Revoke</button>
+  </div>
+  <div id="ap-diagram"></div>
+  <div class="ap-takeaway" id="ap-takeaway" aria-live="polite"></div>
+  <div class="text-small text-muted ap-footnote">Architecture illustration · scopes and responses shown as examples</div>
+</div>
+<style>
+  #agentpass-technical-flow {color:var(--foreground);--ap-ink:var(--viz-series-1);}
+  #agentpass-technical-flow .ap-heading{padding:12px 100px 8px 0;}
+  #agentpass-technical-flow h2{margin:6px 0 12px;}
+  #agentpass-technical-flow .viz-controls{margin-bottom:12px;}
+  #agentpass-technical-flow .ap-takeaway{padding:14px 0 8px;font-weight:500;}
+  #agentpass-technical-flow .ap-footnote{padding:4px 0 12px;}
+  #agentpass-technical-flow svg{display:block;max-width:100%;overflow:visible;}
+  #agentpass-technical-flow svg text{fill:var(--foreground);font-size:14px;font-family:inherit;}
+  #agentpass-technical-flow svg .small{font-size:12px;}
+  #agentpass-technical-flow svg .muted{fill:var(--muted-foreground);}
+  #agentpass-technical-flow svg .strong{font-weight:500;}
+  #agentpass-technical-flow svg .node{fill:var(--background);stroke:var(--border);stroke-width:1;}
+  #agentpass-technical-flow svg .focus{fill:color-mix(in srgb,var(--ap-ink) 8%,var(--background));stroke:var(--ap-ink);stroke-width:1.5;}
+  #agentpass-technical-flow svg .line{fill:none;stroke:var(--muted-foreground);stroke-width:1.3;}
+  #agentpass-technical-flow svg .active-line{stroke:var(--ap-ink);}
+  #agentpass-technical-flow svg .revoked{stroke-dasharray:5 5;opacity:.6;}
+  #agentpass-technical-flow svg .divider{stroke:var(--border);stroke-width:1;}
+  @media(max-width:480px){#agentpass-technical-flow .ap-heading{padding-right:70px;}}
+</style>
+<script>
+(() => {
+  const root=document.getElementById('agentpass-technical-flow');
+  const host=root.querySelector('#ap-diagram');
+  const titles=['One authority layer. Any agent client.','Delegate scope, never unrestricted access.','A permission failure becomes a recovery path.','Every side effect goes through enforcement.','Revoke a grant. Stop its descendants.'];
+  const names=['Architecture','Scoped grants','Negotiation','Protected execution','Revocation & audit'];
+  const takeaways=[
+    'Credentials establish identity. Grants establish what that identity may do.',
+    'Every child grant is a subset of its parent; budgets and execution ceilings remain shared.',
+    'The child requests access. An authorized parent counteroffers. AgentPass enforces the boundary.',
+    'A prior ALLOW is advisory. Execution checks live authority again before invoking the resource.',
+    'Revocation is checked online, including the ancestor chain; persisted audit events retain the history.'
+  ];
+  let step=0;
+  const esc=s=>String(s).replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
+  const txt=(x,y,s,cls='',anchor='start')=>`<text x="${x}" y="${y}" class="${cls}" text-anchor="${anchor}">${esc(s)}</text>`;
+  const rect=(x,y,w,h,cls='node')=>`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="10" class="${cls}"/>`;
+  const box=(x,y,w,h,title,lines=[],focus=false)=>rect(x,y,w,h,focus?'focus':'node')+txt(x+16,y+27,title,'strong')+lines.map((s,i)=>txt(x+16,y+53+i*23,s,'small muted')).join('');
+  const line=(x1,y1,x2,y2,active=false,dashed=false)=>`<path d="M${x1},${y1} L${x2},${y2}" class="line ${active?'active-line':''} ${dashed?'revoked':''}" marker-end="url(#ap-arrow)"/>`;
+  const path=d=>`<path d="${d}" class="line" marker-end="url(#ap-arrow)"/>`;
+  const label=(x,y,s)=>txt(x,y,s,'small muted','middle');
+
+  function architecture(w,m){
+    if(m){
+      let s=box(8,8,w-16,100,'Agent clients',['Codex · parent agent · subagents','Each uses its own credential']);
+      s+=line(w/2,108,w/2,148)+box(8,148,w-16,78,'MCP tools',['Typed agent-facing interface']);
+      s+=line(w/2,226,w/2,266)+box(8,266,w-16,150,'AgentPass authority',['Authenticate caller → principal','Validate grant + ancestor chain','Persist grants · ledger · audit'],true);
+      s+=line(w/2,416,w/2,456)+box(8,456,w-16,102,'Protected resource gateway',['Registered operations only','Applies independent service policy']);
+      s+=line(w/2,558,w/2,598)+box(8,598,w-16,100,'Private systems',['Code · deployments · analytics','Supplier quotes + simulated orders']);
+      return [s,710];
+    }
+    const left=176,right=176,center=w-440,cx=220,rx=w-184;
+    let s=txt(8,28,'CALLER','small muted')+txt(cx,28,'AGENTPASS','small muted')+txt(rx,28,'RESOURCE OWNER','small muted');
+    s+=box(8,58,left,116,'Agent clients',['Codex / agent runtime','Parent + child identities','Own credential per agent']);
+    s+=line(184,116,cx,116,true);
+    s+=box(cx,58,center,116,'MCP tools',['Inspect · delegate · request','Counteroffer · accept','Execute · revoke'],true);
+    s+=line(cx+center/2,174,cx+center/2,214,true);
+    s+=box(cx,214,center,139,'Authority engine',['Credential → principal','Grant + ancestor checks','Action, resource, expiry, quota'],true);
+    s+=line(cx+center,281,rx,281,true);
+    s+=box(rx,214,right,139,'Protected gateway',['Registered action handler','Own service policy','Public result only']);
+    s+=line(rx+right/2,353,rx+right/2,393);
+    s+=box(rx,393,right,91,'Private systems',['Code / data / supplier','No direct agent bypass']);
+    s+=line(cx+center/2,353,cx+center/2,393);
+    s+=box(cx,393,center,91,'Durable state',['Grants · requests · usage','Execution records · audit']);
+    s+=box(8,255,left,116,'Trust boundary',['Identity is derived at ingress','Tool arguments cannot','choose the caller']);
+    return [s,500];
+  }
+
+  function grants(w,m){
+    if(m){
+      let s=box(8,8,w-16,84,'Trusted owner / administrator',['Issues bounded root authority']);
+      s+=line(w/2,92,w/2,132)+box(8,132,w-16,150,'Parent grant',['Read + write + preview','Project A · approved paths','Expires in 15 min · depth 2','Shared execution ceiling: 10'],true);
+      s+=line(w/2,282,w/2,322)+box(8,322,w-16,150,'Child grant',['Preview only · Project A','Expires no later than parent','Depth 1 · ceiling ≤ parent','New identity, own credential'],true);
+      s+=line(w/2,472,w/2,512)+box(8,512,w-16,103,'Grandchild grant',['Same or narrower scope','Depth 0 · cannot delegate']);
+      return [s,630];
+    }
+    const bw=(w-80)/2,rx=w-bw-8;
+    let s=box(w/2-143,8,286,78,'Trusted owner / administrator',['Root authority is provisioned outside MCP']);
+    s+=line(w/2,86,w/2,126);
+    s+=box(8,126,w-16,120,'Parent grant',['Actions: read + write + preview · Resource: Project A','Paths restricted · expiry: 15 min · delegation depth: 2','Shared execution ceiling: 10'],true);
+    s+=path(`M${w/2},246 L${w/2},272 L${8+bw/2},272 L${8+bw/2},306`);
+    s+=path(`M${w/2},272 L${rx+bw/2},272 L${rx+bw/2},306`);
+    s+=box(8,306,bw,126,'Child A · preview only',['Project A · no file writes','Expiry ≤ parent · depth 1','Own credential · bounded quota'],true);
+    s+=box(rx,306,bw,126,'Child B · read only',['Project A · approved paths','Expiry ≤ parent · depth 1','Own credential · bounded quota']);
+    s+=txt(w/2,475,'Actions · resources · paths · expiry · budget / quota · delegation depth','small','middle');
+    s+=label(w/2,502,'Creating children does not create a fresh budget or execution pool.');
+    return [s,520];
+  }
+
+  function negotiation(w,m){
+    const events=[
+      ['01','Child agent','execute_action','Missing scope → AUTHORITY_REQUIRED'],
+      ['02','Child → parent','request_authority','Exact required_scope + reason'],
+      ['03','Authorized parent','respond_authority_request','COUNTEROFFER: less scope + expiry'],
+      ['04','Child agent','accept_authority_offer','Scoped grant → resume execution']
+    ];
+    let s='';
+    if(m){events.forEach((e,i)=>{let y=8+i*148;s+=box(8,y,w-16,113,`${e[0]}  ${e[1]}`,[e[2],e[3]],i===2);if(i<3)s+=line(w/2,y+113,w/2,y+148);});return[s,601];}
+    events.forEach((e,i)=>{const y=18+i*119;s+=rect(8,y,45,45,i===2?'focus':'node')+txt(30.5,y+28,e[0],'strong','middle');s+=box(80,y,w-88,100,e[1],[e[2]],i===2);s+=txt(w-24,y+81,e[3],'small muted','end');if(i<3)s+=line(30.5,y+45,30.5,y+119);});
+    s+=label(w/2,525,'Requests never self-approve; the parent cannot grant beyond its live authority.');
+    return [s,545];
+  }
+
+  function enforcement(w,m){
+    if(m){
+      const entries=[['execute_action',['Authenticated caller + grant','Action + resource + idempotency key']],['Live authority checks',['Subject + full ancestor chain','Action · resource · expiry · quota']],['Atomic reservation',['Bind key to exact request','Reserve shared ancestor quota']],['Trusted gateway',['Registered adapter + own policy','Perform the validated operation']],['Persist outcome',['Execution result + audit event','Purchases: receipt + budget ledger']]];
+      let s='';entries.forEach((e,i)=>{let y=8+i*132;s+=box(8,y,w-16,97,e[0],e[1],i===1||i===2);if(i<4)s+=line(w/2,y+97,w/2,y+132);});
+      s+=txt(8,694,'Any failed check → no protected action','strong');
+      s+=txt(8,724,'Uncertain side effect → stays pending','small muted');return[s,744];
+    }
+    const bw=(w-76)/2,rx=w-bw-8;
+    let s=box(8,8,w-16,82,'execute_action',['Authenticated caller · grant · action · resource · parameters · idempotency key']);
+    s+=line(8+bw/2,90,8+bw/2,130,true);
+    s+=box(8,130,bw,126,'1  Live authority checks',['Caller owns grant · full chain live','Action + resource + expiry match','Quota / budget available'],true);
+    s+=line(8+bw,193,rx,193,true);
+    s+=box(rx,130,bw,126,'2  Atomic reservation',['Key bound to exact request','Shared ancestor quota reserved','Changed replay is rejected'],true);
+    s+=line(rx+bw/2,256,rx+bw/2,296,true);
+    s+=box(rx,296,bw,126,'3  Resource-side policy',['Trusted registered gateway','Independent service policy check','Execute exact allowed operation']);
+    s+=line(rx,359,8+bw,359,true);
+    s+=box(8,296,bw,126,'4  Record outcome',['Execution result + audit','Purchases: receipt + ledger','Completed replay: no second debit']);
+    s+=txt(8,465,'Failed check → no protected action','strong');
+    s+=txt(8,492,'Uncertain side effect → pending reservation retained until trusted reconciliation','small muted');
+    return [s,515];
+  }
+
+  function revocation(w,m){
+    if(m){
+      let s=box(8,8,w-16,82,'Issuer / organization owner',['revoke_authority(parent_grant)']);
+      s+=line(w/2,90,w/2,130)+box(8,130,w-16,82,'Parent grant · REVOKED',['Existing record remains for audit'],true);
+      s+=line(w/2,212,w/2,252,false,true)+box(8,252,w-16,82,'Child + grandchild',['Ancestor chain no longer authorizes']);
+      s+=line(w/2,334,w/2,374,false,true)+box(8,374,w-16,103,'Next protected operation',['DENIED · revoked ancestor','Provisioned keys may fail at ingress']);
+      s+=box(8,517,w-16,126,'Persisted audit trail',['Delegation → request → counteroffer','Acceptance → execution → revocation','Principal · action · decision · time']);return[s,660];
+    }
+    const bw=(w-76)/2,rx=w-bw-8;
+    let s=box(8,12,bw,90,'Issuer / organization owner',['revoke_authority(parent_grant)']);
+    s+=line(8+bw,57,rx,57,true)+box(rx,12,bw,90,'Parent grant · REVOKED',['Record remains for audit'],true);
+    s+=line(rx+bw/2,102,rx+bw/2,152,false,true);
+    s+=box(rx,152,bw,103,'Child + grandchild',['Ancestor chain is invalid','Next protected call is denied']);
+    s+=line(rx,203,8+bw,203,false,true);
+    s+=box(8,152,bw,103,'Online recheck',['GRANT_REVOKED / ingress denial','Old grant IDs do not restore access']);
+    s+=rect(8,310,w-16,143,'focus')+txt(24,340,'Persisted audit trail','strong');
+    const events=['Delegate','Request','Counteroffer','Accept','Execute','Revoke'];
+    const gap=(w-80)/5;events.forEach((e,i)=>{let x=40+i*gap;s+=`<circle cx="${x}" cy="380" r="4" fill="var(--ap-ink)"/>`;if(i<5)s+=`<line x1="${x+6}" y1="380" x2="${x+gap-6}" y2="380" class="divider"/>`;s+=txt(x,406,e,'small','middle');});
+    s+=txt(24,434,'Authenticated principal · grant · action · decision · timestamp','small muted');
+    s+=label(w/2,495,'Revocation stops future access; it does not undo completed actions.');return[s,515];
+  }
+
+  const scenes=[architecture,grants,negotiation,enforcement,revocation];
+  function paint(){
+    const w=Math.max(280,Math.floor(host.getBoundingClientRect().width));
+    const [content,height]=scenes[step](w,w<640);
+    host.innerHTML=`<svg width="${w}" height="${height}" viewBox="0 0 ${w} ${height}" role="img" aria-label="${esc(titles[step])}"><title>${esc(titles[step])}</title><desc>${esc(takeaways[step])}</desc><defs><marker id="ap-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M1 1 L7 4 L1 7" fill="none" stroke="var(--muted-foreground)" stroke-width="1.2"/></marker></defs>${content}</svg>`;
+    root.querySelector('#ap-title').textContent=titles[step];
+    root.querySelector('#ap-takeaway').textContent=takeaways[step];
+    root.querySelectorAll('[data-step]').forEach(button=>button.setAttribute('aria-pressed',String(Number(button.dataset.step)===step)));
+  }
+  function move(n){step=(n+5)%5;paint();if(window.openai?.setWidgetState)window.openai.setWidgetState({modelContent:{section:names[step]},privateContent:{step}}).catch(()=>{});}
+  root.querySelectorAll('[data-step]').forEach(button=>button.addEventListener('click',()=>move(Number(button.dataset.step))));
+  const saved=window.openai?.widgetState?.privateContent?.step;
+  if(Number.isInteger(saved)&&saved>=0&&saved<5)step=saved;
+  window.addEventListener('openai:set_globals',event=>{const n=event.detail?.globals?.widgetState?.privateContent?.step;if(Number.isInteger(n)&&n>=0&&n<5){step=n;paint();}});
+  new ResizeObserver(paint).observe(host);
+  paint();
+})();
+</script>
