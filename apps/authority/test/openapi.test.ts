@@ -42,6 +42,7 @@ describe('complete product OpenAPI contract', () => {
       }
     }
     expect(new Set(ids).size).toBe(ids.length);
+    expect(raw.paths['/v1/grants/{grantId}/provision-child'].post.security).toEqual([{ AgentBearer: [] }]);
     expect(raw.paths['/internal/agent-jobs/{job_id}/credential'].post['x-internal']).toBe(true);
     expect(raw.paths['/onboarding/approve'].post.requestBody.content).toHaveProperty('application/x-www-form-urlencoded');
   });

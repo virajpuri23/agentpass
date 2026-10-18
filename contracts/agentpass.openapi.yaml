@@ -408,6 +408,8 @@ paths:
       summary: Create a credential-bound child and subset grant
       tags:
         - Authority
+      security:
+        - AgentBearer: []
       requestBody:
         required: true
         content:
@@ -452,10 +454,13 @@ paths:
             minLength: 1
             maxLength: 200
       description: >-
-        Trusted runtime generates and retains the child secret, then submits only its verifier. New
-        child is fixed AGENT/SERVICE in the parent organization. Atomic creation with idempotency
-        scoped to parent and exact input; changed input returns 409 ALREADY_EXECUTED. No credential
-        or verifier is returned.
+        Service-agent bearer only. Human OAuth connections must use POST /v1/agents and receive
+        this legacy path returns 403 with next_action contact_owner and a reason directing the caller
+        to provision_agent. The trusted runtime generates
+        and retains the child secret, then submits only its verifier. New child is fixed
+        AGENT/SERVICE in the parent organization. Atomic creation with idempotency scoped to parent
+        and exact input; changed input returns 409 ALREADY_EXECUTED. No credential or verifier is
+        returned.
       x-mcp-tool: provision_child
   /v1/grants/{grantId}/revoke:
     post:
