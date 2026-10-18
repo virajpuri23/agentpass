@@ -32,7 +32,7 @@ const who = (a) => WHO[a] || a;
 // Anchor points in the SVG's coordinate space.
 const P = {
   owner: [200, 118], leadTop: [200, 150], leadBottom: [200, 236], lead: [296, 193], gate: [564, 235],
-  design: [101, 355], hosting: [241, 355], analytics: [381, 355], security: [830, 417],
+  design: [101, 355], hosting: [241, 355], analytics: [381, 355], security: [830, 417], securityTop: [830, 392],
   designTop: [101, 300], hostingTop: [241, 300], analyticsTop: [381, 300],
   repo: [690, 78], env: [690, 126], preview: [690, 174], prod: [690, 222], agg: [690, 270], raw: [690, 318],
   vendor: [564, 352],
@@ -149,8 +149,25 @@ const SPEED = { slow: 2.2, normal: 1, instant: 0 };
 const play = { speed: 'normal', helpers: 'all', queue: [], pumping: false, timer: null, startedAt: 0, catchUp: false };
 const CUT_CHECKS = new Set([5, 6, 7, 8, 9, 10, 17]);
 const CUT_PHASES = new Set([4, 5]);
+/** In the two-helper cut the security reviewer sits next to Design as a sub-agent; otherwise it is the outside firm's box bottom right. */
+function placeSecurity(two) {
+  const g = document.getElementById('n-security');
+  const rect = g.querySelector('rect'), [title, sub] = g.querySelectorAll('text'), badge = document.getElementById('b-security');
+  if (two) {
+    g.setAttribute('transform', 'translate(176 300)'); rect.setAttribute('width', '130'); rect.setAttribute('height', '112');
+    title.setAttribute('x', '12'); title.setAttribute('y', '24'); sub.setAttribute('x', '12'); sub.setAttribute('y', '42');
+    title.textContent = '🔍 Security'; badge.setAttribute('transform', 'translate(12 56)');
+    P.security = [241, 355]; P.securityTop = [241, 300];
+  } else {
+    g.setAttribute('transform', 'translate(690 392)'); rect.setAttribute('width', '280'); rect.setAttribute('height', '50');
+    title.setAttribute('x', '14'); title.setAttribute('y', '22'); sub.setAttribute('x', '14'); sub.setAttribute('y', '40');
+    title.textContent = '🔍 Security reviewer'; badge.setAttribute('transform', 'translate(190 8)');
+    P.security = [830, 417]; P.securityTop = [830, 392];
+  }
+}
 function applyCut() {
   document.body.classList.toggle('two', play.helpers === 'two');
+  placeSecurity(play.helpers === 'two');
   $('.lede').textContent = play.helpers === 'two' ? 'One AI manager, two AI helpers, one web page. AgentPass hands out passes and wallets and checks every move.' : 'One AI manager, four AI helpers, one web page. AgentPass hands out passes and wallets and checks every move.';
   [...$('#checks').children].forEach((li, i) => li.classList.toggle('cut', play.helpers === 'two' && CUT_CHECKS.has(i + 1)));
   [...$('#dots').children].forEach((li, i) => li.classList.toggle('cut', play.helpers === 'two' && CUT_PHASES.has(i + 1)));
@@ -298,12 +315,12 @@ function animate(env) {
     switch (e.kind) {
       case 'note': { pulse('n-lead'); const m = e.text.match(/Budget: \$([\d,.]+) root wallet/); if (m) { st.root = Math.round(parseFloat(m[1].replace(/,/g, '')) * 100); go([P.owner, P.leadTop], 'money', `wallet $${m[1]}`); setBadge('w-lead', `$${m[1]} wallet`); } break; }
       case 'subagent_created': node(n, '', 'has its own key'); pulse(`n-${n}`); break;
-      case 'external_contacted': node('security', '', 'another company · own key'); pulse('n-security'); break;
+      case 'external_contacted': node('security', '', play.helpers === 'two' ? 'own key · look only' : 'another company · own key'); pulse('n-security'); break;
       case 'authority_delegated': {
         const m = e.text.match(/^Delegated to ([a-z]+)-agent: (.+?) on (.+)$/);
         if (!m) break;
         const w = m[1], actions = m[2].split(', ');
-        if (w === 'security') go([P.lead, P.gate, P.security], 'good', 'look-only pass');
+        if (w === 'security') go(play.helpers === 'two' ? [P.leadBottom, P.securityTop] : [P.lead, P.gate, P.security], 'good', 'look-only pass');
         setBadge(`b-${w}`, w === 'security' ? 'look only' : shortScope(actions));
         node(w, '');
         break;
@@ -419,7 +436,7 @@ function reset() {
   $('#flows').replaceChildren();
   for (const n of ['design', 'hosting', 'analytics', 'security']) {
     const g = document.getElementById(`n-${n}`); g.className.baseVal = `node dim${n === 'security' ? ' external' : ''}`;
-    document.getElementById(`s-${n}`).textContent = n === 'security' ? 'not called in yet · may look, never edit' : 'not started';
+    document.getElementById(`s-${n}`).textContent = n === 'security' ? (play.helpers === 'two' ? 'look only' : 'not called in yet · may look, never edit') : 'not started';
     setBadge(`b-${n}`, '');
     if (n !== 'security') setBadge(`w-${n}`, '');
     const lock = document.getElementById(`l-${n}`); if (lock) lock.setAttribute('opacity', '0');
@@ -505,7 +522,7 @@ function onEvent(env) {
       d.classList.remove('now');
       const mine = [...$('#checks').children].filter((_, j) => CHECK_PHASE[j] === i + 1);
       const ok = i === 0 ? ev.passed : mine.length > 0 && mine.every((li) => li.classList.contains('pass') || li.classList.contains('skip'));
-      d.className = ok ? 'pass' : 'fail'; d.textContent = ok ? '✓' : '✕';
+      d.className = `${ok ? 'pass' : 'fail'}${d.classList.contains('cut') ? ' cut' : ''}`; d.textContent = ok ? '✓' : '✕';
     });
     caption('Done', ev.passed ? `Every rule held: ${n} of ${total}.` : `Some checks failed: ${n} of ${total} passed.`, 'Every ✓, ✕ and $ you saw was a real AgentPass decision.');
     refresh();

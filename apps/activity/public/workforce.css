@@ -173,5 +173,6 @@ summary { cursor: pointer; color: var(--ink-2); font-weight: 600; }
 @media (max-width: 560px) { .top, main { padding-left: 16px; padding-right: 16px; } .step-title { font-size: 17px; } }
 
 /* two-helper cut: the other helpers, their checks and their phases are hidden */
-body.two #n-analytics, body.two #n-hosting, body.two #r-preview, body.two #r-prod, body.two #r-agg, body.two #r-raw, body.two .wire.ho, body.two .wire.an { display: none; }
+body.two #n-analytics, body.two #n-hosting, body.two #r-preview, body.two #r-prod, body.two #r-agg, body.two #r-raw, body.two .wire.ho, body.two .wire.an, body.two .org.ext, body.two .org-label.ext, body.two .org-sub.ext, body.two .wire.sec { display: none; }
+body.two #n-security .lock { display: none; }
 body.two .story li.cut, body.two .dots li.cut { display: none; }
