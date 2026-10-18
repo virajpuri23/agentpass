@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:agentpass:proposal:onboarding-v1",
-  "description": "PROPOSED A9 review bundle; not implemented or agreed by Developer B.",
+  "description": "A9 onboarding contract accepted by Developer B; endpoint implementation status is documented separately.",
   "$defs": {
     "context_request": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",

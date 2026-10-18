@@ -13,11 +13,12 @@ export function deny(code: ErrorCode, reason: string, http = 403): never {
   throw new Denial({ status: 'DENIED', code, reason, next_action: 'contact_owner' }, http);
 }
 export class AuthorityEngine {
-  constructor(public db: AuthorityStore, public supplier: SupplierService, public now = () => new Date()) {}
+  constructor(public db: AuthorityStore, public supplier: SupplierService, public now = () => new Date(),private validatePrincipal?:(principal:Principal,requireAuthority:boolean)=>Promise<void>) {}
   time() { return this.now().toISOString(); }
-  async principal(id: string): Promise<Principal> {
+  async principal(id: string,requireAuthority=false): Promise<Principal> {
     const p = await this.db.prepare('SELECT id, organization_id, kind, role FROM principals WHERE id = ? AND active = 1').get(id) as Principal | undefined;
     if (!p) deny('INVALID_CALLER', 'Unknown or inactive principal', 401);
+    await this.validatePrincipal?.(p,requireAuthority);
     return p;
   }
   async authenticate(token: string): Promise<Principal> {
@@ -68,7 +69,7 @@ export class AuthorityEngine {
     if (g.subject_principal_id !== p.id || g.organization_id !== p.organization_id) deny('INVALID_CALLER', 'Grant does not belong to caller');
     for (;;) {
       if (chain.some(x => x.id === g.id) || chain.length > 20) deny('INSUFFICIENT_SCOPE', 'Invalid authority chain');
-      if (g.organization_id !== p.organization_id || (await this.principal(g.subject_principal_id)).organization_id !== p.organization_id || (await this.principal(g.issuer_principal_id)).organization_id !== p.organization_id) deny('INVALID_CALLER', 'Cross-organization authority is prohibited');
+      if (g.organization_id !== p.organization_id || (await this.principal(g.subject_principal_id,true)).organization_id !== p.organization_id || (await this.principal(g.issuer_principal_id,true)).organization_id !== p.organization_id) deny('INVALID_CALLER', 'Cross-organization authority is prohibited');
       if (g.revoked_at) deny('GRANT_REVOKED', 'Grant or ancestor was revoked');
       if (!Number.isFinite(Date.parse(g.scope.expires_at)) || Date.parse(g.scope.expires_at) <= this.now().getTime()) deny('GRANT_EXPIRED', 'Grant or ancestor expired');
       chain.push(g);
@@ -95,7 +96,10 @@ export class AuthorityEngine {
   }
   async delegate(p: Principal, parent: string, recipient: string, scope: AuthorityScope) { return await this.db.transaction(async () => await this.issue(p, parent, recipient, scope)).immediate(); }
   async provisionChild(p: Principal, parentId: string, scope: AuthorityScope, credentialHash: string, idempotencyKey: string) {
-    return this.db.transaction(async () => {
+    return this.db.transaction(() => this.provisionChildInTransaction(p,parentId,scope,credentialHash,idempotencyKey)).immediate();
+  }
+  // Caller must already hold the authority write transaction.
+  async provisionChildInTransaction(p: Principal, parentId: string, scope: AuthorityScope, credentialHash: string, idempotencyKey: string) {
       const parent = (await this.chain(parentId,p))[0];
       const fingerprint = JSON.stringify([parentId,scope,credentialHash]);
       const previous = await this.db.prepare('SELECT * FROM child_provisionings WHERE parent_principal_id=? AND idempotency_key=?').get(p.id,idempotencyKey);
@@ -120,7 +124,6 @@ export class AuthorityEngine {
       await this.db.prepare('INSERT INTO child_provisionings(parent_principal_id,idempotency_key,request_json,child_principal_id,child_grant_id,credential_key_id,created_at) VALUES(?,?,?,?,?,?,?)').run(p.id,idempotencyKey,fingerprint,child.id,grant.id,keyId,this.time());
       await this.audit(p,'principal.provision','ALLOW',grant.id);
       return {principal:child,grant};
-    }).immediate();
   }
   async request(p: Principal, parentId: string, scope: AuthorityScope, reason: string) {
     const parent = await this.grant(parentId);

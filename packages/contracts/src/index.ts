@@ -1,4 +1,6 @@
 /** AgentPass hackathon v1 wire contracts. Source of truth for both developers. */
+export { onboardingSchemas, onboardingSchemaBundle } from './onboarding.js';
+export type { ProvisionAgentInput, AgentInstance, OnboardingContext } from './onboarding.js';
 export type PrincipalId = string;
 export type OrganizationId = string;
 export type GrantId = string;

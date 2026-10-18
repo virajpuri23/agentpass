@@ -14,6 +14,13 @@ function migrationFiles(target: MigrationTarget) {
   }));
 }
 
+export async function assertMigrationsCurrent(db:AuthorityStore,target:MigrationTarget){
+  for(const migration of migrationFiles(target)){
+    const row=await db.prepare('SELECT checksum FROM schema_migrations WHERE version=?').get(migration.version);
+    if(row?.checksum!==createHash('sha256').update(migration.sql).digest('hex'))throw new Error('Onboarding schema migrations are missing or changed; run db:migrate before startup');
+  }
+}
+
 export async function migrateStore(db: AuthorityStore, target: MigrationTarget, now = () => new Date()): Promise<string[]> {
   const history = target === 'postgres'
     ? `CREATE TABLE IF NOT EXISTS agentpass.schema_migrations (version TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at TEXT NOT NULL);
