@@ -14,20 +14,88 @@ const clock = (iso) => (iso ? iso.slice(11, 23) : '');
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
+// Plain-language wording for a viewer with some, not deep, tech background. The
+// raw event text still appears in the small "technical" line and in the log.
 const CHECKS = [
-  'Design agent changes actual UI files', 'Design agent cannot read .env', 'Security agent completes a real audit',
-  'Security agent cannot modify source files', 'Hosting agent requests production deployment', 'AgentPass denies production authorization',
-  'Hosting agent requests narrower preview authority', 'Hosting agent deploys the preview successfully', 'Analytics agent computes real aggregate metrics',
-  'Analytics agent cannot retrieve raw user records', 'Temporary grants are revoked after task completion', 'Attempts to reuse revoked grants fail',
+  'The Design helper really edited the page files', 'The Design helper was blocked from the secrets file', 'The outside security reviewer did a real review',
+  'The security reviewer was blocked from editing anything', 'The Publishing helper tried to publish to the live site', 'AgentPass blocked the live-site publish',
+  'The Publishing helper asked for a smaller pass instead (test copy only)', 'The test copy went live with that smaller pass', 'The Numbers helper worked out real visitor totals',
+  'The Numbers helper was blocked from individual visitors’ records', 'Every temporary pass was taken back when the job was done', 'The old passes no longer open anything',
 ];
 const PHASES = [
-  'The lead receives the task and the only root grant',
-  'Design: its own identity, UI files only, .env refused',
-  'External security audit, read-only; the lead applies the fix',
-  'Hosting: production refused, preview negotiated, live URL',
-  'Analytics: aggregates only, raw user rows refused',
-  'Task done: grants revoked, old credentials dead',
+  'The manager gets the job and one master pass',
+  'Design gets a small pass, edits the page, is blocked from the secrets',
+  'An outside security reviewer looks but can’t touch; the manager fixes the bug',
+  'Publishing is blocked from the live site, asks for less, ships a test copy',
+  'Numbers gets totals only, never individual records',
+  'Job done: every pass taken back, old passes dead',
 ];
+const ACTION = {
+  'repo.read': 'read page files', 'repo.write': 'edit page files', 'repo.list': 'list page files', 'security.audit.run': 'run a security review',
+  'deploy.preview': 'publish a test copy', 'deploy.production': 'publish to the live site',
+  'analytics.aggregate': 'see visitor totals', 'analytics.aggregate.read': 'see visitor totals', 'analytics.raw': 'see individual visitors', 'analytics.raw.read': 'see individual visitors',
+};
+const RESOURCE = {
+  'src/**': 'all page files', 'src/': 'all page files', 'src/components/**': 'page layout files', 'src/components/': 'page layout files', 'src/app/**': 'page files', 'src/app/': 'page files',
+  'package.json': 'project settings', 'preview': 'the test site', 'production': 'the live site', 'landing-page': 'visitor data', '.env': 'the secrets file',
+};
+const CODE = {
+  INSUFFICIENT_SCOPE: 'that pass doesn’t cover this', AUTHORITY_REQUIRED: 'a different pass is needed; the desk said which one could be asked for', SECRET_FILE: 'the secrets file is never allowed',
+  OUTSIDE_PARENT_SCOPE: 'nobody can hand out more than they hold', GRANT_REVOKED: 'that pass was taken back', INVALID_CALLER: 'that helper’s pass no longer exists',
+  GRANT_EXPIRED: 'that pass has expired', NOT_FOUND: 'no such pass', FORBIDDEN: 'not allowed',
+};
+const RULE = {
+  'dangerouslySetInnerHTML fed by an unescaped value': 'Serious: text typed by a visitor is put straight onto the page without being made safe (an attacker could inject their own code)',
+  'hardcoded secret-looking literal in source': 'Serious: something that looks like a password or key is written directly in the code',
+  'dependency pinned to a non-exact version': 'Minor: a library version is not pinned exactly',
+};
+const plainAction = (a) => ACTION[a] || a;
+const plainActions = (list) => list.map(plainAction).join(', ');
+const DIR = { components: 'page layout files', styles: 'page style files', app: 'page files', lib: 'page logic files' };
+const plainResource = (r) => {
+  if (RESOURCE[r]) return RESOURCE[r];
+  const d = r.match(/^src\/([^/]+)\/(?:\*\*)?$/);
+  if (d) return DIR[d[1]] || `${d[1]} files`;
+  return /^src\//.test(r) ? `page file ${r.split('/').pop()}` : r;
+};
+const plainResources = (list) => list.map(plainResource).join(', ');
+const plainCode = (c) => (c ? CODE[c] || c : '');
+const fileName = (p) => (p || '').split('/').pop();
+/** One plain sentence for an agent's own trace line (what it is doing right now). */
+function plainTrace(agent, text) {
+  const who = cap(WHO[agent] || agent);
+  let m;
+  if ((m = text.match(/^negative check: repo\.read \.env/))) return `${who} tries to open the secrets file (it should be blocked)`;
+  if ((m = text.match(/^negative check: repo\.write (\S+)/))) return `${who} tries to edit ${fileName(m[1])}, which its pass does not cover (it should be blocked)`;
+  if ((m = text.match(/^negative check: analytics\.raw/))) return `${who} asks for individual visitors’ records, emails included (it should be blocked)`;
+  if ((m = text.match(/^repo\.list (\S+)/))) return `${who} looks at which files are in ${plainResource(m[1] + '/')}`;
+  if ((m = text.match(/^repo\.read (\S+)/))) return `${who} reads ${fileName(m[1])}`;
+  if ((m = text.match(/^repo\.write (\S+)/))) return `${who} edits ${fileName(m[1])}`;
+  if ((m = text.match(/^read (\d+) files/))) return `${who} has read ${m[1]} files, all through the desk`;
+  if ((m = text.match(/^rewrote (.+?);/))) return `${who} rewrote ${m[1].split(', ').map(fileName).join(', ')}`;
+  if (/^done:/.test(text)) return `${who} is finished`;
+  if (/^scan:/.test(text)) return `${who} finished the review: ${text.replace(/^scan: /, '')}`;
+  if (/^Task: deploy/.test(text)) return `${who} tries the obvious thing first: publish straight to the live site`;
+  if (/^deploy\.production: refused/.test(text)) return `${who} was blocked from the live site`;
+  if (/^Refusal says/.test(text)) return `${who} reads the refusal: it names a smaller pass it may ask for, so it asks for exactly that`;
+  if (/^accept offer/.test(text)) return `${who} accepts the smaller pass the manager offered`;
+  if (/^deploy\.preview: live/.test(text)) return `${who} publishes the test copy with the smaller pass`;
+  if (/^Preview deployed/.test(text)) return `${who}: the test copy is up`;
+  if (/^analytics\.aggregate/.test(text)) return `${who} asks for visitor totals`;
+  if ((m = text.match(/^aggregate received: (\d+) views, (\d+) signups over (\d+) days/))) return `${who} got totals only: ${Number(m[1]).toLocaleString()} visits, ${m[2]} signups in ${m[3]} days`;
+  if (/^insights computed/.test(text)) return `${who} works out the conversion rate and a few suggestions, in code`;
+  if (/suggestions,.*refusal/.test(text)) return `${who} is finished`;
+  return `${who}: ${text}`;
+}
+/** Plain explanation of a refusal from its code and what was attempted. */
+function plainDenial(text, code) {
+  const why = plainCode(code);
+  if (/\.env/.test(text)) return `Blocked: the secrets file is off-limits to every pass${why ? ` (${why})` : ''}.`;
+  if (/deploy\.production/.test(text)) return `Blocked: the live site needs a pass nobody in this job holds. The desk also said what may be asked for instead: a pass for the test copy.`;
+  if (/analytics\.raw/.test(text)) return `Blocked: individual visitors’ records stay private${why ? ` (${why})` : ''}.`;
+  if (/repo\.write/.test(text)) return `Blocked: this pass does not allow editing that file${why ? ` (${why})` : ''}.`;
+  return `Blocked${why ? `: ${why}` : ''}.`;
+}
 const CHECK_PHASE = [2, 2, 3, 3, 4, 4, 4, 4, 5, 5, 6, 6];
 const KIND = {
   subagent_created: ['info', 'spawned'], authority_delegated: ['ok', 'delegated'], external_contacted: ['info', 'external'],
@@ -36,10 +104,12 @@ const KIND = {
   authority_revoked: ['rev', 'revoked'], note: ['info', 'note'],
 };
 const WHO = {
-  'lead-agent': 'the lead', 'design-agent': 'the Design agent', 'security-agent': 'the external Security agent',
-  'hosting-agent': 'the Hosting agent', 'analytics-agent': 'the Analytics agent',
+  'lead-agent': 'the manager', 'design-agent': 'the Design helper', 'security-agent': 'the outside security reviewer',
+  'hosting-agent': 'the Publishing helper', 'analytics-agent': 'the Numbers helper',
 };
 const NODE = { 'lead-agent': 'lead', 'design-agent': 'design', 'security-agent': 'security', 'hosting-agent': 'hosting', 'analytics-agent': 'analytics' };
+const SHORT = { 'lead-agent': 'Manager', 'design-agent': 'Design', 'security-agent': 'Security', 'hosting-agent': 'Publishing', 'analytics-agent': 'Numbers' };
+const NAME = { lead: 'Manager', design: 'Design', security: 'Security reviewer', hosting: 'Publishing', analytics: 'Numbers', 'lead-agent': 'Manager', 'design-agent': 'Design', 'security-agent': 'Security reviewer', 'hosting-agent': 'Publishing', 'analytics-agent': 'Numbers' };
 const PHASE_OF_AGENT = { 'design-agent': 2, 'security-agent': 3, 'hosting-agent': 4, 'analytics-agent': 5 };
 
 // Anchor points in the SVG's coordinate space.
@@ -54,24 +124,47 @@ const P = {
 function headline(e) {
   const who = WHO[e.agent] || e.agent;
   switch (e.kind) {
-    case 'note': return 'The lead receives the task. It holds the only root grant.';
-    case 'subagent_created': return `${cap(who)} gets its own identity and credential; only a hash reaches AgentPass.`;
-    case 'authority_delegated': { const m = e.text.match(/^Delegated to ([a-z-]+)/); return `The lead delegates a narrow slice of its own authority${m && WHO[m[1]] ? ` to ${WHO[m[1]]}` : ''}.`; }
-    case 'external_contacted': return 'A separate company’s Security agent joins, authenticating with its own credential.';
-    case 'permission_denied': return `AgentPass refused that call from ${who}${e.code ? ` (${e.code})` : ''}. Here’s why…`;
-    case 'narrower_requested': return `${cap(who)} asks for less, with a reason.`;
-    case 'permission_granted': return 'The lead counteroffers a narrower, shorter grant.';
-    case 'deployment_completed': return 'The preview is live on the negotiated grant: a local build, not production.';
-    case 'analytics_analyzed': return 'Analytics gets aggregates only. Raw user rows stay off-limits.';
-    case 'fix_applied': return 'The lead applies the auditor’s fix itself. The auditor never had write access.';
-    case 'authority_revoked': return 'Task done. The lead revokes the temporary grants; the old credentials stop working.';
+    case 'note': return 'The manager gets the job. It holds the one master pass.';
+    case 'subagent_created': return `${cap(who)} is created with its own identity and its own secret key.`;
+    case 'authority_delegated': { const m = e.text.match(/^Delegated to ([a-z-]+)/); return `The manager hands ${m && WHO[m[1]] ? WHO[m[1]] : 'a helper'} a smaller pass: a slice of its own, never more.`; }
+    case 'external_contacted': return 'A security reviewer from a different company joins, signing in with its own key.';
+    case 'permission_denied': return `AgentPass says no to ${who}.`;
+    case 'narrower_requested': return `${cap(who)} asks the manager for a smaller pass, and says why.`;
+    case 'permission_granted': return 'The manager agrees, but gives an even tighter pass: test copy only, 15 minutes.';
+    case 'deployment_completed': return 'The test copy is live, using that small pass. The live site was never touched.';
+    case 'analytics_analyzed': return 'The Numbers helper gets totals only. Individual visitors stay private.';
+    case 'fix_applied': return 'The manager fixes the bug the reviewer found. The reviewer never had editing rights.';
+    case 'authority_revoked': return 'Job done. The manager takes the passes back; the old ones stop working.';
     default: return `${cap(who)}: ${e.kind}`;
   }
 }
-function caption(no, title, detail) {
+/** Plain explanation under the headline for each workflow event (the raw text goes to the technical line). */
+function detailFor(e) {
+  const who = WHO[e.agent] || e.agent;
+  let m;
+  switch (e.kind) {
+    case 'note': return 'The job: make the landing page look better, get it security-reviewed, publish a test copy and report visitor numbers.';
+    case 'subagent_created': return 'AgentPass only ever receives a fingerprint of the key, never the key itself, so nobody can copy it later.';
+    case 'authority_delegated': {
+      m = e.text.match(/^Delegated to ([a-z-]+): (.+?) on (.+)$/);
+      return m ? `${cap(WHO[m[1]] || m[1])} may now: ${plainActions(m[2].split(', '))}. Where: ${plainResources(m[3].split(', '))}. Nothing else.` : e.text;
+    }
+    case 'external_contacted': return 'It runs as a separate program, in another company, and gets a look-only pass. It cannot change a single file.';
+    case 'permission_denied': return plainDenial(e.text, e.code);
+    case 'narrower_requested': { m = e.text.match(/"(.+)"$/); return m ? `Its reason: “${m[1]}”` : e.text; }
+    case 'permission_granted': return 'Asking for less is how helpers get things done without anyone handing over the keys to the whole project.';
+    case 'deployment_completed': { m = e.text.match(/at (\S+)/); return m ? `The test copy runs on this computer at ${m[1]}.` : e.text; }
+    case 'analytics_analyzed': return 'Visits, signups and a conversion rate were computed from the data, without ever handing over a single person’s record.';
+    case 'fix_applied': return 'The reviewer found text being put on the page without being made safe; the manager, which does hold an editing pass, applied the fix.';
+    case 'authority_revoked': { m = e.text.match(/Revoked ([a-z-]+)'s/); return m ? `${cap(WHO[`${m[1]}-agent`] || (m[1] === 'hosting-preview' ? 'the Publishing helper’s test-copy pass' : m[1]))}: pass taken back.` : e.text; }
+    default: return `${cap(who)}: ${e.text}`;
+  }
+}
+function caption(no, title, detail, tech) {
   if (no !== undefined) $('#step-no').textContent = no;
   if (title !== undefined) $('#story').textContent = title;
   $('#story-detail').textContent = detail || '';
+  $('#story-tech').textContent = tech ? `technical: ${tech}` : '';
 }
 
 // ---- Playback queue ----
@@ -89,8 +182,8 @@ function delayFor(env) {
 function playState() {
   const n = play.queue.length;
   const s = $('#story-state');
-  if (play.paused) { s.textContent = `paused before the next step · Next, → or Space · ${n} queued`; s.className = 'step-state paused'; }
-  else if (n > 0) { s.textContent = `playing · ${n} queued`; s.className = 'step-state'; }
+  if (play.paused) { s.textContent = `paused before the next step · press Next, → or Space · ${n} to go`; s.className = 'step-state paused'; }
+  else if (n > 0) { s.textContent = `playing · ${n} to go`; s.className = 'step-state'; }
   else { s.textContent = ''; s.className = 'step-state'; }
   $('#next').disabled = !play.paused;
 }
@@ -215,45 +308,64 @@ function send(points, kind, label, opts = {}) {
   }
   requestAnimationFrame(frame);
 }
-const shortScope = (actions) => actions.map((a) => a.replace('repo.', '').replace('analytics.', '').replace('deploy.', '')).join(' + ');
+/** Short pass label for a node badge / packet: "read + edit", "look only", "see totals". */
+const shortScope = (actions) => {
+  const set = new Set(actions.map((a) => a.replace(/^(analytics\.\w+)\.read$/, '$1')));
+  const parts = [];
+  if (set.has('repo.read') || set.has('repo.list')) parts.push('read');
+  if (set.has('repo.write')) parts.push('edit');
+  if (set.has('security.audit.run')) parts.push('review');
+  if (set.has('deploy.preview')) parts.push('test copy');
+  if (set.has('deploy.production')) parts.push('live site');
+  if (set.has('analytics.aggregate')) parts.push('see totals');
+  if (set.has('analytics.raw')) parts.push('see people');
+  return parts.join(' + ') || actions.join(', ');
+};
 const short = (p) => (p || '').split('/').pop();
 const denialTarget = (text) => (/\.env/.test(text) ? 'r-env' : /analytics\.raw/.test(text) ? 'r-raw' : /deploy\.production/.test(text) ? 'r-prod' : /repo\.write/.test(text) ? 'r-repo' : null);
-const denialLabel = (text) => { const m = text.match(/(repo\.\w+ \S+|deploy\.\w+|analytics\.\w+(?:\([^)]*\))?|request_authority|accept offer|get_request)/); return m ? m[1].replace(/\(.*\)/, '') : 'request'; };
+const denialLabel = (text) => {
+  if (/\.env/.test(text)) return 'open the secrets file';
+  if (/deploy\.production/.test(text)) return 'publish to the live site';
+  if (/analytics\.raw/.test(text)) return 'see visitors’ records';
+  const m = text.match(/repo\.write (\S+)/);
+  if (m) return `edit ${short(m[1])}`;
+  return 'request';
+};
 
 /** Turns a real event into movement on the diagram. State changes (dim, badges, locks) also apply at Instant; packets do not. */
 function animate(env) {
   const ev = env.event;
   if (ev.type === 'meta') {
     pulse('n-owner');
-    send([P.owner, P.leadTop], 'good', 'root grant');
-    setBadge('b-lead', 'root grant');
-    node('lead', '', 'task received · holds the root grant');
+    send([P.owner, P.leadTop], 'good', 'master pass');
+    setBadge('b-lead', 'master pass');
+    node('lead', '', 'has the job · holds the master pass');
   } else if (ev.type === 'event') {
     const e = ev.event, n = NODE[e.agent];
     switch (e.kind) {
       case 'note': pulse('n-lead'); break;
-      case 'subagent_created': node(n, '', 'own credential'); pulse(`n-${n}`); break;
-      case 'external_contacted': node('security', '', 'separate process · own credential'); pulse('n-security'); break;
+      case 'subagent_created': node(n, '', 'has its own key'); pulse(`n-${n}`); break;
+      case 'external_contacted': node('security', '', 'another company · own key'); pulse('n-security'); break;
       case 'authority_delegated': {
         const m = e.text.match(/^Delegated to ([a-z]+)-agent: (.+?) on (.+)$/);
         if (!m) break;
         const who = m[1], actions = m[2].split(', ');
-        if (who === 'security') send([P.lead, P.gate, P.security], 'good', 'read-only pass'); else send([P.leadBottom, P[`${who}Top`]], 'good', `${shortScope(actions)} pass`);
-        setBadge(`b-${who}`, who === 'security' ? 'read-only' : shortScope(actions));
+        if (who === 'security') send([P.lead, P.gate, P.security], 'good', 'look-only pass'); else send([P.leadBottom, P[`${who}Top`]], 'good', `pass: ${shortScope(actions)}`);
+        setBadge(`b-${who}`, who === 'security' ? 'look only' : shortScope(actions));
         break;
       }
-      case 'narrower_requested': send([P.hostingTop, P.leadBottom], 'warn', 'may I deploy.preview?'); node('hosting', '', 'negotiating with the lead'); break;
-      case 'permission_granted': send([P.leadBottom, P.hostingTop], 'good', 'deploy.preview · 15 min'); setBadge('b-hosting', 'read + preview · 15 min'); break;
-      case 'deployment_completed': pulse('r-preview'); node('hosting', 'done', 'preview live'); break;
-      case 'analytics_analyzed': pulse('r-agg'); node('analytics', 'done', 'aggregates computed'); break;
-      case 'fix_applied': send([P.lead, P.gate, P.repo], 'good', 'repo.write newsletter.ts'); node('lead', '', 'applied the security fix'); break;
+      case 'narrower_requested': send([P.hostingTop, P.leadBottom], 'warn', 'may I do the test copy instead?'); node('hosting', '', 'asking for less'); break;
+      case 'permission_granted': send([P.leadBottom, P.hostingTop], 'good', 'test copy only · 15 min'); setBadge('b-hosting', 'read + test copy · 15 min'); break;
+      case 'deployment_completed': pulse('r-preview'); node('hosting', 'done', 'test copy is live'); break;
+      case 'analytics_analyzed': pulse('r-agg'); node('analytics', 'done', 'totals worked out'); break;
+      case 'fix_applied': send([P.lead, P.gate, P.repo], 'good', 'fixes the bug'); node('lead', '', 'fixed the security bug'); break;
       case 'authority_revoked': {
         const m = e.text.match(/Revoked ([a-z-]+)'s grant/);
         if (!m) break;
-        send([P.lead, P.gate], 'warn', `revoke ${m[1]}`, { hold: 150 });
         const who = m[1].replace('-preview', '');
-        setBadge(`b-${who}`, 'revoked', true);
-        node(who, 'revoked', who === 'security' ? 'grant revoked · credential untouched' : 'credential disabled');
+        send([P.lead, P.gate], 'warn', `take back ${NAME[who] || who}${m[1].endsWith('-preview') ? '’s test-copy pass' : '’s pass'}`, { hold: 150 });
+        setBadge(`b-${who}`, 'taken back', true);
+        node(who, 'revoked', who === 'security' ? 'pass taken back' : 'key disabled');
         const lock = document.getElementById(`l-${who}`);
         if (lock) lock.setAttribute('opacity', '1');
         break;
@@ -266,16 +378,18 @@ function animate(env) {
     if (ev.kind === 'call') {
       if (/^negative check/.test(t)) return;
       let m;
-      if ((m = t.match(/^(repo\.(?:list|read|write)) (\S+)/))) send([P[n], P.gate, P.repo], 'good', `${m[1]} ${short(m[2])}`, { hold: 100 });
-      else if (/^analytics\.aggregate/.test(t)) send([P.analytics, P.gate, P.agg], 'good', 'analytics.aggregate');
-      else if (/^deploy\.preview: live/.test(t)) send([P.hosting, P.gate, P.preview], 'good', 'deploy.preview');
+      if ((m = t.match(/^repo\.list (\S+)/))) send([P[n], P.gate, P.repo], 'good', `list ${short(m[1])}/`, { hold: 100 });
+      else if ((m = t.match(/^repo\.read (\S+)/))) send([P[n], P.gate, P.repo], 'good', `read ${short(m[1])}`, { hold: 100 });
+      else if ((m = t.match(/^repo\.write (\S+)/))) send([P[n], P.gate, P.repo], 'good', `edit ${short(m[1])}`, { hold: 100 });
+      else if (/^analytics\.aggregate/.test(t)) send([P.analytics, P.gate, P.agg], 'good', 'get visitor totals');
+      else if (/^deploy\.preview: live/.test(t)) send([P.hosting, P.gate, P.preview], 'good', 'publish test copy');
       else if (/^accept offer/.test(t)) pulse('n-hosting');
     } else if (ev.kind === 'denied') {
       send([P[n], P.gate], 'bad', denialLabel(t), { burstAt: P.gate });
       const target = denialTarget(t);
       if (target) setTimeout(() => hit(target), 450 * (pace() || 1));
     } else if (ev.kind === 'result') { node(n, 'done'); pulse(`n-${n}`); }
-    else if (ev.kind === 'note' && /Attempting production/.test(t)) node('hosting', '', 'trying production first');
+    else if (ev.kind === 'note' && /Attempting production/.test(t)) node('hosting', '', 'tries the live site');
   }
 }
 
@@ -302,13 +416,13 @@ function setPhase(n) {
   [...$('#dots').children].forEach((d, i) => d.classList.toggle('now', i === n - 1));
   [...$('#checks').children].forEach((li, i) => { if (CHECK_PHASE[i] < n) li.classList.add('seen'); });
 }
-const phaseLabel = (n) => (n ? `Phase ${n} of ${PHASES.length} · ${PHASES[n - 1]}` : 'Ready');
+const phaseLabel = (n) => (n ? `Step ${n} of ${PHASES.length} · ${PHASES[n - 1]}` : 'Ready');
 
 let st;
 function reset() {
   st = { count: 0, allowed: 0, denied: 0, negotiated: 0, revoked: 0, grants: new Map(), phase: 0 };
   $('#timeline').replaceChildren(el('li', 'empty', 'Starting…'));
-  $('#grants tbody').replaceChildren((() => { const tr = el('tr', 'empty'); const td = el('td', '', 'No grants yet.'); td.colSpan = 4; tr.append(td); return tr; })());
+  $('#grants tbody').replaceChildren((() => { const tr = el('tr', 'empty'); const td = el('td', '', 'No passes handed out yet.'); td.colSpan = 4; tr.append(td); return tr; })());
   for (const id of ['allowed', 'denied', 'negotiated', 'revoked']) $(`#n-${id}`).textContent = '0';
   $('#count').textContent = '';
   $('#hero-before').textContent = '—'; $('#hero-after').textContent = '—';
@@ -317,16 +431,16 @@ function reset() {
   $('#checks').replaceChildren(...CHECKS.map((t) => { const li = el('li'); li.append(el('span', 'm', '·'), el('span', '', t)); return li; }));
   $('#dots').replaceChildren(...PHASES.map((t, i) => { const li = el('li', '', String(i + 1)); li.title = t; return li; }));
   $('#result').textContent = ''; $('#result').className = 'result';
-  caption('Ready', 'Press “Run demo” to watch one lead and four real agents build a page under AgentPass.', '');
+  caption('Ready', 'Press “Run demo” to watch the manager and four helpers build a page, with AgentPass checking every move.', '', '');
   // diagram
   $('#flows').replaceChildren();
   for (const n of ['design', 'hosting', 'analytics', 'security']) {
     const g = document.getElementById(`n-${n}`); g.className.baseVal = `node dim${n === 'security' ? ' external' : ''}`;
-    document.getElementById(`s-${n}`).textContent = n === 'security' ? 'not contacted yet · read-only when it is' : 'not started yet';
+    document.getElementById(`s-${n}`).textContent = n === 'security' ? 'not called in yet · may look, never edit' : 'not started yet';
     setBadge(`b-${n}`, '');
     const lock = document.getElementById(`l-${n}`); if (lock) lock.setAttribute('opacity', '0');
   }
-  document.getElementById('n-lead').className.baseVal = 'node'; $('#s-lead').textContent = 'coordinates the specialists'; setBadge('b-lead', '');
+  document.getElementById('n-lead').className.baseVal = 'node'; $('#s-lead').textContent = 'hires and directs the helpers'; setBadge('b-lead', '');
   for (const v of document.querySelectorAll('.vault-g')) v.classList.remove('hit');
 }
 
@@ -351,16 +465,16 @@ function upsertGrant(id, data) {
   const g = st.grants.get(id);
   tr.className = g.revoked ? 'revoked' : '';
   tr.replaceChildren(
-    el('td', '', (g.holder || '').replace('-agent', '')),
-    el('td', '', (g.actions || []).join(', ')),
-    el('td', '', (g.resources || []).join(', ')),
-    el('td', '', g.revoked ? 'revoked' : g.status || 'active'),
+    el('td', '', (SHORT[g.holder] || (g.holder || '').replace('-agent', '')) + (id === 'hosting-preview' ? ' (test copy)' : '')),
+    el('td', '', shortScope(g.actions || [])),
+    el('td', '', plainResources(g.resources || [])),
+    el('td', '', g.revoked ? 'taken back' : g.status || 'active'),
   );
 }
 
 function onWorkflowEvent(e) {
   const [cls, label] = KIND[e.kind] || ['info', e.kind];
-  caption(undefined, headline(e), e.text);
+  caption(undefined, headline(e), detailFor(e), `${e.agent} · ${e.kind}${e.code ? ` ${e.code}` : ''} · ${e.text}`);
   // Denials are already shown by the agent's own trace line (with the error code); only count them here.
   if (e.kind !== 'permission_denied') row('event', e.at, e.agent, [el('span', `tag ${cls}`, label), document.createTextNode(e.text)]);
   if (e.kind === 'authority_delegated') {
@@ -369,7 +483,7 @@ function onWorkflowEvent(e) {
   }
   if (e.kind === 'permission_denied') st.denied += 1;
   if (e.kind === 'narrower_requested') st.negotiated += 1;
-  if (e.kind === 'permission_granted') upsertGrant('hosting-preview', { holder: 'hosting-agent', actions: ['deploy.preview'], resources: ['preview'], status: 'active (15 min)' });
+  if (e.kind === 'permission_granted') upsertGrant('hosting-preview', { holder: 'hosting-agent', actions: ['deploy.preview'], resources: ['preview'], status: 'active for 15 min' });
   if (e.kind === 'authority_revoked') {
     st.revoked += 1;
     const m = e.text.match(/Revoked ([a-z-]+)'s grant/);
@@ -383,7 +497,7 @@ function onTrace(e) {
   else if (e.kind === 'denied') row('trace', e.at, e.agent, [el('span', 'tag bad', e.code || 'denied'), document.createTextNode(e.text)]);
   else if (e.kind === 'result') row('trace', e.at, e.agent, [el('span', 'tag ok', 'result'), document.createTextNode(e.text)]);
   else row('trace', e.at, e.agent, [document.createTextNode(e.text)]);
-  if (e.kind === 'call' || e.kind === 'note') caption(undefined, undefined, `${e.agent}: ${e.text}`);
+  if (e.kind === 'call' || e.kind === 'note') caption(undefined, undefined, plainTrace(e.agent, e.text), `${e.agent} · ${e.text}`);
 }
 
 function onOutputs(o) {
@@ -391,18 +505,18 @@ function onOutputs(o) {
   $('#hero-after').textContent = o.after.hero;
   const sec = o.security;
   if (sec && sec.findings) {
-    $('#findings').replaceChildren(...sec.findings.map((f) => { const li = el('li'); li.append(el('span', `sev ${f.severity}`, f.severity), document.createTextNode(`${f.rule} — ${f.file}:${f.line}`)); return li; }));
-    $('#fix').textContent = o.fix_applied ? 'Lead applied the fix: escapeHtml(name) in src/lib/newsletter.ts' : 'Fix not applied';
+    $('#findings').replaceChildren(...sec.findings.map((f) => { const li = el('li'); li.append(el('span', `sev ${f.severity}`, f.severity), document.createTextNode(`${RULE[f.rule] || f.rule} — in ${fileName(f.file)}, line ${f.line}`)); return li; }));
+    $('#fix').textContent = o.fix_applied ? 'The manager fixed the serious one: visitor-typed text is now made safe before it goes on the page (newsletter.ts).' : 'Fix not applied';
     $('#fix').className = o.fix_applied ? 'ok-text' : 'muted';
   }
   const h = o.hosting;
   if (h && h.deployment) {
     const a = el('a', '', h.deployment.url); a.href = h.deployment.url; a.target = '_blank'; a.rel = 'noopener';
-    $('#preview').replaceChildren(a, el('div', 'prov', `${h.deployment.provider}: a real local build, not production. Production was refused (${h.production_attempt.code}).`));
-  } else if (h) { $('#preview').textContent = `No deployment: ${h.failure?.reason || h.negotiation?.status || 'unknown'}`; }
+    $('#preview').replaceChildren(a, el('div', 'prov', `Built and served on this computer; not a public website. The live site was blocked (${plainCode(h.production_attempt.code)}).`));
+  } else if (h) { $('#preview').textContent = `Nothing published: ${h.failure?.reason || h.negotiation?.status || 'unknown'}`; }
   const an = o.analytics;
   if (an && an.summary) {
-    $('#metrics').textContent = `${an.summary.page_views.toLocaleString()} page views · ${an.summary.signups} signups · ${(an.summary.conversion_rate * 100).toFixed(2)}% conversion · ${an.summary.period.days} days`;
+    $('#metrics').textContent = `${an.summary.page_views.toLocaleString()} visits · ${an.summary.signups} signups · ${(an.summary.conversion_rate * 100).toFixed(2)}% of visitors signed up · last ${an.summary.period.days} days`;
     $('#metrics').className = '';
     $('#suggestions').replaceChildren(...(an.suggestions || []).map((s) => el('li', '', s)));
   }
@@ -416,18 +530,19 @@ function onEvent(env) {
   if (phase) { setPhase(phase); $('#step-no').textContent = phaseLabel(st.phase); }
   if (ev.type === 'meta') {
     const b = $('#authority');
-    b.textContent = `authority: ${ev.authority}${ev.missing?.length ? ` · missing: ${ev.missing.join(', ')}` : ''}`;
-    b.className = `badge ${ev.authority === 'MOCK' ? 'mock' : 'real'}`;
-    b.title = ev.authority === 'MOCK' ? 'Labeled mock until Developer A\'s generic-action contract is wired in' : 'Real AgentPass authority';
-    upsertGrant('grant-root-lead', { holder: 'lead-agent', actions: ['repo.read', 'repo.write', 'deploy.preview', 'analytics.aggregate'], resources: ['src/**', 'package.json', 'preview', 'landing-page'], status: 'root (owner-issued)' });
-    caption(undefined, `Clean seeded start on ${ev.authority === 'MOCK' ? 'the labeled mock authority' : 'the real AgentPass authority'}: fresh project copy, fresh credentials, one owner-issued root grant.`, '');
+    const realRun = ev.authority !== 'MOCK';
+    b.textContent = realRun ? 'running on: real AgentPass' : `running on: practice mock${ev.missing?.length ? ` · missing: ${ev.missing.join(', ')}` : ''}`;
+    b.className = `badge ${realRun ? 'real' : 'mock'}`;
+    b.title = realRun ? 'Every decision comes from the real AgentPass authority service' : 'A labeled stand-in for AgentPass; decisions are not the real service’s';
+    upsertGrant('grant-root-lead', { holder: 'lead-agent', actions: ['repo.read', 'repo.write', 'deploy.preview', 'analytics.aggregate'], resources: ['src/**', 'package.json', 'preview', 'landing-page'], status: 'master pass from the owner' });
+    caption(undefined, `A clean start${realRun ? ' on the real AgentPass' : ' on the practice mock'}: a fresh copy of the project, brand-new keys, and one master pass from the owner to the manager.`, 'Even the manager’s master pass has limits: it cannot publish to the live site or see individual visitors.', `authority ${ev.authority} · root grant: repo.read, repo.write, deploy.preview, analytics.aggregate on src/**, package.json`);
   } else if (ev.type === 'event') onWorkflowEvent(ev.event);
   else if (ev.type === 'trace') onTrace(ev);
-  else if (ev.type === 'outputs') { onOutputs(ev.outputs); caption('Outputs', 'What the agents actually produced: the page diff, the audit, the preview URL and the metrics.', ''); }
+  else if (ev.type === 'outputs') { onOutputs(ev.outputs); caption('Results', 'What the helpers actually made: the new headline, the security review, the test copy and the visitor numbers.', 'See “What the helpers produced” on the right.', ''); }
   else if (ev.type === 'check') {
     const li = $('#checks').children[ev.check.n - 1];
     if (li) { li.className = ev.check.pass ? 'seen pass' : 'seen fail'; li.querySelector('.m').textContent = ev.check.pass ? '✓' : '✕'; li.title = ev.check.detail; }
-    caption('Verifying', `Checking the run against real events and files: ${ev.check.n} of ${CHECKS.length}.`, `${ev.check.pass ? 'PASS' : 'FAIL'} ${ev.check.title}: ${ev.check.detail}`);
+    caption('Checking', `Double-checking against the real files and events: ${ev.check.n} of ${CHECKS.length}.`, `${ev.check.pass ? '✓' : '✕'} ${CHECKS[ev.check.n - 1]}`, `${ev.check.pass ? 'PASS' : 'FAIL'} ${ev.check.title}: ${ev.check.detail}`);
   } else if (ev.type === 'done') {
     const n = $('#checks').querySelectorAll('.pass').length;
     const shown = play.startedAt ? ` · ${mmss(performance.now() - play.startedAt)} on screen` : '';
@@ -440,7 +555,7 @@ function onEvent(env) {
       const ok = i === 0 ? ev.passed : mine.length > 0 && mine.every((li) => li.classList.contains('pass'));
       d.className = ok ? 'pass' : 'fail'; d.textContent = ok ? '✓' : '✕';
     });
-    caption('Done', ev.passed ? `Every rule held: ${n} of ${CHECKS.length} checks passed.` : `Some checks failed: ${n} of ${CHECKS.length} passed.`, 'Every refusal, grant and revocation above was a real AgentPass decision on a real agent session.');
+    caption('Done', ev.passed ? `Every rule held: ${n} of ${CHECKS.length} checks passed.` : `Some checks failed: ${n} of ${CHECKS.length} passed.`, 'The helpers did real work, every “no” was real, and nothing in the project was reachable without a pass. Scroll the right-hand side for what they produced.', '');
     refresh();
   }
   animate(env);
@@ -457,7 +572,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('#run').addEventListener('click', async () => {
     $('#run').disabled = true;
     const r = await fetch('/api/workforce/run', { method: 'POST' });
-    if (!r.ok) { caption('Could not start', (await r.json()).reason, ''); refresh(); }
+    if (!r.ok) { caption('Could not start', (await r.json()).reason, '', ''); refresh(); }
   });
   $('#speed').addEventListener('change', (e) => setSpeed(e.target.value));
   $('#step').addEventListener('change', (e) => { setStep(e.target.checked); e.target.blur(); });

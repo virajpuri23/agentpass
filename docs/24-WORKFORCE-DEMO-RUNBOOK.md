@@ -1,19 +1,21 @@
 # Workforce demo runbook — 2:30 live, judge-facing
 
-**Screen:** `http://127.0.0.1:3200/workforce.html` (the animated stage: Acme's agents on the left, the AgentPass gate in the middle, the gated project on the right, the external security company bottom right). Every packet on the diagram is a real call by a separate agent session; the caption under the diagram says in plain English what just happened and quotes the real event beneath it.
+**Screen:** `http://127.0.0.1:3200/workforce.html` (the animated stage: Acme's agents on the left, the AgentPass desk in the middle, the gated project on the right, the external security company bottom right). The page is written for a viewer with only some tech background: agents are "the manager" and "helpers", grants are "passes", the authority is "the security desk", and every caption is a plain sentence. The raw event (agent, kind, code, text) is still there in the small `technical:` line under each caption and in the Technical log, so a technical judge loses nothing. Every packet on the diagram is a real call by a separate agent session.
 
 ## Pre-demo checklist (10 minutes before)
 
 - [ ] `npm install && npm --prefix apps/mcp/agentpass-manufact install` done once; run `npm run demo` once so the npm cache is warm (each run copies `demo-project/` to a temp dir and runs `npm install --prefer-offline` there; cold, that is the only slow part).
 - [ ] Port 3200 free (`lsof -iTCP:3200 -sTCP:LISTEN`); otherwise `ACTIVITY_PORT=3210 npm run dev:activity` and open that port.
 - [ ] `npm run dev:activity`, open the page, window ≥ 1280×800, light or dark both fine.
-- [ ] **Speed: Slow** for a narrated run (≈1:40 on screen). Normal is ≈0:40, Instant is the raw stream (≈0:04). Tick **Step through** if you want to hold on a beat: playback pauses before every workflow event; **Next**, **→** or **Space** advances. Untick to let it run.
-- [ ] Badge top left reads **`authority: AGENTPASS`** (green) = Developer A's real authority app, real grants, real execute gateway on a fresh SQLite. If it reads `MOCK` (amber) the run is on the labeled in-memory mock: say so, do not present it as the real thing.
+- [ ] **Speed: Slow** for a narrated run (≈1:40 on screen). Normal is ≈0:40, Instant is the raw stream (≈0:04). Tick **One step at a time** if you want to hold on a beat: playback pauses before every workflow event; **Next**, **→** or **Space** advances. Untick to let it run.
+- [ ] Badge top left reads **`running on: real AgentPass`** (green) = Developer A's real authority app, real grants, real execute gateway on a fresh SQLite. If it reads `running on: practice mock` (amber) the run is on the labeled in-memory mock: say so, do not present it as the real thing.
 - [ ] Do a full rehearsal run and leave the page open: a new run clears it.
 
 Measured on 2026-10-17 (warm cache, Apple Silicon laptop): 2.1 s from pressing Run to the first event, 3.7 s of real streaming, 5.7 s total wall-clock. On screen: Instant 0:04 · Normal 0:40 · Slow ≈1:40 playing (2:06 measured with ~25 s held in step-through).
 
 ## Script (Slow speed, ~2:30)
+
+The on-screen labels use the plain words (manager, helpers, passes, the desk, test copy, live site); the script below uses the technical ones so you can answer questions. Say whichever fits the judge in front of you; the `technical:` line under the caption shows the real event text if someone asks.
 
 **0:00 Hook** (before pressing Run). *"A lead coding agent is about to get a landing page built by four specialist agents, one from another company. Nobody shares credentials. AgentPass decides, per call, what each agent may touch, and you'll see it refuse, negotiate and revoke, live."* Press **Run demo**.
 
