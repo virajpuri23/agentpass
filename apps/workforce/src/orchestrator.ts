@@ -48,6 +48,15 @@ export interface Specialists {
 
 const later = (min: number) => new Date(Date.now() + min * 60_000).toISOString();
 
+/** Specialists may return a bare result or an ApiResult envelope (failing closed); unwrap the latter. */
+function unwrap(value: unknown): unknown {
+  if (value && typeof value === 'object' && 'status' in value) {
+    const r = value as { status: string; data?: unknown };
+    return r.status === 'OK' ? r.data : value; // keep a denial envelope as-is so it is visible in the result
+  }
+  return value;
+}
+
 export async function runWorkflow(input: {
   authority: WorkforceAuthority;
   credentials: Credentials;
@@ -89,12 +98,12 @@ export async function runWorkflow(input: {
 
   // 1. Design
   const design = await spawn('design', credentials.design, { actions: ['repo.read', 'repo.write'], resources: ['src/components/**', 'src/styles/**'] });
-  if (input.specialists.design) result.design = await input.specialists.design(design);
+  if (input.specialists.design) result.design = unwrap(await input.specialists.design(design));
 
   // 2. Security (external company; read-only)
   const security = await spawn('security', credentials.security, { actions: ['repo.read'], resources: ['src/**', 'package.json'] }, true);
   if (input.specialists.security) {
-    result.security = await input.specialists.security(security);
+    result.security = unwrap(await input.specialists.security(security));
     // The lead applies the fix itself: it is the only principal allowed to write src/lib.
     const report = result.security as { findings?: { file: string; rule: string }[] } | undefined;
     const xss = report?.findings?.find((f) => f.file === 'src/lib/newsletter.ts');
@@ -133,7 +142,7 @@ export async function runWorkflow(input: {
   // 4. Analytics
   const analytics = await spawn('analytics', credentials.analytics, { actions: ['analytics.aggregate'], resources: ['landing-page'] });
   if (input.specialists.analytics) {
-    result.analytics = await input.specialists.analytics(analytics);
+    result.analytics = unwrap(await input.specialists.analytics(analytics));
     emit('analytics_analyzed', 'analytics-agent', 'Computed aggregate metrics from the dataset (no raw rows)');
   }
 
