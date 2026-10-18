@@ -1,11 +1,11 @@
 /**
- * npm run demo [-- --project <dir>] [-- --authority mock] [-- --gateway remote]
+ * npm run demo [-- --project <dir>] [-- --authority mock] [-- --gateway remote] [-- --helpers two]
  *
  * The coding-agent workforce demo from a clean seeded state: a lead agent
  * coordinates Design, Security (external), Hosting and Analytics specialists
  * on a fresh copy of demo-project/, through AgentPass (Developer A's authority,
  * in-process) or the labeled MOCK, and the real gateways. Prints the timeline,
- * the outputs and the 12 checks from the scope; exits 1 if any check fails.
+ * the outputs and the 18 checks (12 from the scope, 6 for money); exits 1 if any check fails.
  * Specialists that are not yet built are reported as missing, never faked.
  *
  * `--gateway remote` runs the protected workforce gateway AND the external
@@ -35,13 +35,15 @@ import type { SecurityServiceClient } from '../apps/workforce/src/orchestrator.j
 import { RealWorkforceAuthority } from '../apps/workforce/src/real/authority.js';
 import { createRealGateways } from '../apps/workforce/src/real/gateways.js';
 import { createDemoProjectResource } from '../apps/workforce/src/real/resource-adapter.js';
+import { createServiceVendor, SKU_IDS, VENDOR_ID } from '../apps/workforce/src/real/vendor.js';
+import { usd } from '../apps/workforce/src/wallet.js';
 import type { Trace } from '../apps/workforce/src/agent-base.js';
 import { createAnalyticsGateway } from '../apps/workforce/src/gateways/analytics.js';
 import { createDeployGateway } from '../apps/workforce/src/gateways/deploy.js';
 import { createRepoGateway } from '../apps/workforce/src/gateways/repo.js';
 import { MockWorkforceAuthority } from '../apps/workforce/src/mock-authority.js';
 import type { WorkforceAuthority } from '../apps/workforce/src/contract.js';
-import { runWorkflow, type Credentials, type Specialists, type WorkflowEvent, type WorkflowResult } from '../apps/workforce/src/orchestrator.js';
+import { DEFAULT_BUDGET_PLAN, runWorkflow, type BudgetPlan, type BudgetResult, type Credentials, type Specialists, type WorkflowEvent, type WorkflowResult } from '../apps/workforce/src/orchestrator.js';
 
 const SOURCE = fileURLToPath(new URL('../demo-project/', import.meta.url));
 const argv = process.argv.slice(2);
@@ -49,7 +51,7 @@ const color = process.stdout.isTTY && !process.env.NO_COLOR;
 const c = (code: number, s: string) => (color ? `\x1b[${code}m${s}\x1b[0m` : s);
 const clock = () => new Date().toISOString().slice(11, 23);
 
-export type Check = { n: number; title: string; pass: boolean; detail: string };
+export type Check = { n: number; title: string; pass: boolean; detail: string; /** Not run on this authority (the mock has no wallets); never counted as a pass or a failure. */ skipped?: boolean };
 
 /** Loads whichever specialist agents exist on this branch. */
 async function loadSpecialists(): Promise<{ specialists: Specialists; missing: string[] }> {
@@ -84,9 +86,19 @@ export interface DemoOutputs {
   grants: Record<string, unknown>;
   revoked: string[];
   reuse_after_revoke: unknown[];
+  wallets?: Record<string, unknown>;
+  budget?: BudgetResult;
 }
 
+/** The owner's root wallet to the lead: $1,000 for the task, at most $300 per purchase, from the service vendor. */
+const ROOT_WALLET_ID = 'grant-root-wallet';
+const ROOT_WALLET_CENTS = 100000;
+const ROOT_WALLET_PER_ACTION_CENTS = 30000;
+
 export type AuthorityMode = 'agentpass' | 'mock';
+/** `all`: the four specialists; `two`: Design and the external Security agent only (the 20-second video cut; the other checks are reported as not run). */
+export type HelpersMode = 'all' | 'two';
+const TWO = ['design', 'security'] as const;
 /** `inprocess`: the demo-project adapter is registered directly; `remote`: AgentPass calls B's gateway service over HTTP. */
 export type GatewayMode = 'inprocess' | 'remote';
 
@@ -97,7 +109,7 @@ const WORKFORCE_ALLOWED_ACTIONS = ['repo.read', 'repo.write', 'security.audit.ru
  * demo-project resource registered. Principals: owner-1 and buyer-agent (the lead) from A's admin seed,
  * plus the external security-agent registered under sentinel-sec. The workforce root is issued by owner-1.
  */
-async function agentpassStack(root: string, gateway: GatewayMode, log: (line: string) => void) {
+async function agentpassStack(root: string, gateway: GatewayMode, two: boolean, log: (line: string) => void) {
   const cred = () => randomBytes(24).toString('base64url');
   const keys = { owner: cred(), lead: cred(), sourcing: cred(), supplierAgent: cred(), security: cred() };
   const db = openDatabase(join(root, '..', `authority-${randomBytes(4).toString('hex')}.sqlite`));
@@ -115,6 +127,12 @@ async function agentpassStack(root: string, gateway: GatewayMode, log: (line: st
     resources: [{ resource: 'demo-project', organization_id: 'buyer-co', owner_principal_id: 'owner-1', paths: ['src/', 'package.json'] }],
     max_executions: 200,
   } });
+  // The root wallet: a purchasing grant (A's other scope family) from owner-1 to the lead, inserted the way A's seed does.
+  db.prepare('INSERT INTO grants(id,organization_id,parent_grant_id,issuer_principal_id,subject_principal_id,scope_json,created_at) VALUES(?,?,NULL,?,?,?,?)').run(
+    ROOT_WALLET_ID, 'buyer-co', 'owner-1', 'buyer-agent',
+    JSON.stringify({ actions: ['supplier.quote.request', 'supplier.purchase.execute'], supplier_ids: [VENDOR_ID], sku_ids: SKU_IDS, max_per_action_cents: ROOT_WALLET_PER_ACTION_CENTS, total_budget_cents: ROOT_WALLET_CENTS, expires_at: new Date(Date.now() + 3600_000).toISOString(), max_delegation_depth: 3 }),
+    new Date().toISOString(),
+  );
   const analyticsFile = join(root, 'data/analytics-events.json');
   const children: ChildService[] = [];
   let workforce: WorkforceOptions;
@@ -135,10 +153,8 @@ async function agentpassStack(root: string, gateway: GatewayMode, log: (line: st
     workforce = { resources: [adapter] };
     stopAdapter = () => adapter.stop();
   }
-  const supplier: SupplierService = {
-    async policy() { return false; },
-    async quote() { throw new Error('unused'); }, async getQuote() { throw new Error('unused'); }, async fulfill() { throw new Error('unused'); },
-  };
+  // The service vendor the wallets buy from (in-process, fixed prices, simulated orders).
+  const supplier: SupplierService = createServiceVendor();
   const app = createAuthorityApp({ db: store, supplier, workforce });
   const server = await new Promise<import('node:http').Server>((r) => { const s = app.listen(0, '127.0.0.1', () => r(s)); });
   const authorityUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -153,14 +169,17 @@ async function agentpassStack(root: string, gateway: GatewayMode, log: (line: st
     securityService = { url: sec.url, token, authority_url: authorityUrl };
     credentials = { lead: keys.lead }; // the lead process never holds the auditor's credential
   }
+  const budget: BudgetPlan = { ...DEFAULT_BUDGET_PLAN, rootWalletId: ROOT_WALLET_ID, vendor_id: VENDOR_ID };
+  if (two) budget.wallets = { ...budget.wallets, design: 10000 }; // $100: five photos ($200) need a top-up
   return {
-    auth: auth as WorkforceAuthority, rootGrantId, credentials, securityService,
+    auth: auth as WorkforceAuthority, rootGrantId, credentials, securityService, budget,
     gateways: createRealGateways({ repoRoot: root, analyticsFile }),
     async stop() { await stopAdapter(); for (const ch of children) await ch.stop(); await new Promise((r) => server.close(r)); db.close(); },
   };
 }
 
-export async function runDemo(opts: { project?: string; authority?: AuthorityMode; gateway?: GatewayMode; print?: (l: string) => void; onStream?: (e: WorkforceStreamEvent) => void } = {}) {
+export async function runDemo(opts: { project?: string; authority?: AuthorityMode; gateway?: GatewayMode; helpers?: HelpersMode; print?: (l: string) => void; onStream?: (e: WorkforceStreamEvent) => void } = {}) {
+  const two = opts.helpers === 'two';
   const stream = opts.onStream ?? (() => {});
   const mode: AuthorityMode = opts.authority ?? 'agentpass';
   const gatewayMode: GatewayMode = opts.gateway ?? 'inprocess';
@@ -176,6 +195,7 @@ export async function runDemo(opts: { project?: string; authority?: AuthorityMod
   // Clean seeded authority: fresh random credentials, one root grant to the lead.
   let auth: WorkforceAuthority, rootGrantId: string, credentials: Credentials, gateways: Parameters<typeof runWorkflow>[0]['gateways'];
   let securityService: SecurityServiceClient | undefined;
+  let budgetPlan: BudgetPlan | undefined;
   let stopStack = async () => {};
   if (mode === 'agentpass') {
     // Child-process logs (one JSON line per request) shown compactly: the remote hop is part of the story.
@@ -185,8 +205,9 @@ export async function runDemo(opts: { project?: string; authority?: AuthorityMod
       try { const j = JSON.parse(m[2]!); print(c(90, `${clock()}  [${m[1]}] ${[j.method, j.path, j.status, j.action, j.replay ? 'replay' : '', j.port ? `listening on ${j.port}` : '', j.error ? `error ${j.name}` : ''].filter(Boolean).join(' ')}`)); }
       catch { print(c(90, l)); }
     };
-    const stack = await agentpassStack(root, gatewayMode, childLog);
+    const stack = await agentpassStack(root, gatewayMode, two, childLog);
     ({ auth, rootGrantId, credentials, gateways, securityService } = stack);
+    budgetPlan = stack.budget;
     stopStack = stack.stop;
   } else {
     if (gatewayMode === 'remote') throw new Error('--gateway remote needs the AgentPass authority (drop --authority mock)');
@@ -214,7 +235,7 @@ export async function runDemo(opts: { project?: string; authority?: AuthorityMod
   stream({ type: 'meta', authority: auth.source, project: root, missing });
 
   let result: WorkflowResult | undefined, error: Error | undefined;
-  try { result = await runWorkflow({ authority: auth, credentials, rootGrantId, gateways, specialists, securityService, trace, onEvent: (event) => stream({ type: 'event', event }) }); }
+  try { result = await runWorkflow({ authority: auth, credentials, rootGrantId, gateways, specialists, securityService, budget: budgetPlan, helpers: two ? [...TWO] : undefined, trace, onEvent: (event) => stream({ type: 'event', event }) }); }
   catch (e) { error = e as Error; }
   finally { await gateways.deploy.stopAll(); }
 
@@ -227,7 +248,9 @@ export async function runDemo(opts: { project?: string; authority?: AuthorityMod
   const refused = (agent: string, resource: string) => audit.some((e) => e.principal_id === pid(agent) && e.decision !== 'ALLOW' && e.resource === resource);
   const refusedAction = (agent: string, action: string) => audit.some((e) => e.principal_id === pid(agent) && e.action === action && e.decision !== 'ALLOW' && !['ISSUED', 'REVOKED', 'REQUESTED', 'COUNTEROFFERED', 'ACCEPTED', 'REJECTED'].includes(e.decision));
   const checks: Check[] = [];
-  const check = (n: number, title: string, pass: boolean, detail: string) => { const x = { n, title, pass, detail }; checks.push(x); stream({ type: 'check', check: x }); };
+  const check = (n: number, title: string, pass: boolean, detail: string, skipped = false) => { const x: Check = { n, title, pass, detail, ...(skipped ? { skipped: true } : {}) }; checks.push(x); stream({ type: 'check', check: x }); };
+  /** A check about a specialist that is not in this cut: reported, never counted. */
+  const cut = (n: number, title: string, pass: boolean, detail: string) => check(n, title, two ? false : pass, two ? 'not run: not in the two-helper cut' : detail, two);
   const sec = r?.security as { findings?: { file: string; severity: string }[] } | undefined;
   const an = r?.analytics as { summary?: { page_views: number; signups: number; conversion_rate: number }; suggestions?: string[] } | undefined;
 
@@ -235,22 +258,44 @@ export async function runDemo(opts: { project?: string; authority?: AuthorityMod
   check(2, 'Design agent cannot read .env', refused('design-agent', '.env') && env.includes('FAKE_FIXTURE'), refused('design-agent', '.env') ? `${audit.find((e) => e.principal_id === pid('design-agent') && e.resource === '.env')?.reason_code ?? 'refused'} recorded; .env intact` : 'no .env refusal recorded');
   check(3, 'Security agent completes a real audit', !!sec?.findings?.some((f) => f.file === 'src/lib/newsletter.ts' && f.severity === 'high'), missing.includes('security') ? 'security agent not built yet' : `${sec?.findings?.length ?? 0} finding(s), high on src/lib/newsletter.ts`);
   check(4, 'Security agent cannot modify source files', refusedAction('security-agent', 'repo.write'), 'write attempt refused (read-only grant)');
-  check(5, 'Hosting agent requests production deployment', r?.hosting?.production_attempt.status !== undefined, `attempted deploy.production → ${r?.hosting?.production_attempt.status}`);
+  cut(5, 'Hosting agent requests production deployment', r?.hosting?.production_attempt.status !== undefined, `attempted deploy.production → ${r?.hosting?.production_attempt.status}`);
   // The mock answers INSUFFICIENT_SCOPE; AgentPass answers OUTSIDE_PARENT_SCOPE (production is in no ancestor). Both must name preview as the way forward.
   const prodCode = r?.hosting?.production_attempt.code;
-  check(6, 'AgentPass denies production authorization', ['INSUFFICIENT_SCOPE', 'OUTSIDE_PARENT_SCOPE'].includes(prodCode ?? '') && r?.hosting?.production_attempt.alternative?.[0] === 'deploy.preview', `${prodCode ?? 'no code'} with alternative ${r?.hosting?.production_attempt.alternative?.join(', ') ?? 'none'}`);
-  check(7, 'Hosting agent requests narrower preview authority', r?.hosting?.negotiation?.requested.actions.join() === 'deploy.preview', `requested ${r?.hosting?.negotiation?.requested.actions.join(', ')}; lead counteroffered ${r?.hosting?.negotiation?.status}`);
-  check(8, 'Hosting agent deploys the preview successfully', !!r?.hosting?.deployment?.url, r?.hosting?.deployment ? `${r.hosting.deployment.url} (${r.hosting.deployment.provider}, local)` : r?.hosting?.failure?.reason ?? 'no deployment');
-  check(9, 'Analytics agent computes real aggregate metrics', !!an?.summary && an.summary.signups > 0 && (an.suggestions?.length ?? 0) >= 2, missing.includes('analytics') ? 'analytics agent not built yet' : `${an?.summary?.page_views} views, ${an?.summary?.signups} signups, ${((an?.summary?.conversion_rate ?? 0) * 100).toFixed(2)}% conversion, ${an?.suggestions?.length} suggestions`);
-  check(10, 'Analytics agent cannot retrieve raw user records', refusedAction('analytics-agent', 'analytics.raw') && !JSON.stringify(an ?? {}).includes('@example.com'), 'analytics.raw refused; no emails in output');
-  check(11, 'Temporary grants are revoked after task completion', (r?.revoked.length ?? 0) >= 4 && Object.values(r?.grants ?? {}).every((g) => r!.revoked.includes(g.id)), `${r?.revoked.length ?? 0} grant(s) revoked`);
+  cut(6, 'AgentPass denies production authorization', ['INSUFFICIENT_SCOPE', 'OUTSIDE_PARENT_SCOPE'].includes(prodCode ?? '') && r?.hosting?.production_attempt.alternative?.[0] === 'deploy.preview', `${prodCode ?? 'no code'} with alternative ${r?.hosting?.production_attempt.alternative?.join(', ') ?? 'none'}`);
+  cut(7, 'Hosting agent requests narrower preview authority', r?.hosting?.negotiation?.requested.actions.join() === 'deploy.preview', `requested ${r?.hosting?.negotiation?.requested.actions.join(', ')}; lead counteroffered ${r?.hosting?.negotiation?.status}`);
+  cut(8, 'Hosting agent deploys the preview successfully', !!r?.hosting?.deployment?.url, r?.hosting?.deployment ? `${r.hosting.deployment.url} (${r.hosting.deployment.provider}, local)` : r?.hosting?.failure?.reason ?? 'no deployment');
+  cut(9, 'Analytics agent computes real aggregate metrics', !!an?.summary && an.summary.signups > 0 && (an.suggestions?.length ?? 0) >= 2, missing.includes('analytics') ? 'analytics agent not built yet' : `${an?.summary?.page_views} views, ${an?.summary?.signups} signups, ${((an?.summary?.conversion_rate ?? 0) * 100).toFixed(2)}% conversion, ${an?.suggestions?.length} suggestions`);
+  cut(10, 'Analytics agent cannot retrieve raw user records', refusedAction('analytics-agent', 'analytics.raw') && !JSON.stringify(an ?? {}).includes('@example.com'), 'analytics.raw refused; no emails in output');
+  check(11, 'Temporary grants are revoked after task completion', (r?.revoked.length ?? 0) >= (two ? 2 : 4) && Object.values(r?.grants ?? {}).every((g) => r!.revoked.includes(g.id)), `${r?.revoked.length ?? 0} grant(s) revoked`);
   // GRANT_REVOKED for a delegated principal; INVALID_CALLER for a provisioned child, whose credential AgentPass disables on revocation.
-  check(12, 'Attempts to reuse revoked grants fail', (r?.reuse_after_revoke.length ?? 0) >= 4 && r!.reuse_after_revoke.every((x) => ['GRANT_REVOKED', 'INVALID_CALLER'].includes(x.code)), r?.reuse_after_revoke.map((x) => `${x.agent}: ${x.code}${x.code === 'INVALID_CALLER' ? ' (credential disabled)' : ''}`).join(', ') ?? '');
+  check(12, 'Attempts to reuse revoked grants fail', (r?.reuse_after_revoke.length ?? 0) >= (two ? 2 : 4) && r!.reuse_after_revoke.every((x) => ['GRANT_REVOKED', 'INVALID_CALLER'].includes(x.code)), r?.reuse_after_revoke.map((x) => `${x.agent}: ${x.code}${x.code === 'INVALID_CALLER' ? ' (credential disabled)' : ''}`).join(', ') ?? '');
+
+  // ---- Money (AgentPass only; the mock has no wallets, so these six are reported as not run, never faked). ----
+  const b = r?.budget;
+  const money = (n: number, title: string, pass: boolean, detail: string) => check(n, title, mode === 'agentpass' && pass, mode === 'agentpass' ? detail : 'not run: the mock authority has no wallets', mode !== 'agentpass');
+  const walletSum = Object.values(b?.wallet_cents ?? {}).reduce((s, x) => s + x, 0);
+  money(13, 'Root wallet is $1,000; helper wallets are subsets of it', b?.root_cents === ROOT_WALLET_CENTS && Object.keys(b?.wallet_cents ?? {}).length === (two ? 1 : 3) && Object.values(b?.wallet_cents ?? {}).every((x) => x <= ROOT_WALLET_CENTS) && walletSum <= ROOT_WALLET_CENTS,
+    b ? `root ${usd(b.root_cents)}; wallets ${Object.entries(b.wallet_cents).map(([k, v]) => `${k} ${usd(v)}`).join(', ')}` : 'no budget');
+  money(14, 'Helpers buy through AgentPass with real receipts', (b?.ledger.length ?? 0) >= (two ? 2 : 4) && (b?.ledger ?? []).every((l) => l.receipt_id && l.amount_cents > 0),
+    b ? b.ledger.map((l) => `${l.agent.replace('-agent', '')}: ${l.quantity} × ${l.sku_id} ${usd(l.amount_cents)}`).join('; ') : 'no ledger');
+  const over = (agent: string, sku: string) => b?.refused.find((x) => x.agent === agent && x.sku_id === sku && x.code === 'BUDGET_EXCEEDED');
+  money(15, 'Spending over a wallet is refused (BUDGET_EXCEEDED)', !!over('design-agent', 'stock-photo') && (two || !!over('hosting-agent', 'hosting-slot')),
+    b ? b.refused.map((x) => `${x.agent.replace('-agent', '')}: ${x.quantity} × ${x.sku_id} ${usd(x.amount_cents)} → ${x.code}`).join('; ') : 'no refusals');
+  const hostingTopup = b?.topups.find((t) => t.agent === (two ? 'design-agent' : 'hosting-agent'));
+  const boughtOnTopup = hostingTopup?.issued_grant_id ? b?.ledger.find((l) => l.grant_id === hostingTopup.issued_grant_id) : undefined;
+  money(16, `${two ? 'Design' : 'Hosting'} asks for more; the manager counteroffers less; it accepts and buys`, hostingTopup?.decision === 'COUNTEROFFER' && (hostingTopup.offered_cents ?? 0) < hostingTopup.requested_cents && !!boughtOnTopup,
+    hostingTopup ? `asked ${usd(hostingTopup.requested_cents)}, offered ${usd(hostingTopup.offered_cents ?? 0)} (${hostingTopup.manager_reason})${boughtOnTopup ? `, then bought ${usd(boughtOnTopup.amount_cents)} on the new wallet` : ''}` : 'no top-up');
+  const rawTopup = b?.topups.find((t) => t.agent === 'analytics-agent');
+  (two ? cut : money)(17, 'A top-up for raw user records is rejected by the manager', rawTopup?.decision === 'REJECT' && !rawTopup.issued_grant_id,
+    rawTopup ? `asked ${usd(rawTopup.requested_cents)} for ${rawTopup.sku_ids.join(', ')} → REJECT (${rawTopup.manager_reason})` : 'no request');
+  const walletsRevoked = Object.values(r?.wallets ?? {}).every((w) => r!.revoked.includes(w.id));
+  money(18, 'Spend stays within $1,000, matches AgentPass’s ledger, and wallets die with the passes', !!b && b.spent_cents <= ROOT_WALLET_CENTS && b.remaining_cents === ROOT_WALLET_CENTS - b.spent_cents && walletsRevoked && (r?.wallet_reuse_after_revoke.length ?? 0) >= (two ? 1 : 3),
+    b ? `spent ${usd(b.spent_cents)}, AgentPass says ${b.remaining_cents === null ? 'n/a' : usd(b.remaining_cents)} left; ${Object.keys(r?.wallets ?? {}).length} wallet(s) revoked; reuse: ${r?.wallet_reuse_after_revoke.map((x) => x.code).join(', ')}` : 'no budget');
 
   const fixApplied = !!r?.fix?.applied && after.newsletter.includes('escapeHtml(name)');
   await stopStack();
-  stream({ type: 'outputs', outputs: { before, after, design: r?.design, security: r?.security, hosting: r?.hosting, analytics: r?.analytics, fix_applied: fixApplied, grants: r?.grants ?? {}, revoked: r?.revoked ?? [], reuse_after_revoke: r?.reuse_after_revoke ?? [] } });
-  const passed = checks.every((x) => x.pass);
+  stream({ type: 'outputs', outputs: { before, after, design: r?.design, security: r?.security, hosting: r?.hosting, analytics: r?.analytics, fix_applied: fixApplied, grants: r?.grants ?? {}, revoked: r?.revoked ?? [], wallets: r?.wallets ?? {}, budget: r?.budget, reuse_after_revoke: r?.reuse_after_revoke ?? [] } });
+  const passed = checks.every((x) => x.pass || x.skipped);
   stream({ type: 'done', passed });
   if (!opts.project) rmSync(root, { recursive: true, force: true });
   return { result, error, checks, missing, fixApplied, before, after, audit, passed };
@@ -260,8 +305,9 @@ async function main() {
   const project = argv.includes('--project') ? argv[argv.indexOf('--project') + 1] : undefined;
   const authority: AuthorityMode = argv.includes('--authority') && argv[argv.indexOf('--authority') + 1] === 'mock' ? 'mock' : 'agentpass';
   const gateway: GatewayMode = argv.includes('--gateway') && argv[argv.indexOf('--gateway') + 1] === 'remote' ? 'remote' : 'inprocess';
+  const helpers: HelpersMode = argv.includes('--helpers') && argv[argv.indexOf('--helpers') + 1] === 'two' ? 'two' : 'all';
   console.log(c(1, `\nAgentPass workforce demo: a coding agent and four specialists build a landing page (authority: ${authority}, gateway: ${gateway}${gateway === 'remote' ? ', security agent: separate process' : ''})\n`));
-  const out = await runDemo({ project, authority, gateway, print: (l) => console.log(l) });
+  const out = await runDemo({ project, authority, gateway, helpers, print: (l) => console.log(l) });
   if (out.error) console.log(c(31, `\nWorkflow error: ${out.error.message}`));
   console.log(c(1, '\nAuthority: ') + (out.result?.authority_source === 'MOCK' ? c(33, 'MOCK (run with the default to use AgentPass)') : c(32, 'AgentPass (Developer A\'s authority, real grants, real execute gateway)')));
   if (out.missing.length) console.log(c(33, `Specialists not built yet (not faked): ${out.missing.join(', ')}`));
@@ -273,10 +319,20 @@ async function main() {
   console.log(`  Security fix applied by lead: ${out.fixApplied ? 'yes (escapeHtml)' : 'no'}`);
   const an = out.result?.analytics as any;
   if (an?.summary) { console.log(`  Analytics: ${an.summary.page_views} views, ${an.summary.signups} signups, ${(an.summary.conversion_rate * 100).toFixed(2)}% conversion`); for (const s of an.suggestions ?? []) console.log(`    • ${s}`); }
+  const bud = out.result?.budget;
+  if (bud) {
+    console.log(c(1, '\nMoney') + c(90, '  (AgentPass purchase ledger; the vendor is an in-process stub, nothing is paid for real)'));
+    console.log(`  Root wallet ${usd(bud.root_cents)} → wallets: ${Object.entries(bud.wallet_cents).map(([k, v]) => `${k} ${usd(v)}`).join(', ')}`);
+    for (const l of bud.ledger) console.log(`  ${l.agent.padEnd(16)} bought ${l.quantity} × ${l.sku_id} for ${usd(l.amount_cents)}`);
+    for (const x of bud.refused) console.log(`  ${x.agent.padEnd(16)} ${c(31, `refused ${x.quantity} × ${x.sku_id} ${usd(x.amount_cents)} (${x.code})`)}`);
+    for (const t of bud.topups) console.log(`  ${t.agent.padEnd(16)} asked ${usd(t.requested_cents)} for ${t.sku_ids.join(', ')} → ${t.decision === 'COUNTEROFFER' ? c(32, `counteroffer ${usd(t.offered_cents ?? 0)}`) : c(31, 'rejected')} (${t.manager_reason})`);
+    console.log(`  Spent ${usd(bud.spent_cents)}; AgentPass says ${bud.remaining_cents === null ? 'n/a' : usd(bud.remaining_cents)} left of ${usd(bud.root_cents)}`);
+  }
   console.log(c(1, '\nChecks'));
-  for (const x of out.checks) console.log(`  ${x.pass ? c(32, 'PASS') : c(31, 'FAIL')}  ${String(x.n).padStart(2)}. ${x.title.padEnd(52)} ${c(90, x.detail)}`);
-  const n = out.checks.filter((x) => x.pass).length;
-  console.log(out.passed ? c(32, `\n${n}/12 checks passed\n`) : c(31, `\n${n}/12 checks passed\n`));
+  for (const x of out.checks) console.log(`  ${x.skipped ? c(33, 'SKIP') : x.pass ? c(32, 'PASS') : c(31, 'FAIL')}  ${String(x.n).padStart(2)}. ${x.title.padEnd(52)} ${c(90, x.detail)}`);
+  const n = out.checks.filter((x) => x.pass).length, skipped = out.checks.filter((x) => x.skipped).length;
+  const tally = `${n}/${out.checks.length - skipped} checks passed${skipped ? ` (${skipped} not run${helpers === 'two' ? ' in the two-helper cut' : ''}${authority === 'mock' ? ' on the mock' : ''})` : ''}`;
+  console.log(out.passed ? c(32, `\n${tally}\n`) : c(31, `\n${tally}\n`));
   process.exit(out.passed ? 0 : 1);
 }
 

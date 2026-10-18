@@ -77,6 +77,15 @@ svg { width: 100%; height: auto; display: block; }
 .badge-svg, .badge rect { fill: var(--pill); }
 .badge text { font-size: 11.5px; font-weight: 600; fill: var(--ink); }
 .badge.revoked rect { fill: color-mix(in srgb, var(--critical) 25%, transparent); }
+.badge.money rect { fill: var(--ok-bg); stroke: var(--good); stroke-width: 1; }
+.badge.money text { fill: var(--ink); }
+.badge.money.revoked rect { fill: color-mix(in srgb, var(--critical) 25%, transparent); stroke: none; }
+.node.vendor rect { fill: var(--node); stroke: var(--good); stroke-dasharray: 5 4; }
+.chip.money { background: var(--ok-bg); color: var(--good); border: 1px solid var(--good); }
+.packet.money circle, .packet.money .pill rect { fill: var(--good); }
+.packet.money .pill text { fill: #fff; }
+.ledger { margin: 4px 0 0; padding-left: 16px; font-size: 12px; color: var(--ink-2); }
+.story li.skip { color: var(--muted); } .story li.skip .m { color: var(--muted); }
 .vault { fill: var(--org); stroke: var(--line); }
 .vault-text { font-size: 12px; fill: var(--ink-2); }
 .vault-g.hit .vault { stroke: var(--critical); stroke-width: 2; }
@@ -162,3 +171,8 @@ summary { cursor: pointer; color: var(--ink-2); font-weight: 600; }
 
 @media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
 @media (max-width: 560px) { .top, main { padding-left: 16px; padding-right: 16px; } .step-title { font-size: 17px; } }
+
+/* two-helper cut: the other helpers, their checks and their phases are hidden */
+body.two #n-analytics, body.two #n-hosting, body.two #r-preview, body.two #r-prod, body.two #r-agg, body.two #r-raw, body.two .wire.ho, body.two .wire.an, body.two .org.ext, body.two .org-label.ext, body.two .org-sub.ext, body.two .wire.sec { display: none; }
+body.two #n-security .lock { display: none; }
+body.two .story li.cut, body.two .dots li.cut { display: none; }

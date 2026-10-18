@@ -43,8 +43,16 @@ the Hosting agent is refused `deploy.production`, reads the hint, requests
 `deploy.preview` instead and ships a **real local build**; the Analytics agent gets
 aggregates, never raw rows; every temporary grant is revoked at the end.
 
+Money too: the owner gives the lead a **$1,000 root wallet**; the lead hands each in-house
+specialist a smaller wallet (Design $150, Hosting $100, Analytics $50) and pays the outside
+security firm's invoice itself. Every purchase goes through AgentPass's purchase ledger:
+overspending is refused (`BUDGET_EXCEEDED`), the Hosting agent asks the lead for $200 more and
+gets a $120 counteroffer it accepts and spends, the Analytics agent's request for a raw export
+of user records is rejected, and the wallets are revoked with the passes. The vendor is an
+in-process stub with fixed prices; nothing is paid for real.
+
 ```bash
-npm run demo                 # headless: timeline + 12 checks (12/12), exit 1 on failure
+npm run demo                 # headless: timeline + 18 checks (18/18), exit 1 on failure
 npm run dev:activity         # then open http://127.0.0.1:3200/workforce.html
 ```
 

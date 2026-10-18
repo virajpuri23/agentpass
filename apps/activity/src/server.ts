@@ -47,10 +47,10 @@ async function stackFor(mode: Mode): Promise<DemoStack> {
 }
 
 /** The coding-agent workforce demo (lead + 4 specialists) on a fresh project copy. */
-async function runWorkforce(authority: 'agentpass' | 'mock') {
-  startRun(`workforce · ${authority}`);
+async function runWorkforce(authority: 'agentpass' | 'mock', helpers: 'all' | 'two') {
+  startRun(`workforce · ${authority}${helpers === 'two' ? ' · two helpers' : ''}`);
   try {
-    await runWorkforceDemo({ authority, onStream: (e) => publish(e, false) });
+    await runWorkforceDemo({ authority, helpers, onStream: (e) => publish(e, false) });
   } catch (error) {
     publish({ type: 'trace', at: new Date().toISOString(), agent: 'runner', kind: 'denied', text: `Run failed: ${(error as Error).message}` }, false);
     publish({ type: 'done', passed: false }, false);
@@ -130,7 +130,7 @@ const server = createServer(async (req, res) => {
       if (running) return json(res, 409, { status: 'ERROR', code: 'BUSY', reason: 'A run is already in progress' });
       const input = await body(req).catch(() => ({}));
       running = true;
-      void runWorkforce(input.authority === 'mock' ? 'mock' : 'agentpass');
+      void runWorkforce(input.authority === 'mock' ? 'mock' : 'agentpass', input.helpers === 'two' ? 'two' : 'all');
       return json(res, 202, { status: 'OK', run: runId + 1 });
     }
     if (req.method === 'POST' && (url.pathname === '/api/run' || url.pathname === '/api/replay')) {
@@ -159,4 +159,8 @@ const server = createServer(async (req, res) => {
   }
 });
 
+// Loopback only, on both IPv4 and IPv6: browsers may resolve `localhost` to ::1 first, which a 127.0.0.1-only bind refuses.
 server.listen(port, '127.0.0.1', () => console.log(JSON.stringify({ service: 'activity', url: `http://127.0.0.1:${port}` })));
+const server6 = createServer(server.listeners('request')[0] as (req: IncomingMessage, res: ServerResponse) => void);
+server6.on('error', () => { /* no IPv6 loopback on this host: IPv4 is enough */ });
+server6.listen(port, '::1');
