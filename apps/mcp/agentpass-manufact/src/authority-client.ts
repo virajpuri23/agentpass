@@ -1,13 +1,15 @@
 import { z } from 'zod';
+import { WORKFORCE_ACTIONS, workforceDecisionSchema, workforceScopeSchema } from '../../../../packages/contracts/src/workforce.js';
 
-export const ACTIONS = [
+export const SUPPLIER_ACTIONS = [
   'supplier.quote.request',
   'supplier.purchase.execute',
   'supplier.margin.read',
 ] as const;
+export const ACTIONS = [...SUPPLIER_ACTIONS, ...WORKFORCE_ACTIONS] as const;
 
-export const scopeSchema = z.object({
-  actions: z.array(z.enum(ACTIONS)),
+const supplierScopeSchema = z.object({
+  actions: z.array(z.enum(SUPPLIER_ACTIONS)),
   supplier_ids: z.array(z.string().min(1)),
   sku_ids: z.array(z.string().min(1)),
   max_per_action_cents: z.number().int().nonnegative(),
@@ -15,6 +17,7 @@ export const scopeSchema = z.object({
   expires_at: z.iso.datetime({ offset: true }),
   max_delegation_depth: z.number().int().nonnegative(),
 }).strict();
+export const scopeSchema = z.union([supplierScopeSchema, workforceScopeSchema]);
 
 const errorSchema = z.object({
   status: z.enum(['AUTHORITY_REQUIRED', 'DENIED', 'ERROR']),
@@ -29,7 +32,9 @@ const successSchema = z.object({
   data: z.record(z.string(), z.unknown()),
 }).passthrough();
 
-export const envelopeSchema = z.union([successSchema, errorSchema]);
+
+
+export const envelopeSchema = z.union([successSchema, workforceDecisionSchema, errorSchema]);
 export type Envelope = z.infer<typeof envelopeSchema>;
 type Config = { authorityUrl: string; agentApiKey: string; runId?: string };
 

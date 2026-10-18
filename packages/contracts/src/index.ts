@@ -1,3 +1,5 @@
+import type { WorkforceAction, ResourceScope } from './workforce.js';
+export * from './workforce.js';
 /** AgentPass hackathon v1 wire contracts. Source of truth for both developers. */
 export { onboardingSchemas, onboardingSchemaBundle } from './onboarding.js';
 export type { ProvisionAgentInput, AgentInstance, OnboardingContext } from './onboarding.js';
@@ -8,7 +10,7 @@ export type RequestId = string;
 export type QuoteId = string;
 export type ISODateTime = string;
 
-export type AgentAction =
+export type AgentAction = WorkforceAction
   | 'supplier.quote.request'
   | 'supplier.purchase.execute'
   | 'supplier.margin.read'; // Supported only so seller can explicitly DENY it.
@@ -23,6 +25,9 @@ export interface AuthorityScope {
   total_budget_cents: number;
   expires_at: ISODateTime;
   max_delegation_depth: number;
+  /** Additive workforce scope; absent for frozen purchasing scopes. */
+  resources?: ResourceScope[];
+  max_executions?: number;
 }
 
 export interface Principal {

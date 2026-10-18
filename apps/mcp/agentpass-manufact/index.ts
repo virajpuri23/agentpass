@@ -2,7 +2,8 @@ import { createConsoleHandler } from '../../dashboard/src/handler.js';
 import { MCPServer, type RequestContext } from 'mcp-use';
 import { z } from 'zod';
 import { authorityEndpoint } from './src/backend.js';
-import { ACTIONS, scopeSchema, envelopeSchema, createAuthorityClient, toolResult } from './src/authority-client.js';
+import { ACTIONS, SUPPLIER_ACTIONS, scopeSchema, envelopeSchema, createAuthorityClient, toolResult } from './src/authority-client.js';
+import { workforceActionSchema } from '../../../packages/contracts/src/workforce.js';
 import { createAgentPassOAuthProvider, humanOAuthConfigFromEnv, type AgentPassOAuthUser } from './src/oauth.js';
 import { createOnboardingProxy } from './src/onboarding-proxy.js';
 import { onboardingSchemas } from '../../../packages/contracts/src/index.js';
@@ -103,7 +104,7 @@ export const describeAuthority = server.tool({
   inputSchema: z.object({}).strict(), outputSchema: envelopeSchema, annotations: readOnly,
 }, async () => toolResult({ status: 'OK', data: {
   actions: ACTIONS,
-  scope_limits: Object.keys(scopeSchema.shape),
+  scope_limits: ['actions', 'supplier_ids', 'sku_ids', 'max_per_action_cents', 'total_budget_cents', 'expires_at', 'max_delegation_depth', 'resources', 'max_executions'],
   recovery_tools: ['request_authority', 'get_authority_request', 'accept_authority_offer'],
 } }));
 
@@ -214,10 +215,15 @@ export const delegateAuthority = server.tool({
 }, async ({ parent_grant_id, ...body }, ctx) => toolResult(await authority(ctx)('POST', `v1/grants/${encodeURIComponent(parent_grant_id)}/delegate`, body)));
 
 export const executeAction = server.tool({
-  name: 'execute_action', description: 'Request a trusted supplier quote or execute an authorized simulated purchase. Purchase prices come from quote_id.',
-  inputSchema: z.object({ grant_id: id, action: z.enum(ACTIONS), supplier_id: id, sku_id: id, quantity: z.number().int().positive().optional(), quote_id: id.optional(), idempotency_key: id }).strict(),
+  name: 'execute_action', description: 'Request a trusted supplier quote, execute a simulated purchase, or run an authorized workforce action.',
+  inputSchema: z.union([z.object({ grant_id: id, action: z.enum(SUPPLIER_ACTIONS), supplier_id: id, sku_id: id, quantity: z.number().int().positive().optional(), quote_id: id.optional(), idempotency_key: id }).strict(), workforceActionSchema]),
   outputSchema: envelopeSchema, annotations: write,
 }, async (input, ctx) => toolResult(await authority(ctx)('POST', 'v1/actions/execute', input)));
+
+export const verifyAuthority = server.tool({
+  name: 'verify_authority', description: 'Check whether the authenticated caller may perform a workforce action. The decision cannot authorize later execution.',
+  inputSchema: workforceActionSchema, outputSchema: envelopeSchema, annotations: readOnly,
+}, async (input, ctx) => toolResult(await authority(ctx)('POST', 'v1/actions/verify', input)));
 
 export const revokeAuthority = server.tool({
   name: 'revoke_authority', description: 'Revoke authority as its issuer or organization owner.',
