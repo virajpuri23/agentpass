@@ -2,7 +2,11 @@
  * Deploy gateway: builds the project and serves it. `preview` starts a real
  * local server (`next start` on a free port) and returns its URL, labeled
  * local. `production` is accepted by the interface so the authority can
- * refuse it; this gateway never performs a production deploy.
+ * refuse it; nothing here ever performs a production deploy.
+ *
+ * `buildAndServe` is the trusted build step; the mock-mode gateway calls it
+ * after authorizing, and the AgentPass resource adapter calls it when the
+ * authority invokes the registered `demo-project` resource.
  */
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
@@ -38,6 +42,28 @@ function run(cmd: string, args: string[], cwd: string): Promise<{ code: number |
   });
 }
 
+/** Real `next build` + `next start` on a free loopback port. Started servers are pushed onto `servers` so the caller can stop them. */
+export async function buildAndServe(projectRoot: string, servers: ChildProcess[]): Promise<ApiResult<Deployment>> {
+  const build = await run('npm', ['run', 'build'], projectRoot);
+  if (build.code !== 0) return { status: 'ERROR', code: 'SERVICE_UNAVAILABLE', reason: `Build failed:\n${build.tail.slice(-8).join('\n')}` };
+  const port = await freePort();
+  const server = spawn('npm', ['start', '--', '--port', String(port), '--hostname', '127.0.0.1'], { cwd: projectRoot, env: { ...process.env }, stdio: 'ignore' });
+  servers.push(server);
+  const url = `http://127.0.0.1:${port}`;
+  for (let i = 0; i < 80; i++) {
+    if (await fetch(url).then((r) => r.ok, () => false)) {
+      return { status: 'OK', data: { environment: 'preview', url, provider: 'local-next-start', pid: server.pid ?? -1, build_log_tail: build.tail.slice(-6) } };
+    }
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  server.kill('SIGTERM');
+  return { status: 'ERROR', code: 'SERVICE_UNAVAILABLE', reason: 'Preview server did not start' };
+}
+
+export function stopServers(servers: ChildProcess[]) {
+  for (const s of servers.splice(0)) s.kill('SIGTERM');
+}
+
 export function createDeployGateway(projectRoot: string): DeployGateway {
   const servers: ChildProcess[] = [];
   return {
@@ -48,21 +74,8 @@ export function createDeployGateway(projectRoot: string): DeployGateway {
         // Authority said yes only if an owner-level grant was used; the demo still refuses to pretend.
         return { status: 'ERROR', code: 'SERVICE_UNAVAILABLE', reason: 'This demo has no production target; nothing was deployed' };
       }
-      const build = await run('npm', ['run', 'build'], projectRoot);
-      if (build.code !== 0) return { status: 'ERROR', code: 'SERVICE_UNAVAILABLE', reason: `Build failed:\n${build.tail.slice(-8).join('\n')}` };
-      const port = await freePort();
-      const server = spawn('npm', ['start', '--', '--port', String(port), '--hostname', '127.0.0.1'], { cwd: projectRoot, env: { ...process.env }, stdio: 'ignore' });
-      servers.push(server);
-      const url = `http://127.0.0.1:${port}`;
-      for (let i = 0; i < 80; i++) {
-        if (await fetch(url).then((r) => r.ok, () => false)) {
-          return { status: 'OK', data: { environment: 'preview', url, provider: 'local-next-start', pid: server.pid ?? -1, build_log_tail: build.tail.slice(-6) } };
-        }
-        await new Promise((r) => setTimeout(r, 250));
-      }
-      server.kill('SIGTERM');
-      return { status: 'ERROR', code: 'SERVICE_UNAVAILABLE', reason: 'Preview server did not start' };
+      return buildAndServe(projectRoot, servers);
     },
-    async stopAll() { for (const s of servers.splice(0)) s.kill('SIGTERM'); },
+    async stopAll() { stopServers(servers); },
   };
 }

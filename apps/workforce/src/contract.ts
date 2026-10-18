@@ -17,6 +17,7 @@
 export type WorkforceAction =
   | 'repo.read'
   | 'repo.write'
+  | 'security.audit.run'
   | 'deploy.preview'
   | 'deploy.production'
   | 'analytics.aggregate'
@@ -24,7 +25,7 @@ export type WorkforceAction =
   | 'secrets.read';
 
 export const WORKFORCE_ACTIONS: readonly WorkforceAction[] = [
-  'repo.read', 'repo.write', 'deploy.preview', 'deploy.production', 'analytics.aggregate', 'analytics.raw', 'secrets.read',
+  'repo.read', 'repo.write', 'security.audit.run', 'deploy.preview', 'deploy.production', 'analytics.aggregate', 'analytics.raw', 'secrets.read',
 ];
 
 /**
@@ -39,6 +40,8 @@ export interface WorkforceScope {
   resources: string[];
   expires_at: string;
   max_delegation_depth: number;
+  /** Execution ceiling shared with every ancestor (AgentPass workforce contract); the mock ignores it. */
+  max_executions?: number;
 }
 
 export interface WorkforceGrant {

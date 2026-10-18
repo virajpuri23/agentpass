@@ -9,17 +9,29 @@
  * are reported as missing, never faked.
  */
 import { execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
+import type { AddressInfo } from 'node:net';
+import { openDatabase } from '../db/database.js';
+import { migrateStore } from '../db/migrations.js';
+import { seedDatabase } from '../db/seed.js';
+import { seedWorkforceRoot } from '../db/seed-workforce.js';
+import { sqliteStore } from '../db/store.js';
+import { createAuthorityApp } from '../apps/authority/src/app.js';
+import type { SupplierService } from '../apps/authority/src/supplier.js';
+import { RealWorkforceAuthority } from '../apps/workforce/src/real/authority.js';
+import { createRealGateways } from '../apps/workforce/src/real/gateways.js';
+import { createDemoProjectResource } from '../apps/workforce/src/real/resource-adapter.js';
 import type { Trace } from '../apps/workforce/src/agent-base.js';
 import { createAnalyticsGateway } from '../apps/workforce/src/gateways/analytics.js';
 import { createDeployGateway } from '../apps/workforce/src/gateways/deploy.js';
 import { createRepoGateway } from '../apps/workforce/src/gateways/repo.js';
 import { MockWorkforceAuthority } from '../apps/workforce/src/mock-authority.js';
-import { runWorkflow, type Specialists, type WorkflowEvent, type WorkflowResult } from '../apps/workforce/src/orchestrator.js';
+import type { WorkforceAuthority } from '../apps/workforce/src/contract.js';
+import { runWorkflow, type Credentials, type Specialists, type WorkflowEvent, type WorkflowResult } from '../apps/workforce/src/orchestrator.js';
 
 const SOURCE = fileURLToPath(new URL('../demo-project/', import.meta.url));
 const argv = process.argv.slice(2);
@@ -64,10 +76,54 @@ export interface DemoOutputs {
   reuse_after_revoke: unknown[];
 }
 
-export async function runDemo(opts: { project?: string; print?: (l: string) => void; onStream?: (e: WorkforceStreamEvent) => void } = {}) {
+export type AuthorityMode = 'agentpass' | 'mock';
+
+/**
+ * AgentPass itself, in-process on a migrated throwaway SQLite: Developer A's authority app with the
+ * demo-project resource registered. Principals: owner-1 and buyer-agent (the lead) from A's admin seed,
+ * plus the external security-agent registered under sentinel-sec. The workforce root is issued by owner-1.
+ */
+async function agentpassStack(root: string) {
+  const cred = () => randomBytes(24).toString('base64url');
+  const keys = { owner: cred(), lead: cred(), sourcing: cred(), supplierAgent: cred(), security: cred() };
+  const db = openDatabase(join(root, '..', `authority-${randomBytes(4).toString('hex')}.sqlite`));
+  const store = sqliteStore(db);
+  await migrateStore(store, 'sqlite');
+  seedDatabase(db, { 'owner-1': keys.owner, 'buyer-agent': keys.lead, 'sourcing-agent': keys.sourcing, 'supplier-agent': keys.supplierAgent });
+  db.prepare('INSERT INTO organizations(id,name) VALUES(?,?)').run('sentinel-sec', 'Sentinel Security (external)');
+  db.prepare('INSERT INTO principals(id,organization_id,kind,role) VALUES(?,?,?,?)').run('security-agent', 'sentinel-sec', 'AGENT', 'SERVICE');
+  db.prepare('INSERT INTO principal_keys(key_id,principal_id,key_hash) VALUES(?,?,?)').run('seed:security-agent', 'security-agent', createHash('sha256').update(keys.security).digest('hex'));
+  const rootGrantId = 'grant-root-lead';
+  await seedWorkforceRoot(store, { grant_id: rootGrantId, owner_principal_id: 'owner-1', subject_principal_id: 'buyer-agent', scope: {
+    actions: ['repo.read', 'repo.write', 'security.audit.run', 'deploy.preview', 'analytics.aggregate.read'],
+    supplier_ids: [], sku_ids: [], max_per_action_cents: 0, total_budget_cents: 0,
+    expires_at: new Date(Date.now() + 3600_000).toISOString(), max_delegation_depth: 3,
+    resources: [{ resource: 'demo-project', organization_id: 'buyer-co', owner_principal_id: 'owner-1', paths: ['src/', 'package.json'] }],
+    max_executions: 200,
+  } });
+  const adapter = createDemoProjectResource({ repoRoot: root, analyticsFile: join(root, 'data/analytics-events.json'), organization_id: 'buyer-co', owner_principal_id: 'owner-1' });
+  const supplier: SupplierService = {
+    async policy() { return false; },
+    async quote() { throw new Error('unused'); }, async getQuote() { throw new Error('unused'); }, async fulfill() { throw new Error('unused'); },
+  };
+  const app = createAuthorityApp({ db: store, supplier, workforce: { resources: [adapter] } });
+  const server = await new Promise<import('node:http').Server>((r) => { const s = app.listen(0, '127.0.0.1', () => r(s)); });
+  const authorityUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const auth = new RealWorkforceAuthority({ authorityUrl, identity: { organization_id: 'buyer-co', owner_principal_id: 'owner-1' }, ownerCredential: keys.owner, defaultMaxExecutions: 40 });
+  return {
+    auth: auth as WorkforceAuthority, rootGrantId,
+    credentials: { lead: keys.lead, security: keys.security },
+    gateways: createRealGateways({ repoRoot: root, analyticsFile: join(root, 'data/analytics-events.json') }),
+    async stop() { await adapter.stop(); await new Promise((r) => server.close(r)); db.close(); },
+  };
+}
+
+export async function runDemo(opts: { project?: string; authority?: AuthorityMode; print?: (l: string) => void; onStream?: (e: WorkforceStreamEvent) => void } = {}) {
   const stream = opts.onStream ?? (() => {});
+  const mode: AuthorityMode = opts.authority ?? 'agentpass';
   const print = opts.print ?? (() => {});
-  const root = opts.project ?? mkdtempSync(join(tmpdir(), 'agentpass-workforce-'));
+  // AgentPass's path guard requires the canonical repository root (macOS tmp dirs are symlinks).
+  const root = realpathSync(opts.project ?? mkdtempSync(join(tmpdir(), 'agentpass-workforce-')));
   if (!opts.project) {
     cpSync(SOURCE, root, { recursive: true, filter: (s) => !/node_modules|\.next/.test(s) });
     execFileSync('npm', ['install', '--no-audit', '--no-fund', '--prefer-offline', '--silent'], { cwd: root, stdio: 'ignore' });
@@ -75,21 +131,29 @@ export async function runDemo(opts: { project?: string; print?: (l: string) => v
   const before = { hero: readFileSync(join(root, 'src/components/Hero.tsx'), 'utf8'), newsletter: readFileSync(join(root, 'src/lib/newsletter.ts'), 'utf8') };
 
   // Clean seeded authority: fresh random credentials, one root grant to the lead.
-  const auth = new MockWorkforceAuthority();
-  const cred = () => randomBytes(24).toString('base64url');
-  const credentials = { lead: cred(), design: cred(), security: cred(), hosting: cred(), analytics: cred() };
-  auth.addPrincipal({ id: 'lead-agent', organization_id: 'acme', credential: credentials.lead });
-  auth.addPrincipal({ id: 'design-agent', organization_id: 'acme', credential: credentials.design });
-  auth.addPrincipal({ id: 'security-agent', organization_id: 'sentinel-sec', credential: credentials.security });
-  auth.addPrincipal({ id: 'hosting-agent', organization_id: 'acme', credential: credentials.hosting });
-  auth.addPrincipal({ id: 'analytics-agent', organization_id: 'acme', credential: credentials.analytics });
-  const root_grant = auth.issueRoot({ id: 'grant-root-lead', issuer: 'owner-1', subject: 'lead-agent', organization_id: 'acme', scope: {
-    actions: ['repo.read', 'repo.write', 'deploy.preview', 'analytics.aggregate'],
-    resources: ['src/**', 'package.json', 'preview', 'landing-page'],
-    expires_at: new Date(Date.now() + 3600_000).toISOString(), max_delegation_depth: 2,
-  } });
-
-  const gateways = { repo: createRepoGateway(root), deploy: createDeployGateway(root), analytics: createAnalyticsGateway(join(root, 'data/analytics-events.json')) };
+  let auth: WorkforceAuthority, rootGrantId: string, credentials: Credentials, gateways: Parameters<typeof runWorkflow>[0]['gateways'];
+  let stopStack = async () => {};
+  if (mode === 'agentpass') {
+    const stack = await agentpassStack(root);
+    ({ auth, rootGrantId, credentials, gateways } = stack);
+    stopStack = stack.stop;
+  } else {
+    const mock = new MockWorkforceAuthority();
+    const cred = () => randomBytes(24).toString('base64url');
+    credentials = { lead: cred(), design: cred(), security: cred(), hosting: cred(), analytics: cred() };
+    mock.addPrincipal({ id: 'lead-agent', organization_id: 'acme', credential: credentials.lead });
+    mock.addPrincipal({ id: 'design-agent', organization_id: 'acme', credential: credentials.design! });
+    mock.addPrincipal({ id: 'security-agent', organization_id: 'sentinel-sec', credential: credentials.security });
+    mock.addPrincipal({ id: 'hosting-agent', organization_id: 'acme', credential: credentials.hosting! });
+    mock.addPrincipal({ id: 'analytics-agent', organization_id: 'acme', credential: credentials.analytics! });
+    rootGrantId = mock.issueRoot({ id: 'grant-root-lead', issuer: 'owner-1', subject: 'lead-agent', organization_id: 'acme', scope: {
+      actions: ['repo.read', 'repo.write', 'deploy.preview', 'analytics.aggregate'],
+      resources: ['src/**', 'package.json', 'preview', 'landing-page'],
+      expires_at: new Date(Date.now() + 3600_000).toISOString(), max_delegation_depth: 2,
+    } }).id;
+    auth = mock;
+    gateways = { repo: createRepoGateway(root), deploy: createDeployGateway(root), analytics: createAnalyticsGateway(join(root, 'data/analytics-events.json')) };
+  }
   const { specialists, missing } = await loadSpecialists();
   const trace: Trace = (l) => {
     stream({ type: 'trace', at: new Date().toISOString(), agent: l.agent, kind: l.kind, text: l.text, code: l.code });
@@ -98,34 +162,41 @@ export async function runDemo(opts: { project?: string; print?: (l: string) => v
   stream({ type: 'meta', authority: auth.source, project: root, missing });
 
   let result: WorkflowResult | undefined, error: Error | undefined;
-  try { result = await runWorkflow({ authority: auth, credentials, rootGrantId: root_grant.id, gateways, specialists, trace, onEvent: (event) => stream({ type: 'event', event }) }); }
+  try { result = await runWorkflow({ authority: auth, credentials, rootGrantId, gateways, specialists, trace, onEvent: (event) => stream({ type: 'event', event }) }); }
   catch (e) { error = e as Error; }
   finally { await gateways.deploy.stopAll(); }
 
   const after = { hero: readFileSync(join(root, 'src/components/Hero.tsx'), 'utf8'), newsletter: readFileSync(join(root, 'src/lib/newsletter.ts'), 'utf8') };
   const env = readFileSync(join(root, '.env'), 'utf8');
   const audit = await auth.audit();
-  const denied = (agent: string, resource: string) => audit.some((e) => e.principal_id === agent && e.decision === 'DENY' && e.resource === resource);
   const r = result;
+  /** A specialist's real principal id: provisioned agents get server-generated ids, so look it up via its grant. */
+  const pid = (agent: string) => r?.grants[agent.replace(/-agent$/, '')]?.subject_principal_id ?? agent;
+  const refused = (agent: string, resource: string) => audit.some((e) => e.principal_id === pid(agent) && e.decision !== 'ALLOW' && e.resource === resource);
+  const refusedAction = (agent: string, action: string) => audit.some((e) => e.principal_id === pid(agent) && e.action === action && e.decision !== 'ALLOW' && !['ISSUED', 'REVOKED', 'REQUESTED', 'COUNTEROFFERED', 'ACCEPTED', 'REJECTED'].includes(e.decision));
   const checks: Check[] = [];
   const check = (n: number, title: string, pass: boolean, detail: string) => { const x = { n, title, pass, detail }; checks.push(x); stream({ type: 'check', check: x }); };
   const sec = r?.security as { findings?: { file: string; severity: string }[] } | undefined;
   const an = r?.analytics as { summary?: { page_views: number; signups: number; conversion_rate: number }; suggestions?: string[] } | undefined;
 
   check(1, 'Design agent changes actual UI files', before.hero !== after.hero, missing.includes('design') ? 'design agent not built yet' : `Hero.tsx changed (${before.hero.length} → ${after.hero.length} bytes)`);
-  check(2, 'Design agent cannot read .env', denied('design-agent', '.env') && env.includes('FAKE_FIXTURE'), denied('design-agent', '.env') ? 'RESOURCE_DENIED recorded; .env intact' : 'no .env denial recorded');
+  check(2, 'Design agent cannot read .env', refused('design-agent', '.env') && env.includes('FAKE_FIXTURE'), refused('design-agent', '.env') ? `${audit.find((e) => e.principal_id === pid('design-agent') && e.resource === '.env')?.reason_code ?? 'refused'} recorded; .env intact` : 'no .env refusal recorded');
   check(3, 'Security agent completes a real audit', !!sec?.findings?.some((f) => f.file === 'src/lib/newsletter.ts' && f.severity === 'high'), missing.includes('security') ? 'security agent not built yet' : `${sec?.findings?.length ?? 0} finding(s), high on src/lib/newsletter.ts`);
-  check(4, 'Security agent cannot modify source files', audit.some((e) => e.principal_id === 'security-agent' && e.action === 'repo.write' && e.decision !== 'ALLOW'), 'write attempt refused (read-only grant)');
+  check(4, 'Security agent cannot modify source files', refusedAction('security-agent', 'repo.write'), 'write attempt refused (read-only grant)');
   check(5, 'Hosting agent requests production deployment', r?.hosting?.production_attempt.status !== undefined, `attempted deploy.production → ${r?.hosting?.production_attempt.status}`);
-  check(6, 'AgentPass denies production authorization', r?.hosting?.production_attempt.code === 'INSUFFICIENT_SCOPE' && r?.hosting?.production_attempt.alternative?.[0] === 'deploy.preview', `INSUFFICIENT_SCOPE with alternative deploy.preview`);
+  // The mock answers INSUFFICIENT_SCOPE; AgentPass answers OUTSIDE_PARENT_SCOPE (production is in no ancestor). Both must name preview as the way forward.
+  const prodCode = r?.hosting?.production_attempt.code;
+  check(6, 'AgentPass denies production authorization', ['INSUFFICIENT_SCOPE', 'OUTSIDE_PARENT_SCOPE'].includes(prodCode ?? '') && r?.hosting?.production_attempt.alternative?.[0] === 'deploy.preview', `${prodCode ?? 'no code'} with alternative ${r?.hosting?.production_attempt.alternative?.join(', ') ?? 'none'}`);
   check(7, 'Hosting agent requests narrower preview authority', r?.hosting?.negotiation?.requested.actions.join() === 'deploy.preview', `requested ${r?.hosting?.negotiation?.requested.actions.join(', ')}; lead counteroffered ${r?.hosting?.negotiation?.status}`);
   check(8, 'Hosting agent deploys the preview successfully', !!r?.hosting?.deployment?.url, r?.hosting?.deployment ? `${r.hosting.deployment.url} (${r.hosting.deployment.provider}, local)` : r?.hosting?.failure?.reason ?? 'no deployment');
   check(9, 'Analytics agent computes real aggregate metrics', !!an?.summary && an.summary.signups > 0 && (an.suggestions?.length ?? 0) >= 2, missing.includes('analytics') ? 'analytics agent not built yet' : `${an?.summary?.page_views} views, ${an?.summary?.signups} signups, ${((an?.summary?.conversion_rate ?? 0) * 100).toFixed(2)}% conversion, ${an?.suggestions?.length} suggestions`);
-  check(10, 'Analytics agent cannot retrieve raw user records', audit.some((e) => e.principal_id === 'analytics-agent' && e.action === 'analytics.raw' && e.decision !== 'ALLOW') && !JSON.stringify(an ?? {}).includes('@example.com'), 'analytics.raw refused; no emails in output');
+  check(10, 'Analytics agent cannot retrieve raw user records', refusedAction('analytics-agent', 'analytics.raw') && !JSON.stringify(an ?? {}).includes('@example.com'), 'analytics.raw refused; no emails in output');
   check(11, 'Temporary grants are revoked after task completion', (r?.revoked.length ?? 0) >= 4 && Object.values(r?.grants ?? {}).every((g) => r!.revoked.includes(g.id)), `${r?.revoked.length ?? 0} grant(s) revoked`);
-  check(12, 'Attempts to reuse revoked grants fail', (r?.reuse_after_revoke.length ?? 0) >= 4 && r!.reuse_after_revoke.every((x) => x.code === 'GRANT_REVOKED'), r?.reuse_after_revoke.map((x) => `${x.agent}: ${x.code}`).join(', ') ?? '');
+  // GRANT_REVOKED for a delegated principal; INVALID_CALLER for a provisioned child, whose credential AgentPass disables on revocation.
+  check(12, 'Attempts to reuse revoked grants fail', (r?.reuse_after_revoke.length ?? 0) >= 4 && r!.reuse_after_revoke.every((x) => ['GRANT_REVOKED', 'INVALID_CALLER'].includes(x.code)), r?.reuse_after_revoke.map((x) => `${x.agent}: ${x.code}${x.code === 'INVALID_CALLER' ? ' (credential disabled)' : ''}`).join(', ') ?? '');
 
   const fixApplied = !!r?.fix?.applied && after.newsletter.includes('escapeHtml(name)');
+  await stopStack();
   stream({ type: 'outputs', outputs: { before, after, design: r?.design, security: r?.security, hosting: r?.hosting, analytics: r?.analytics, fix_applied: fixApplied, grants: r?.grants ?? {}, revoked: r?.revoked ?? [], reuse_after_revoke: r?.reuse_after_revoke ?? [] } });
   const passed = checks.every((x) => x.pass);
   stream({ type: 'done', passed });
@@ -135,10 +206,11 @@ export async function runDemo(opts: { project?: string; print?: (l: string) => v
 
 async function main() {
   const project = argv.includes('--project') ? argv[argv.indexOf('--project') + 1] : undefined;
-  console.log(c(1, '\nAgentPass workforce demo: a coding agent and four specialists build a landing page\n'));
-  const out = await runDemo({ project, print: (l) => console.log(l) });
+  const authority: AuthorityMode = argv.includes('--authority') && argv[argv.indexOf('--authority') + 1] === 'mock' ? 'mock' : 'agentpass';
+  console.log(c(1, `\nAgentPass workforce demo: a coding agent and four specialists build a landing page (authority: ${authority})\n`));
+  const out = await runDemo({ project, authority, print: (l) => console.log(l) });
   if (out.error) console.log(c(31, `\nWorkflow error: ${out.error.message}`));
-  console.log(c(1, '\nAuthority: ') + (out.result?.authority_source === 'MOCK' ? c(33, 'MOCK (Developer A\'s generic-action contract not yet wired)') : 'AgentPass'));
+  console.log(c(1, '\nAuthority: ') + (out.result?.authority_source === 'MOCK' ? c(33, 'MOCK (run with the default to use AgentPass)') : c(32, 'AgentPass (Developer A\'s authority, real grants, real execute gateway)')));
   if (out.missing.length) console.log(c(33, `Specialists not built yet (not faked): ${out.missing.join(', ')}`));
   console.log(c(1, '\nOutputs'));
   const h = out.result?.hosting;

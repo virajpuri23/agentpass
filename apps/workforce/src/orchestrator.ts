@@ -8,6 +8,7 @@
  * the security fix itself (the only writer allowed on src/lib), and revokes
  * every temporary grant when the work is done.
  */
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { WorkforceAuthority, WorkforceGrant, WorkforceScope, WorkforceSession } from './contract.js';
 import { isError, type AgentContext, type Trace } from './agent-base.js';
 import { runHostingAgent, type HostingResult } from './agents/hosting.js';
@@ -15,7 +16,9 @@ import type { AnalyticsGateway } from './gateways/analytics.js';
 import type { DeployGateway } from './gateways/deploy.js';
 import type { RepoGateway } from './gateways/repo.js';
 
-export interface Credentials { lead: string; design: string; security: string; hosting: string; analytics: string }
+/** The lead's and the external security agent's credentials are provisioned by administrators; a missing
+ *  specialist credential means the lead creates that specialist itself (AgentPass provision_child). */
+export interface Credentials { lead: string; security: string; design?: string; hosting?: string; analytics?: string }
 
 export interface WorkflowEvent {
   at: string;
@@ -88,15 +91,31 @@ export async function runWorkflow(input: {
   const grants: Record<string, WorkforceGrant> = {};
   const sessions: Record<string, WorkforceSession> = {};
 
-  async function spawn(name: 'design' | 'security' | 'hosting' | 'analytics', cred: string, scope: Omit<WorkforceScope, 'expires_at' | 'max_delegation_depth'>, external = false) {
+  async function spawn(name: 'design' | 'security' | 'hosting' | 'analytics', cred: string | undefined, scope: Omit<WorkforceScope, 'expires_at' | 'max_delegation_depth'>, external = false) {
     const agent = `${name}-agent`;
-    sessions[name] = await open(cred);
-    emit(external ? 'external_contacted' : 'subagent_created', agent, external ? `Contacted external ${agent} (${(await sessions[name]!.me() as any).data?.organization_id}); it authenticates with its own credential` : `Started ${agent} with its own identity`);
-    const g = await lead.delegate({ parent_grant_id: input.rootGrantId, recipient_principal_id: agent, scope: { ...scope, expires_at: later(30), max_delegation_depth: 0 } });
-    if (isError(g)) throw new Error(`delegate to ${agent} failed: ${g.code} ${g.reason}`);
-    grants[name] = g.data;
-    emit('authority_delegated', 'lead-agent', `Delegated to ${agent}: ${scope.actions.join(', ')} on ${scope.resources.join(', ')}`);
-    return { name: agent, session: sessions[name]!, grant_id: g.data.id, gateways, trace } satisfies AgentContext;
+    const full: WorkforceScope = { ...scope, expires_at: later(30), max_delegation_depth: 0, max_executions: 40 };
+    if (cred) {
+      // A registered principal (seeded by an administrator, or an external company's agent): delegate to it.
+      sessions[name] = await open(cred);
+      emit(external ? 'external_contacted' : 'subagent_created', agent, external ? `Contacted external ${agent} (${(await sessions[name]!.me() as any).data?.organization_id}); it authenticates with its own credential` : `Started ${agent} with its own identity`);
+      const g = await lead.delegate({ parent_grant_id: input.rootGrantId, recipient_principal_id: sessions[name]!.principal_id, scope: full });
+      if (isError(g)) throw new Error(`delegate to ${agent} failed: ${g.code} ${g.reason}`);
+      grants[name] = g.data;
+      emit('authority_delegated', 'lead-agent', `Delegated to ${agent}: ${scope.actions.join(', ')} on ${scope.resources.join(', ')}`);
+    } else {
+      // No credential exists yet: the lead provisions a brand-new principal. The secret is generated here,
+      // only its SHA-256 goes to AgentPass, and the specialist's session is opened with that secret.
+      const provision = (lead as { provisionChild?: (i: unknown) => Promise<unknown> }).provisionChild;
+      if (!provision) throw new Error(`no credential for ${agent} and the authority cannot provision children`);
+      const secret = randomBytes(32).toString('base64url');
+      const made = await (provision.call(lead, { parent_grant_id: input.rootGrantId, scope: full, credential_hash: createHash('sha256').update(secret).digest('hex'), idempotency_key: `spawn-${name}-${randomUUID()}` }) as Promise<any>);
+      if (isError(made)) throw new Error(`provision ${agent} failed: ${made.code} ${made.reason}`);
+      grants[name] = made.data.grant;
+      sessions[name] = await open(secret);
+      emit('subagent_created', agent, `Provisioned ${agent} as ${made.data.principal.id} with its own credential (only its hash was sent)`);
+      emit('authority_delegated', 'lead-agent', `Delegated to ${agent}: ${scope.actions.join(', ')} on ${scope.resources.join(', ')}`);
+    }
+    return { name: agent, session: sessions[name]!, grant_id: grants[name]!.id, gateways, trace } satisfies AgentContext;
   }
 
   const result: WorkflowResult = { authority_source: authority.source, events, grants, revoked: [], reuse_after_revoke: [] };
