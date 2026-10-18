@@ -1,0 +1,75 @@
+Implement AgentPass's visual authority console and MCP onboarding in /Users/neha/agentpass. This is an execution task: inspect the repository, implement the smallest complete version, run meaningful integration and browser checks, and produce a reviewable PR.
+
+Outcome
+A new user can open a friendly connection page, connect as a real authenticated principal, verify their identity and grants, and understand how to connect an MCP client. An authorized user can visualize delegation, inspect permission requests, counteroffer/reject/accept using the existing lifecycle, inspect real activity, and revoke authority. The same canonical backend must enforce every operation.
+
+Read first
+Read AGENTS.md, README.md, PRD.md, TASKS.md, docs/01-ARCHITECTURE.md, docs/02-API-CONTRACTS.md, docs/05-DEVELOPER-A.md, docs/06-DEVELOPER-B.md, docs/07-TEST-PLAN.md, and docs/14-MANUFACT-VERIFICATION.md. Read applicable MCP Apps, frontend design, authentication and verification skills. State assumptions, actual scope and a brief plan before editing. Inspect git status, branches, current processes and installed package versions. Preserve all unrelated work.
+
+Ownership and coordination
+For this task the user assigns you the new apps/dashboard implementation, connection/onboarding UI, and enhancements to the existing MCP Authority Inspector. You may make necessary, focused changes in apps/mcp, apps/authority and their tests to support those flows. Developer B's supplier and agent implementations remain owned by Developer B: coordinate before touching those files. Shared packages/contracts/src/index.ts remains frozen; obtain the required A/B agreement before any contract change. First inspect existing endpoints and reuse them; do not invent undocumented endpoints or duplicate authority logic. If a missing read API is necessary, describe its smallest shape, document it and preserve the frozen contracts; coordinate any actual shared-contract change. This assignment does not authorize messaging other chats.
+
+Known state to reverify
+- Production MCP URL: https://fast-steel-94x84.run.mcp-use.com/mcp
+- Manufact server ID: f01e0537-092c-48c0-b6a6-66132aa93099
+- Last checked active deployment: 77f8d31c-050b-43bc-b4dc-cd7ac4632b5d, commit 066d90abfddf17cfffe0bb8cbccd8a175701494d, reported running.
+- Production branch feat/authority-core auto-deploys on push. Do not push or merge into that branch as part of this task.
+- Manufact runs the authority and real simulated supplier apps privately in one container with durable Supabase PostgreSQL schemas.
+- Nine existing MCP tools: describe_authority, get_my_grants, delegate_authority, request_authority, get_authority_request, respond_authority_request, accept_authority_offer, execute_action, revoke_authority.
+- Existing read-only widget: apps/mcp/agentpass-manufact/views/authority-inspector/view.tsx. It shows caller identity, grants, remaining budgets, expiry/revocation and the latest authorization result. It is a snapshot, not a live dashboard.
+- At handoff there was no apps/dashboard directory. Recheck before creating it.
+- Current MCP authentication requires distinct per-agent bearer keys. No OAuth authorization server is currently implemented. Opening /mcp in a normal browser returns INVALID_CALLER.
+- Manufact public chat had no saved configuration. It has not been verified with our per-principal authentication.
+- The recorded hosted test spent the canonical root down to $51.40. Do not reset its ledger or consume hosted allocations. Use disposable local data and a fresh local demo allocation.
+
+Build in this order
+1. Friendly connection and onboarding page.
+   Provide /connect or the smallest equivalent browser route, clearly separated from /mcp. Explain what AgentPass does, show the exact MCP URL, choose a supported client, and supply accurate client-specific setup instructions/configuration. Check current official client documentation before claiming one-click compatibility.
+   Provide a real read-only connection test that confirms endpoint, authenticated principal, organization and grants. Distinguish missing credential, invalid credential, service unavailable, and authenticated-with-no-grants. Do not show "Connected" from /health alone.
+   Give a guided first-run flow ending in a visible successful read and then an optional local simulated authority-request demonstration. Never run a purchase automatically during onboarding.
+   Keep credentials outside model-visible content, URLs, logs, analytics, persistent browser storage and compiled frontend assets. For the first local version, support a deliberately supplied existing per-agent credential through an appropriate server-side session boundary; never silently fall back to an owner/buyer key.
+
+2. One-screen authority console.
+   Show:
+   - Authenticated principal and organization, with a clear indication of available roles.
+   - A readable owner/parent/child delegation graph with actual grant links. Only show relationships the caller is authorized to see; label incomplete visibility rather than implying missing children do not exist.
+   - Grant detail: permitted actions/resources, per-action and aggregate limits, effective remaining ancestor budget, expiration and revocation.
+   - Permission request inbox/detail: requested versus offered scope, current status and authorized counteroffer/reject/accept actions. Preserve the existing parent-counteroffer/child-accept semantics; do not invent a blanket approval bypass.
+   - A real activity timeline using persisted request, grant, decision, execution and receipt evidence available to that caller. Do not manufacture events or portray sampled/latest data as a complete audit trail.
+   - Revoke control with a review of known affected descendants, and honest wording if the full impact is not visible.
+   Show loading, empty, denied, pending and failed states. Use accessible controls, keyboard navigation and readable responsive layouts. Avoid decorative charts that do not explain authority.
+   Start with manual refresh or modest polling. Reuse existing components/dependencies where practical; do not add a graph framework if simple SVG/HTML is enough.
+
+3. Improve the embedded MCP App.
+   Keep its caller-scoped view working. Add clear refresh/recovery affordances and links to the console/connect flow where supported by the installed framework and host capabilities. Reuse canonical results and preserve text fallbacks for hosts without UI support. Do not treat UI metadata or a selected graph node as authenticated identity.
+
+4. OAuth onboarding, within available configuration.
+   Inspect the installed mcp-use version and current official OAuth documentation. Implement human sign-in using an existing configured compatible identity provider if available. Bind verified identities to persisted AgentPass principals and organizations; never accept a claimed principal/role/tenant from tool arguments or arbitrary user-editable profile metadata.
+   Preserve distinct service-agent credentials and validate authority on every protected action. Human sign-in alone must not issue root authority or let a sourcing agent act as buyer.
+   Do not create a new provider account, request secrets in chat, or invent credentials. If provider setup requires user action, finish the bearer-authenticated console and a concrete, tested integration/configuration handoff first; clearly mark OAuth as blocked/unverified rather than faking sign-in. Do not weaken authentication to make the demo work.
+
+Manufact versus our UI
+Use Manufact for deployment visibility, tool/session inspection and diagnostics. Build AgentPass-specific graph, approval and onboarding UX in our app. Investigate the simplest deployment shape for the console, including same-origin service routing when supported. Keep authority/supplier internal routes private.
+Do not enable public chat or change Manufact production settings during this task. Explain whether public chat can preserve individual identities and scopes; keep compatibility unverified until tested. Never configure a shared owner credential for visitors.
+
+Scope limits
+Current contracts support supplier quote/purchase and explicit margin denial. Design labels/layout so future document-context and security-analysis permissions fit, but do not implement those new domains, rename frozen scope fields, add generic policy machinery, build a security scanner, add payments or invent unsupported functionality. All orders/payments stay simulated.
+Never expose supplier margins, database credentials or cross-organization records. Fail closed on unavailable authority, ambiguous identity and database errors. UI visibility is not authorization: enforce every read/write on the server.
+
+Verification
+Add at least one positive and one negative integration test per implemented feature, following repository requirements. Cover:
+- Valid connection yields the expected principal/org/grants; absent/invalid credentials fail.
+- Another principal/organization cannot read requests, grant details or audit data.
+- Sourcing cannot counteroffer its own request, impersonate buyer or widen a grant.
+- A permitted parent counteroffer and child acceptance persist and are reflected after refresh.
+- Revoked/expired authority and insufficient ancestor budget remain denied.
+- Clicking UI controls cannot bypass the existing service checks.
+- No credential/private data appears in URLs, tool output, generated assets or logs.
+Run appropriate existing checks and the affected integration suites. Use a disposable local database for destructive/resetting tests. Complete an authenticated browser journey through /connect, graph/details, request/counteroffer/accept, timeline and revoke, verifying persisted state. Distinguish fixture, local authenticated, hosted and unverified evidence. Build success alone is insufficient.
+If OAuth can be configured, verify login, identity binding, logout and failed/unauthorized access too.
+
+Delivery and cutoff
+Work on a focused codex/ branch. Preserve unrelated dirty changes. Commit and push that feature branch and open a focused PR if authentication permits, but do not merge into the auto-deploying production branch. The prompt file for this assignment, if present under docs/prompts, is intentional user-requested material.
+Stop feature expansion when the complete local authenticated journey is verified and the change is reviewable. Do not stop after a static mockup. If credentials/provider configuration blocks one part, complete independent work and report the exact remaining dependency.
+Provide a concise handoff with what works, routes and startup commands, changed files, tests and browser evidence, local versus hosted status, remaining OAuth/deployment steps, PR URL, and final Git state. Include screenshots of the implemented UI when available. End with what was not checked and any material risk.
+

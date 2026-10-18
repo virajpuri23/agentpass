@@ -80,6 +80,7 @@ Supplier **does not** offer an external endpoint that returns internal costs or 
 
 | MCP tool | Arguments | Semantics |
 |---|---|---|
+| `provision_child` | `{ parent_grant_id, scope, credential_hash, idempotency_key }` | Authenticated grant holder creates a new AGENT/SERVICE child and a subset grant; verifier only, never a bearer secret |
 | `describe_authority` | `{}` | List actions, limits vocabulary, and repair actions |
 | `get_my_grants` | `{}` | Authenticated caller's grants only |
 | `request_authority` | `{ parent_grant_id, requested_scope, reason }` | Starts scope negotiation |
@@ -143,3 +144,72 @@ Supplier **does not** offer an external endpoint that returns internal costs or 
 6. Purchase based on $850 trusted quote succeeds; retry same key returns identical receipt without a second debit.
 7. Margin read denied by seller and no private numeric fields in response.
 8. Expired or revoked grant fails even if subject/principal remains valid.
+
+## Console read extension (does not change frozen shared contracts)
+
+`GET /v1/console` requires the same existing bearer authentication as `/v1/me`.
+It returns `{status:"OK",data:{principal,grants,budgets,requests,activity,receipts,visibility,snapshot_at}}`.
+The response is an application read model, not a new grant or authorization contract.
+
+- `principal`: authenticated persisted principal (`id`, `organization_id`, `kind`, `role`).
+- `grants`: existing `Grant` shapes. An organization OWNER sees organization grants; other principals see only grants they hold or directly issued. No arbitrary grant-ID read is added.
+- `budgets`: existing Inspector budget shape, evaluated by the canonical chain and ledger logic for each visible grant. Revoked/expired/invalid chains return a denial code and null remaining budget.
+- `requests`: existing `AuthorityRequest` shapes plus persisted `created_at`/`updated_at`, visible only to requester or parent subject, including for OWNER callers. Existing lifecycle semantics remain unchanged.
+- `activity`: latest 200 persisted audit events, using the same safe field projection as `/v1/audit`. Owners see their organization; other principals see their own events. `activity_truncated` indicates omitted earlier rows.
+- `receipts`: latest 100 completed canonical purchase receipts. Owners see their organization; other principals see their own receipts. `receipts_truncated` indicates omitted earlier rows. No supplier storage rows are exposed.
+- `visibility`: `grants` (`organization` or `held_or_issued`), `descendants_complete`, `requests:"parties_only"`, `activity` (`organization` or `caller_only`), and the two truncation booleans above.
+- `snapshot_at`: server timestamp. Reads are transactionally consistent. Persistence failures fail closed.
+
+The browser console exposes `/connect`, `/console`, `/console.js`, `/console.css`, and
+`/console-api/*`. These are separate from `/mcp` and the private authority routes.
+`POST /console-api/session` accepts only `{credential}` and verifies `/v1/me` plus an
+actual MCP `get_my_grants` call with matching principal and organization. It sets an
+opaque HttpOnly, SameSite=Strict cookie (Secure over HTTPS). The bearer credential
+stays in a bounded, one-hour, process-local server session. Every subsequent read or
+write reauthenticates through the authority service. `/console-api/logout` destroys
+that session. All POSTs require the exact configured Origin and JSON content type.
+
+`GET /console-api/config` supplies the public MCP URL and OAuth configuration status.
+`GET /console-api/snapshot` proxies only `/v1/console`. The write proxy allowlist is
+limited to existing create-request/respond/accept/revoke endpoints under
+`/console-api/v1/…`; it cannot execute purchases, delegate root authority, select a
+caller, or forward arbitrary URLs. Existing service schemas and permission checks
+remain authoritative. Query parameters are rejected; request bodies are bounded to
+32 KiB. Errors retain machine-readable status/code/reason.
+
+
+## Trusted provisioning extension (existing shared contract types unchanged)
+
+`POST /v1/grants/:id/provision-child` authenticates the existing parent bearer key.
+The strict JSON input is `{scope: AuthorityScope, credential_hash: string,
+idempotency_key: string}`. `credential_hash` is a lowercase SHA-256 hex verifier
+of a 256-bit secret generated and retained by the trusted child runtime. A raw
+secret, claimed principal ID, organization, kind, or role is never an input.
+
+The server verifies the parent owns a live grant/ancestor chain, requires subset
+scope and decremented delegation depth, and bounds the new per-action/total limits
+by the effective remaining ancestor budget including reservations. It creates a
+random child principal ID in that organization with fixed `kind:AGENT` and
+`role:SERVICE`, registers the verifier, issues through the canonical grant engine,
+and records the idempotency binding and audit events in one transaction.
+
+The response is `{status:"OK",data:{principal:Principal,grant:Grant}}`. No raw
+credential, credential verifier, or private provisioning record is returned.
+Failures use existing machine-readable errors (`INVALID_CALLER`,
+`OUTSIDE_PARENT_SCOPE`, `BUDGET_EXCEEDED`, `GRANT_EXPIRED`, `GRANT_REVOKED`,
+`ALREADY_EXECUTED`, `INVALID_REQUEST`, or `SERVICE_UNAVAILABLE`).
+
+Idempotency is scoped to authenticated parent principal plus key and bound to
+parent grant, exact validated scope, and verifier. Identical retries return the
+same child/grant only while authority and credential remain live. Changed input
+returns `ALREADY_EXECUTED` without creating another identity. An already registered
+verifier cannot be rebound to another child. Creating grants does not create an
+independent budget pool; executions still debit the shared ancestor ledger.
+
+The child key is bound to the initially issued grant in private
+`child_provisionings`. Every authentication rechecks that complete chain.
+Direct/ancestor revocation, expiry, inactive principals, or invalid authority make
+the key return `INVALID_CALLER`; database errors fail closed. Later accepted grants
+do not extend the original credential lifetime. Seeded existing keys keep their
+existing behavior. The console proxy does not expose provisioning; agents use the
+MCP tool or the authenticated service API.

@@ -129,6 +129,8 @@ export async function runProbe(ctx: AgentContext, probe: ProbeKind, p: Record<st
       return a.executeAction({ grant_id: p.grant_id!, action: 'supplier.quote.request', ...sku, quantity: 1, idempotency_key: `forge-${randomUUID()}`, agent_id: 'buyer-agent' } as never);
     case 'purchase_again':
       return a.executeAction({ grant_id: p.grant_id!, action: 'supplier.purchase.execute', ...sku, quote_id: p.quote_id, idempotency_key: `again-${randomUUID()}` });
+    default:
+      return { status: 'ERROR' as const, code: 'INVALID_REQUEST' as const, reason: `Probe ${probe} is not supported by the sourcing agent` };
   }
 }
 

@@ -35,6 +35,19 @@ CREATE TABLE IF NOT EXISTS grants (
 CREATE INDEX IF NOT EXISTS grants_subject ON grants(subject_principal_id);
 CREATE INDEX IF NOT EXISTS grants_parent ON grants(parent_grant_id);
 
+
+-- A registered child key is usable only while its original delegated grant is live.
+CREATE TABLE IF NOT EXISTS child_provisionings (
+  parent_principal_id TEXT NOT NULL REFERENCES principals(id),
+  idempotency_key TEXT NOT NULL,
+  request_json TEXT NOT NULL CHECK (json_valid(request_json)),
+  child_principal_id TEXT NOT NULL UNIQUE REFERENCES principals(id),
+  child_grant_id TEXT NOT NULL UNIQUE REFERENCES grants(id),
+  credential_key_id TEXT NOT NULL UNIQUE REFERENCES principal_keys(key_id),
+  created_at TEXT NOT NULL,
+  PRIMARY KEY(parent_principal_id,idempotency_key)
+);
+
 CREATE TABLE IF NOT EXISTS authority_requests (
   id TEXT PRIMARY KEY,
   requester_principal_id TEXT NOT NULL REFERENCES principals(id),

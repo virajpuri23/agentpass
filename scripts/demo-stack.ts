@@ -42,16 +42,36 @@ const listen = (app: { listen: (port: number, host: string, cb: () => void) => S
 const urlOf = (s: Server) => `http://127.0.0.1:${(s.address() as AddressInfo).port}`;
 const key = () => randomBytes(32).toString('base64url');
 
-export async function isolatedStack(): Promise<DemoStack> {
+/** Root grant for the internal release-crew scenario: owner -> lead agent, $1,000 across three tools. */
+export const RELEASE_ROOT = 'grant-root-release';
+export const RELEASE_TOOLS = ['SEC-SCAN', 'DESIGN-PACK', 'QA-MINUTES'];
+
+function issueReleaseRoot(db: ReturnType<typeof openDatabase>) {
+  const now = new Date();
+  const scope = {
+    actions: ['supplier.quote.request', 'supplier.purchase.execute'],
+    supplier_ids: ['supplier-co'],
+    sku_ids: RELEASE_TOOLS,
+    max_per_action_cents: 100000,
+    total_budget_cents: 100000,
+    expires_at: new Date(now.getTime() + 24 * 3600_000).toISOString(),
+    max_delegation_depth: 2,
+  };
+  db.prepare(`INSERT INTO grants (id, organization_id, parent_grant_id, issuer_principal_id, subject_principal_id, scope_json, created_at)
+    VALUES (?, 'buyer-co', NULL, 'owner-1', 'buyer-agent', ?, ?) ON CONFLICT(id) DO NOTHING`).run(RELEASE_ROOT, JSON.stringify(scope), now.toISOString());
+}
+
+export async function isolatedStack(opts: { scenario?: 'buyer-supplier' | 'release-crew' } = {}): Promise<DemoStack> {
   const dir = mkdtempSync(join(tmpdir(), 'agentpass-demo-'));
   const serviceKey = key();
   const keys = { owner: key(), buyer: key(), sourcing: key(), supplierAgent: key() };
 
   const supplierStore = sqliteStore(join(dir, 'supplier.sqlite'));
-  const supplier = await listen(createSupplierApp({ service: createSupplierService({ store: supplierStore }), serviceKey }));
+  const supplier = await listen(createSupplierApp({ service: createSupplierService({ store: supplierStore }), serviceKey, requestLog: false }));
 
   const db = openDatabase(join(dir, 'authority.sqlite'));
   seedDatabase(db, { 'owner-1': keys.owner, 'buyer-agent': keys.buyer, 'sourcing-agent': keys.sourcing, 'supplier-agent': keys.supplierAgent });
+  if (opts.scenario === 'release-crew') issueReleaseRoot(db);
   const authority = await listen(createAuthorityApp({ db, supplier: new HttpSupplierService(urlOf(supplier), serviceKey) }));
 
   return {
@@ -60,7 +80,7 @@ export async function isolatedStack(): Promise<DemoStack> {
     authorityUrl: urlOf(authority),
     supplierUrl: urlOf(supplier),
     keys: { owner: keys.owner, buyer: keys.buyer, sourcing: keys.sourcing },
-    rootGrantId: 'grant-root-buyer',
+    rootGrantId: opts.scenario === 'release-crew' ? RELEASE_ROOT : 'grant-root-buyer',
     async stop() {
       await Promise.all([authority, supplier].map((s) => new Promise((r) => s.close(r))));
       db.close();
@@ -93,7 +113,7 @@ export async function servicesStack(): Promise<DemoStack> {
   };
 }
 
-export function hostedStack(): DemoStack {
+export function hostedStack(opts: { scenario?: 'buyer-supplier' | 'release-crew' } = {}): DemoStack {
   const need = (name: string) => {
     const v = process.env[name];
     if (!v) throw new Error(`${name} is required in .env for --hosted mode (the deployment's own agent keys, shared privately by its operator)`);
@@ -107,7 +127,9 @@ export function hostedStack(): DemoStack {
     supplierUrl: '(configured on hosted deployment)',
     keys: { owner: process.env.HOSTED_OWNER_API_KEY ?? '', buyer: need('HOSTED_BUYER_API_KEY'), sourcing: need('HOSTED_SOURCING_API_KEY') },
     // Each hosted $850 run needs a root with budget left; the owner issues a fresh one per run.
-    rootGrantId: process.env.HOSTED_ROOT_GRANT_ID || 'grant-root-buyer',
+    rootGrantId: opts.scenario === 'release-crew'
+      ? process.env.HOSTED_CREW_ROOT_GRANT_ID || RELEASE_ROOT
+      : process.env.HOSTED_ROOT_GRANT_ID || 'grant-root-buyer',
     async stop() {},
   };
 }

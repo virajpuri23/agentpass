@@ -4,6 +4,6 @@
     "strict": true, "esModuleInterop": true, "resolveJsonModule": true,
     "skipLibCheck": true, "noEmit": true, "types": ["node"]
   },
-  "include": ["apps/authority/**/*.ts", "apps/mcp/**/*.ts", "db/**/*.ts", "packages/contracts/**/*.ts",
-    "apps/supplier/**/*.ts", "apps/buyer-agent/**/*.ts", "apps/sourcing-agent/**/*.ts", "apps/remote/**/*.ts", "apps/agent-kit/**/*.ts", "apps/activity/**/*.ts", "scripts/**/*.ts"]
+  "include": ["apps/cli/**/*.ts", "apps/dashboard/**/*.ts", "apps/authority/**/*.ts", "apps/mcp/**/*.ts", "db/**/*.ts", "packages/contracts/**/*.ts",
+    "apps/supplier/**/*.ts", "apps/buyer-agent/**/*.ts", "apps/sourcing-agent/**/*.ts", "apps/remote/**/*.ts", "apps/agent-kit/**/*.ts", "apps/crew-agent/**/*.ts", "apps/workforce/**/*.ts", "apps/activity/**/*.ts", "scripts/**/*.ts"]
 }

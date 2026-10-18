@@ -181,6 +181,11 @@ export function createMcpServer(config: Config): McpServer {
     'POST', `v1/authority/requests/${encodeURIComponent(request_id)}/accept`, { idempotency_key },
   )));
 
+  server.registerTool('provision_child', {
+    description:'Create a distinct AGENT/SERVICE child and a subset grant as the authenticated parent. The runtime generates and keeps the secret; supply only its SHA-256 verifier. Reuse identical input and idempotency key on retry.',
+    inputSchema:z.object({parent_grant_id:z.string().min(1),scope:scopeSchema,credential_hash:z.string().regex(/^[a-f0-9]{64}$/),idempotency_key:z.string().min(1)}).strict(),
+  },async ({parent_grant_id,...body}) => toolResult(await callAuthority('POST',`v1/grants/${encodeURIComponent(parent_grant_id)}/provision-child`,body)));
+
   server.registerTool('delegate_authority', {
     description: 'Delegate a strict subset of an existing grant to a recipient principal.',
     inputSchema: z.object({

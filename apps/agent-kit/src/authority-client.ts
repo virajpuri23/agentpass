@@ -44,6 +44,8 @@ export interface AuthorityClient {
   delegateAuthority(input: { parent_grant_id: string; recipient_principal_id: string; scope: AuthorityScope }): Promise<ApiResult<Grant>>;
   executeAction(input: ExecuteInput): Promise<ApiResult<SupplierQuote | PurchaseReceipt>>;
   revokeAuthority(input: { grant_id: string; reason: string }): Promise<ApiResult<{ grant_id: string; revoked_at: string }>>;
+  /** Developer A's provision_child: a new child identity + subset grant; only the secret's SHA-256 is sent. */
+  provisionChild(input: { parent_grant_id: string; scope: AuthorityScope; credential_hash: string; idempotency_key: string }): Promise<ApiResult<{ principal: { id: string }; grant: Grant }>>;
   close(): Promise<void>;
 }
 
@@ -101,6 +103,7 @@ export async function connectAuthority(
     delegateAuthority: (input) => call('delegate_authority', input),
     executeAction: (input) => call('execute_action', { ...input }),
     revokeAuthority: (input) => call('revoke_authority', input),
+    provisionChild: (input) => call('provision_child', input),
     close: () => client.close(),
   };
 }
