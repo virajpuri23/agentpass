@@ -1,12 +1,13 @@
 import { OAuthError, OAuthErrorCode, oauthCustomProvider, type OAuthAuthInfo, type OAuthProvider, type OAuthTokenVerifier } from 'mcp-use/oauth';
-import { oauthAuth0Provider } from 'mcp-use/oauth/auth0';
+import { oauthSupabaseProvider } from 'mcp-use/oauth/supabase';
 import { createAuthorityClient } from './authority-client.js';
 
-export const AGENTPASS_CONNECT_SCOPE = 'agentpass:connect';
+export const SUPABASE_OPENID_SCOPE = 'openid';
 const MAX_ACCESS_TOKEN_BYTES = 16 * 1024;
 const MAX_ACCESS_TOKEN_LIFETIME_SECONDS = 600;
 
 export interface HumanOAuthConfig {
+  /** Canonical Supabase Auth issuer, normally https://<project>.supabase.co/auth/v1. */
   issuer: string | URL;
   resource: string | URL;
   clientIds: readonly string[];
@@ -45,39 +46,37 @@ function parseUrl(value: string | URL, name: string, allowBareHost = false): URL
   return url;
 }
 
-function normalizedConfig(config: HumanOAuthConfig): { issuer: URL; resource: URL; clientIds: Set<string> } {
-  const issuer = parseUrl(config.issuer, 'Auth0 issuer', true);
+function normalizedConfig(config: HumanOAuthConfig): { issuer: URL; supabaseUrl: URL; resource: URL; clientIds: Set<string> } {
+  const issuer = parseUrl(config.issuer, 'Supabase Auth issuer', true);
+  if (issuer.pathname.replace(/\/+$/, '') !== '/auth/v1') throw new Error('Supabase issuer must identify the canonical /auth/v1 endpoint.');
+  const supabaseUrl = new URL(issuer.origin);
   const resource = parseUrl(config.resource, 'MCP resource');
   if (resource.pathname !== '/mcp') throw new Error('MCP_PUBLIC_URL must identify the canonical /mcp endpoint.');
   if (!config.clientIds.length || config.clientIds.some((id) => !id || id !== id.trim()) || new Set(config.clientIds).size !== config.clientIds.length) {
     throw new Error('AGENTPASS_OAUTH_CLIENT_IDS must contain unique, non-empty client IDs.');
   }
-  return { issuer, resource, clientIds: new Set(config.clientIds) };
+  return { issuer: new URL('/auth/v1', supabaseUrl), supabaseUrl, resource, clientIds: new Set(config.clientIds) };
 }
 
 export function humanOAuthConfigFromEnv(env: OAuthEnvironment = process.env): HumanOAuthConfig | undefined {
-  const keys = ['MCP_USE_OAUTH_AUTH0_DOMAIN', 'MCP_PUBLIC_URL', 'AGENTPASS_OAUTH_CLIENT_IDS'] as const;
-  const oauthConfigured = env.MCP_USE_OAUTH_AUTH0_DOMAIN !== undefined
-    || env.AGENTPASS_OAUTH_CLIENT_IDS !== undefined
-    || env.MCP_USE_OAUTH_AUTH0_AUDIENCE !== undefined;
+  const legacyAuth0Configured = env.MCP_USE_OAUTH_AUTH0_DOMAIN !== undefined || env.MCP_USE_OAUTH_AUTH0_AUDIENCE !== undefined;
+  if (legacyAuth0Configured) throw new Error('Auth0 OAuth configuration is no longer supported; configure Supabase OAuth instead.');
+
+  const keys = ['MCP_USE_OAUTH_SUPABASE_URL', 'MCP_PUBLIC_URL', 'AGENTPASS_OAUTH_CLIENT_IDS'] as const;
+  const oauthConfigured = env.MCP_USE_OAUTH_SUPABASE_URL !== undefined || env.AGENTPASS_OAUTH_CLIENT_IDS !== undefined;
   if (!oauthConfigured) return undefined;
   const present = keys.filter((key) => env[key] !== undefined);
-  if (present.length !== keys.length) throw new Error('Configure MCP_USE_OAUTH_AUTH0_DOMAIN, MCP_PUBLIC_URL, and AGENTPASS_OAUTH_CLIENT_IDS together.');
+  if (present.length !== keys.length) throw new Error('Configure MCP_USE_OAUTH_SUPABASE_URL, MCP_PUBLIC_URL, and AGENTPASS_OAUTH_CLIENT_IDS together.');
 
+  const supabaseUrl = parseUrl(env.MCP_USE_OAUTH_SUPABASE_URL!, 'MCP_USE_OAUTH_SUPABASE_URL');
+  if (supabaseUrl.pathname !== '/') throw new Error('MCP_USE_OAUTH_SUPABASE_URL must be the project origin without a path.');
   const resource = parseUrl(env.MCP_PUBLIC_URL!, 'MCP_PUBLIC_URL');
-  if (env.MCP_USE_OAUTH_AUTH0_AUDIENCE !== undefined) {
-    const audience = parseUrl(env.MCP_USE_OAUTH_AUTH0_AUDIENCE, 'MCP_USE_OAUTH_AUTH0_AUDIENCE', true);
-    if (audience.href.replace(/\/$/, '') !== resource.href.replace(/\/$/, '')) {
-      throw new Error('MCP_USE_OAUTH_AUTH0_AUDIENCE must match MCP_PUBLIC_URL or be unset.');
-    }
-  }
-
   const rawClientIds = env.AGENTPASS_OAUTH_CLIENT_IDS!.split(',');
   const clientIds = rawClientIds.map((id) => id.trim());
   if (clientIds.some((id) => !id) || new Set(clientIds).size !== clientIds.length) {
     throw new Error('AGENTPASS_OAUTH_CLIENT_IDS must be a comma-separated list of unique, non-empty client IDs.');
   }
-  const config = { issuer: env.MCP_USE_OAUTH_AUTH0_DOMAIN!, resource, clientIds };
+  const config = { issuer: new URL('/auth/v1', supabaseUrl), resource, clientIds };
   normalizedConfig(config);
   return config;
 }
@@ -101,15 +100,20 @@ function verifiedPayload(authInfo: OAuthAuthInfo): Record<string, unknown> {
   return payload as Record<string, unknown>;
 }
 
-function verifiedClaims(authInfo: OAuthAuthInfo, clientIds: Set<string>): VerifiedIdentity {
+function verifiedClaims(authInfo: OAuthAuthInfo, config: ReturnType<typeof normalizedConfig>): VerifiedIdentity {
   const payload = verifiedPayload(authInfo);
   const issuer = requiredClaimString(payload, 'iss');
   const subject = requiredClaimString(payload, 'sub');
   const clientId = optionalClaimString(payload, 'client_id');
   const authorizedParty = optionalClaimString(payload, 'azp');
-  if (!clientId && !authorizedParty || clientId && authorizedParty && clientId !== authorizedParty) throw invalidToken();
+  if ((!clientId && !authorizedParty) || (clientId && authorizedParty && clientId !== authorizedParty)) throw invalidToken();
   const verifiedClientId = clientId ?? authorizedParty!;
-  if (!clientIds.has(verifiedClientId) || subject === verifiedClientId || subject.endsWith('@clients')) throw invalidToken();
+  if (!config.clientIds.has(verifiedClientId) || subject === verifiedClientId || subject.endsWith('@clients')) throw invalidToken();
+
+  if (issuer !== config.issuer.href || payload.aud !== config.resource.href || payload.role !== 'authenticated' || payload.is_anonymous !== false) {
+    throw invalidToken();
+  }
+  if (payload.user_id !== undefined && payload.user_id !== subject) throw invalidToken();
 
   const issuedAt = payload.iat;
   const expiresAt = payload.exp;
@@ -121,33 +125,34 @@ function verifiedClaims(authInfo: OAuthAuthInfo, clientIds: Set<string>): Verifi
 
   const scope = payload.scope;
   const scopes = typeof scope === 'string' ? scope.split(/\s+/) : Array.isArray(scope) ? scope : [];
-  if (!scopes.includes(AGENTPASS_CONNECT_SCOPE)) {
-    throw new OAuthError(OAuthErrorCode.InsufficientScope, `The ${AGENTPASS_CONNECT_SCOPE} scope is required.`);
+  if (!scopes.includes(SUPABASE_OPENID_SCOPE)) {
+    throw new OAuthError(OAuthErrorCode.InsufficientScope, `The ${SUPABASE_OPENID_SCOPE} scope is required.`);
   }
   return { issuer, subject, client_id: verifiedClientId };
 }
 
-function createAuth0Verifier(config: HumanOAuthConfig) {
+function createSupabaseVerifier(config: HumanOAuthConfig) {
   const normalized = normalizedConfig(config);
-  const provider = oauthAuth0Provider({
-    domain: normalized.issuer,
+  const provider = oauthSupabaseProvider({
+    supabaseUrl: normalized.supabaseUrl,
+    audience: normalized.resource.href,
     resource: normalized.resource,
-    requiredScopes: [AGENTPASS_CONNECT_SCOPE],
-    scopesSupported: [AGENTPASS_CONNECT_SCOPE],
+    requiredScopes: [SUPABASE_OPENID_SCOPE],
+    scopesSupported: [SUPABASE_OPENID_SCOPE],
     resourceName: 'AgentPass',
   });
   const verifier = provider.createTokenVerifier(normalized.resource);
   const verify = async (token: string): Promise<{ authInfo: OAuthAuthInfo; identity: VerifiedIdentity }> => {
     if (Buffer.byteLength(token, 'utf8') > MAX_ACCESS_TOKEN_BYTES || !token.includes('.')) throw invalidToken();
     const authInfo = await verifier.verifyAccessToken(token);
-    const identity = verifiedClaims(authInfo, normalized.clientIds);
+    const identity = verifiedClaims(authInfo, normalized);
     return { authInfo, identity };
   };
   return { oauthMetadata: provider.oauthMetadata, verify };
 }
 
 export function createHumanTokenVerifier(config: HumanOAuthConfig): (token: string) => Promise<VerifiedIdentity> {
-  const { verify } = createAuth0Verifier(config);
+  const { verify } = createSupabaseVerifier(config);
   return async (token) => (await verify(token)).identity;
 }
 
@@ -162,7 +167,7 @@ function serviceAuthInfo(token: string, resource: URL, data: Record<string, unkn
   return {
     token,
     clientId: principalId,
-    scopes: [AGENTPASS_CONNECT_SCOPE],
+    scopes: [SUPABASE_OPENID_SCOPE],
     expiresAt: Math.floor(Date.now() / 1000) + 60,
     resource,
     extra: { payload: {
@@ -174,20 +179,21 @@ function serviceAuthInfo(token: string, resource: URL, data: Record<string, unkn
 }
 
 export function createAgentPassOAuthProvider(config: HumanOAuthConfig, authorityUrl: string): OAuthProvider<AgentPassOAuthUser> {
-  const auth0 = createAuth0Verifier(config);
+  const supabase = createSupabaseVerifier(config);
   const resource = parseUrl(config.resource, 'MCP resource');
+  const normalized = normalizedConfig(config);
   return oauthCustomProvider<AgentPassOAuthUser>({
     resource,
-    requiredScopes: [AGENTPASS_CONNECT_SCOPE],
-    scopesSupported: [AGENTPASS_CONNECT_SCOPE],
+    requiredScopes: [SUPABASE_OPENID_SCOPE],
+    scopesSupported: [SUPABASE_OPENID_SCOPE],
     resourceName: 'AgentPass',
-    oauthMetadata: auth0.oauthMetadata,
+    oauthMetadata: supabase.oauthMetadata,
     createTokenVerifier: (expectedResource): OAuthTokenVerifier => ({
       async verifyAccessToken(token) {
         if (expectedResource.href !== resource.href) throw new Error('Configured MCP resource must match the canonical MCP endpoint.');
         if (Buffer.byteLength(token, 'utf8') > MAX_ACCESS_TOKEN_BYTES) throw invalidToken();
         if (token.includes('.')) {
-          const { authInfo, identity } = await auth0.verify(token);
+          const { authInfo, identity } = await supabase.verify(token);
           const payload = verifiedPayload(authInfo);
           return {
             ...authInfo,
@@ -201,7 +207,7 @@ export function createAgentPassOAuthProvider(config: HumanOAuthConfig, authority
           if (me.code === 'SERVICE_UNAVAILABLE') throw new OAuthError(OAuthErrorCode.TemporarilyUnavailable, 'The authority service is unavailable.');
           throw invalidToken();
         }
-        return serviceAuthInfo(token, resource, me.data);
+        return serviceAuthInfo(token, normalized.resource, me.data);
       },
     }),
     mapAuthInfo(authInfo) {

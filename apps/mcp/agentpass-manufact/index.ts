@@ -19,7 +19,7 @@ const serverConfig = {
   title: 'AgentPass Authority Inspector',
   version: '2.0.0',
   description: 'Scoped authority negotiation and simulated supplier purchases.',
-  instructions: 'Authenticate with your own verified human OAuth connection or provisioned agent credential; never borrow a parent credential or self-assign identity. Human connections begin without spending authority. Use get_onboarding_context and follow its trusted consent link when required; after consent, use provision_agent, list_agents, get_agent, and revoke_agent to manage narrowly scoped children. Service agents may use provision_child only within their live grant. Use describe_authority and get_my_grants to inspect direct authority. On AUTHORITY_REQUIRED, use request_authority, poll get_authority_request, then accept_authority_offer. All purchases are simulated.',
+  instructions: 'Authenticate with your own verified Supabase OAuth connection or provisioned agent credential; never borrow a parent credential or self-assign identity. Human connections begin without spending authority. Use get_onboarding_context and follow its trusted consent link when required; after consent, use provision_agent, list_agents, get_agent, and revoke_agent to manage narrowly scoped children. Service agents may use provision_child only within their live grant. Use describe_authority and get_my_grants to inspect direct authority. On AUTHORITY_REQUIRED, use request_authority, poll get_authority_request, then accept_authority_offer. All purchases are simulated.',
 };
 const oauth = oauthConfig ? createAgentPassOAuthProvider(oauthConfig, authorityUrl) : undefined;
 const server = oauth
