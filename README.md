@@ -128,7 +128,7 @@ npx mcp-use client sourcing tools call get_my_grants
 
 The CLI stores connection headers in its local user configuration; keep that configuration private and outside Git. Supply keys through each client's private configuration, never a model prompt. The sourcing client must never receive the buyer/owner key.
 
-Discovered tools: `describe_authority`, `get_my_grants`, `request_authority`, `get_authority_request`, `respond_authority_request`, `accept_authority_offer`, `delegate_authority`, `execute_action`, `revoke_authority`. All return structured envelopes with text fallbacks; all core workflows work without rendering the view.
+Discovered tools: `provision_child`, `describe_authority`, `get_my_grants`, `request_authority`, `get_authority_request`, `respond_authority_request`, `accept_authority_offer`, `delegate_authority`, `execute_action`, `revoke_authority`. All return structured envelopes with text fallbacks; all core workflows work without rendering the view.
 
 ### Supabase persistence and hosted authority
 
@@ -195,3 +195,48 @@ Also verify another principal cannot read the request, a child cannot approve it
 For hosted completion, repeat those calls against the exact deployed URL and Developer B's real simulated supplier service, correlate the real authority audit events in the private database with Manufact runtime logs, and inspect outputs for credentials/private margins. The local fixture suite and build success do not satisfy this final gate. Notify Developer B with the URL, bearer-header instructions, seeded root ID and exact tested commit only after that gate passes.
 
 The hosted verification has run and persisted its simulated transactions. The $850 golden-path purchase plus the $98.60 concurrent-test winner leave **$51.40** on the original $1,000 root. Do not expect another $850 purchase to succeed under that same spent root. Preserve the receipts/audit evidence; an owner must provision a fresh demo allocation before another full purchase demonstration.
+
+### Browser authority console
+
+Run `npm run demo:console` after building the nested MCP app to open a fresh,
+loopback-only simulated environment at `/connect` and `/console`. The console
+verifies an actual authenticated MCP read, visualizes caller-visible grants,
+negotiates through the existing request lifecycle, shows persisted activity, and
+reviews revocation impact. See [startup, verification and OAuth handoff](docs/15-AUTHORITY-CONSOLE.md).
+OAuth and hosted console deployment remain unverified; no production settings are
+changed by the local demo.
+
+### Headless agent onboarding
+
+MCP is the primary interface; the UI is optional inspection. An agent with its own
+provisioned `AGENT_API_KEY` can verify identity, grants, remaining budgets and tools
+without opening a browser:
+
+```sh
+npm run --silent agent:onboard -- --url "$MCP_PUBLIC_URL"
+```
+
+The command returns JSON and performs only read-only MCP calls. It does not create
+identity or authority. Initial provisioning comes from a trusted owner/orchestrator;
+parent and child agents then negotiate through the existing MCP lifecycle. See the
+[agent-first workflow](docs/15-AUTHORITY-CONSOLE.md#agent-first-onboarding-no-ui-required).
+
+### Automated child provisioning
+
+A parent with a live delegable grant can create a new child identity and bounded
+authority without a person or browser. The trusted CLI generates the child secret,
+keeps it in a private file outside the repository, and sends only its SHA-256
+verifier to the new `provision_child` MCP tool:
+
+```sh
+npm run --silent agent:provision -- --url "$MCP_PUBLIC_URL" \
+  --parent-grant "$PARENT_GRANT_ID" --scope-file ./child-scope.json \
+  --credential-file "$PRIVATE_RUNTIME_DIR/child.json"
+npm run --silent agent:onboard -- --credential-file "$PRIVATE_RUNTIME_DIR/child.json"
+```
+
+The parent secret comes from its own `AGENT_API_KEY`. The second command uses the
+child file explicitly, even if a parent key remains in the inherited environment.
+Retry provisioning with the same files; never regenerate a credential after an
+uncertain response. See [trusted provisioning](docs/16-CHILD-PROVISIONING.md) for
+scope, expiry, revocation, private-file rules, and the required schema rollout.
