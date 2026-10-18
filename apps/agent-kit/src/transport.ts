@@ -31,6 +31,12 @@ export type AgentMessage =
   | { type: 'AUTHORITY_RESPONDED'; request_id: string; decision: 'COUNTEROFFER' | 'REJECT' }
   | { type: 'TASK_RESULT'; ok: boolean; summary: Record<string, unknown> }
   | { type: 'GRANT_REVOKED'; grant_id: string; ok: boolean; code?: string }
+  // release crew: lead <-> launcher <-> specialists
+  | { type: 'CREW_START'; root_grant_id: string; roles: CrewRole[] }
+  | { type: 'CREW_SPAWN_REQUESTED'; agent: string; credential_file: string }
+  | { type: 'CREW_TASK'; sku_id: string; quantity: number }
+  | { type: 'DECISION_REQUESTED'; request_id: string; agent: string; sku_id: string; asked_cents: number; slice_cents: number; available_cents: number; reason: string }
+  | { type: 'DECISION'; decision: 'APPROVE' | 'PARTIAL' | 'DENY'; amount_cents?: number }
   // launcher -> sourcing: demo probes the child attempts under its own identity
   | { type: 'PROBE_REQUESTED'; probe: ProbeKind; params: Record<string, string> }
   | { type: 'PROBE_RESULT'; probe: ProbeKind; result: { status: string; code?: string; reason?: string; data?: unknown } }
@@ -38,7 +44,17 @@ export type AgentMessage =
   | { type: 'TRACE'; event: TraceEvent }
   | { type: 'ACK' };
 
-export type ProbeKind = 'my_grants' | 'margin_read' | 'overspend' | 'widen_scope' | 'self_approve' | 'forged_identity' | 'purchase_again';
+export type ProbeKind = 'my_grants' | 'margin_read' | 'overspend' | 'widen_scope' | 'self_approve' | 'forged_identity' | 'purchase_again'
+  | 'buy' | 'over_provision';
+
+/** One specialist in the release crew: its tool, budget slice and job. */
+export interface CrewRole {
+  agent: string;          // transport name, e.g. 'qa-agent'
+  label: string;          // display name
+  sku_id: string;         // the only tool it may buy
+  slice_cents: number;    // its own budget ceiling
+  quantity: number;       // what its job needs
+}
 
 /** One line of the demo trace: a real tool call or an agent decision. */
 export type TraceEvent =

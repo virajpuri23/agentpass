@@ -16,13 +16,11 @@ export function supplierMcpHandler(store: SupplierStore) {
       description: 'Public catalog of Packaging Supply Inc. (supplier-co) and how to obtain a quote or purchase through AgentPass.',
       inputSchema: z.object({}).strict(),
     }, async () => {
-      const product = await store.getProduct('PACK-500');
+      const products = await store.listProducts();
       const data = {
         supplier_id: SUPPLIER_ID,
         organization: 'Packaging Supply Inc.',
-        catalog: product?.active
-          ? [{ sku_id: product.sku_id, name: product.product_name, list_unit_price_cents: product.public_unit_price_cents, currency: 'USD' }]
-          : [],
+        catalog: products.map((p) => ({ sku_id: p.sku_id, name: p.product_name, list_unit_price_cents: p.public_unit_price_cents, currency: 'USD' })),
         how_to_buy: 'Call AgentPass execute_action with supplier.quote.request, then supplier.purchase.execute with the returned quote_id. Quotes are binding for 15 minutes; prices are set by supplier-co.',
         private: 'Costs, margins and inventory levels are never disclosed.',
         simulated: true,

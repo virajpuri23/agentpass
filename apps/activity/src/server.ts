@@ -11,9 +11,11 @@ import { fileURLToPath } from 'node:url';
 import { hostedStack, isolatedStack, viaHttpMcp, type DemoStack } from '../../../scripts/demo-stack.js';
 import type { TraceEvent } from '../../agent-kit/src/transport.js';
 import { runDemo, type Check, type DemoEvent } from '../../../scripts/run-e2e.js';
+import { runDemo as runWorkforceDemo, type WorkforceStreamEvent } from '../../../scripts/run-workforce.js';
 
 type Mode = 'local' | 'local-http' | 'hosted';
-type Envelope = { seq: number; run: number; recorded: boolean; event: DemoEvent };
+type AnyEvent = DemoEvent | WorkforceStreamEvent;
+type Envelope = { seq: number; run: number; recorded: boolean; event: AnyEvent };
 
 const PUBLIC = fileURLToPath(new URL('../public/', import.meta.url));
 const EVIDENCE = fileURLToPath(new URL('../../../docs/evidence/', import.meta.url));
@@ -24,7 +26,7 @@ let running = false;
 let buffer: Envelope[] = [];
 const clients = new Set<ServerResponse>();
 
-function publish(event: DemoEvent, recorded: boolean) {
+function publish(event: AnyEvent, recorded: boolean) {
   const env: Envelope = { seq: buffer.length, run: runId, recorded, event };
   buffer.push(env);
   const frame = `data: ${JSON.stringify(env)}\n\n`;
@@ -42,6 +44,19 @@ async function stackFor(mode: Mode): Promise<DemoStack> {
   if (mode === 'hosted') return hostedStack();
   const local = await isolatedStack();
   return mode === 'local-http' ? viaHttpMcp(local) : local;
+}
+
+/** The coding-agent workforce demo (lead + 4 specialists) on a fresh project copy. */
+async function runWorkforce() {
+  startRun('workforce');
+  try {
+    await runWorkforceDemo({ onStream: (e) => publish(e, false) });
+  } catch (error) {
+    publish({ type: 'trace', at: new Date().toISOString(), agent: 'runner', kind: 'denied', text: `Run failed: ${(error as Error).message}` }, false);
+    publish({ type: 'done', passed: false }, false);
+  } finally {
+    running = false;
+  }
 }
 
 async function run(mode: Mode) {
@@ -110,6 +125,12 @@ const server = createServer(async (req, res) => {
         hostedConfigured: Boolean(process.env.HOSTED_MCP_URL && process.env.HOSTED_BUYER_API_KEY && process.env.HOSTED_SOURCING_API_KEY),
         hostedRoot: process.env.HOSTED_ROOT_GRANT_ID ?? null,
       });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/workforce/run') {
+      if (running) return json(res, 409, { status: 'ERROR', code: 'BUSY', reason: 'A run is already in progress' });
+      running = true;
+      void runWorkforce();
+      return json(res, 202, { status: 'OK', run: runId + 1 });
     }
     if (req.method === 'POST' && (url.pathname === '/api/run' || url.pathname === '/api/replay')) {
       if (running) return json(res, 409, { status: 'ERROR', code: 'BUSY', reason: 'A run is already in progress' });
