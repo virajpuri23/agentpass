@@ -34,15 +34,12 @@
 
   <main>
     <section class="stage" aria-label="Animated diagram">
-      <div class="intro">
-        <div class="intro-text">The <b>manager</b> gets one master pass and a <b>$1,000 wallet</b>, and gives each <b>helper</b> a smaller pass and a smaller wallet. <b>AgentPass</b> checks every request and every dollar before anything is touched or spent.</div>
-        <ul class="legend" aria-label="Legend">
-          <li><span class="chip good">✓</span> allowed</li>
-          <li><span class="chip bad">✕</span> blocked</li>
-          <li><span class="chip warn">!</span> asking</li>
-          <li><span class="chip lock">🔒</span> no pass opens it</li>
-          <li><span class="chip money">$</span> wallet / spend</li>
-        </ul>
+      <ol class="steps" id="dots" aria-label="Progress"></ol>
+      <div class="caption" aria-live="polite">
+        <div class="step-head"><span class="step-no" id="step-no">Ready</span><span class="verdict" id="verdict"></span></div>
+        <div class="step-title" id="story">Press “Run demo”.</div>
+        <div class="step-detail" id="story-detail"></div>
+        <div class="step-state" id="story-state"></div>
       </div>
 
       <svg id="diagram" viewBox="0 0 1000 470" role="img" aria-labelledby="diagram-title">
@@ -55,9 +52,9 @@
         <rect class="org" x="16" y="16" width="440" height="438" rx="18"/>
         <text class="org-label" x="36" y="46">Acme</text><text class="org-sub" x="36" y="64">the company doing the work</text>
         <rect class="org" x="672" y="16" width="312" height="330" rx="18"/>
-        <text class="org-label" x="692" y="46">The project</text><text class="org-sub" x="692" y="64">everything here sits behind AgentPass</text>
+        <text class="org-label" x="692" y="46">The project</text><text class="org-sub" x="970" y="46" text-anchor="end">all behind AgentPass</text>
         <rect class="org ext" x="672" y="362" width="312" height="92" rx="18"/>
-        <text class="org-label ext" x="692" y="386">Sentinel Sec</text><text class="org-sub ext" x="692" y="404">an outside security firm</text>
+        <text class="org-label ext" x="692" y="386">Sentinel Sec</text><text class="org-sub ext" x="970" y="386" text-anchor="end">an outside security firm</text>
 
         <!-- static links -->
         <path class="wire" d="M200 118 L200 150" marker-end="url(#arrow)"/>
@@ -68,7 +65,7 @@
         <path class="wire faint" d="M628 235 L690 78"/>
         <path class="wire faint ho" d="M628 235 L690 174"/>
         <path class="wire faint an" d="M628 235 L690 270"/>
-        <path class="wire faint sec" d="M628 290 L690 417"/>
+        <path class="wire faint sec" d="M628 290 L690 421"/>
 
         <!-- Acme nodes -->
         <g class="node" id="n-owner" transform="translate(110 70)">
@@ -89,7 +86,7 @@
           <text x="12" y="42" class="n-sub" id="s-design">not started</text>
           <g class="badge" id="b-design" transform="translate(12 56)"><rect width="0" height="20" rx="10"/><text x="8" y="14"></text></g>
           <g class="badge money" id="w-design" transform="translate(12 82)"><rect width="0" height="20" rx="10"/><text x="8" y="14"></text></g>
-          <text id="l-design" x="104" y="26" class="lock" opacity="0">🔒</text>
+          <text id="l-design" x="108" y="46" class="lock" opacity="0">🔒</text>
         </g>
         <g class="node dim" id="n-hosting" transform="translate(176 300)">
           <rect width="130" height="112" rx="14"/>
@@ -97,7 +94,7 @@
           <text x="12" y="42" class="n-sub" id="s-hosting">not started</text>
           <g class="badge" id="b-hosting" transform="translate(12 56)"><rect width="0" height="20" rx="10"/><text x="8" y="14"></text></g>
           <g class="badge money" id="w-hosting" transform="translate(12 82)"><rect width="0" height="20" rx="10"/><text x="8" y="14"></text></g>
-          <text id="l-hosting" x="104" y="26" class="lock" opacity="0">🔒</text>
+          <text id="l-hosting" x="108" y="46" class="lock" opacity="0">🔒</text>
         </g>
         <g class="node dim" id="n-analytics" transform="translate(316 300)">
           <rect width="130" height="112" rx="14"/>
@@ -105,7 +102,7 @@
           <text x="12" y="42" class="n-sub" id="s-analytics">not started</text>
           <g class="badge" id="b-analytics" transform="translate(12 56)"><rect width="0" height="20" rx="10"/><text x="8" y="14"></text></g>
           <g class="badge money" id="w-analytics" transform="translate(12 82)"><rect width="0" height="20" rx="10"/><text x="8" y="14"></text></g>
-          <text id="l-analytics" x="104" y="26" class="lock" opacity="0">🔒</text>
+          <text id="l-analytics" x="108" y="46" class="lock" opacity="0">🔒</text>
         </g>
 
         <!-- the gate -->
@@ -147,7 +144,7 @@
         <g transform="translate(690 300)"><g class="vault-g" id="r-raw"><rect width="280" height="36" rx="10" class="vault"/><text x="12" y="23" class="vault-text">🔒 People’s records: stay private</text></g></g>
 
         <!-- external security company -->
-        <g class="node dim external" id="n-security" transform="translate(690 392)">
+        <g class="node dim external" id="n-security" transform="translate(690 396)">
           <rect width="280" height="50" rx="14"/>
           <text x="14" y="22" class="n-title">🔍 Security reviewer</text>
           <text x="14" y="40" class="n-sub" id="s-security">not called in yet · may look, never edit</text>
@@ -157,24 +154,24 @@
         <g id="flows"></g>
       </svg>
 
-      <div class="caption" aria-live="polite">
-        <div class="step-no" id="step-no">Ready</div>
-        <div class="step-title" id="story">Press “Run demo”.</div>
-        <div class="step-detail" id="story-detail"></div>
-        <div class="step-state" id="story-state"></div>
-      </div>
-      <ol class="dots" id="dots" aria-label="Progress"></ol>
+      <ul class="legend" aria-label="Legend">
+        <li><span class="chip good">✓</span> allowed</li>
+        <li><span class="chip bad">✕</span> blocked</li>
+        <li><span class="chip warn">!</span> asking</li>
+        <li><span class="chip money">$</span> money</li>
+        <li><span class="chip lock">🔒</span> no pass opens it</li>
+      </ul>
     </section>
 
     <aside class="side">
       <section class="card">
-        <h2>The 18 checks</h2>
+        <h2>What AgentPass must prove <span id="check-count" class="muted"></span></h2>
         <ol class="story" id="checks"></ol>
         <p class="result" id="result"></p>
       </section>
 
       <section class="card">
-        <h2>Results</h2>
+        <h2>What the helpers made</h2>
         <dl class="results">
           <dt>Page headline</dt><dd id="hero">—</dd>
           <dt>Security review</dt><dd id="security">—</dd>
