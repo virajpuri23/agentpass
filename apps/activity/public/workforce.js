@@ -186,6 +186,8 @@ function placeSecurity(two) {
     P.security = [830, 421]; P.securityTop = [830, 396];
   }
 }
+/** In the two-helper cut, the money checks of the cut steps happen during Design. */
+const checkPhase = (n) => (play.helpers === 'two' && CUT_PHASES.has(CHECK_PHASE[n - 1]) ? 2 : CHECK_PHASE[n - 1]);
 const stepNo = (phase) => (play.helpers === 'two' ? TWO_ORDER.indexOf(phase) + 1 : phase);
 const checkLis = () => [...document.querySelectorAll('#checks li[data-n]')];
 const checkLi = (n) => document.querySelector(`#checks li[data-n="${n}"]`);
@@ -193,7 +195,10 @@ function applyCut() {
   document.body.classList.toggle('two', play.helpers === 'two');
   placeSecurity(play.helpers === 'two');
   $('.lede').textContent = `A manager AI and ${play.helpers === 'two' ? 'two' : 'four'} helper AIs improve one web page. AgentPass decides what each may touch and spend, and you watch every yes and no.`;
-  checkLis().forEach((li) => li.classList.toggle('cut', play.helpers === 'two' && CUT_CHECKS.has(Number(li.dataset.n))));
+  checkLis().sort((a, b) => a.dataset.n - b.dataset.n).forEach((li) => {
+    li.classList.toggle('cut', play.helpers === 'two' && CUT_CHECKS.has(Number(li.dataset.n)));
+    $(`#checks .grp[data-phase="${checkPhase(li.dataset.n)}"] ol`).append(li);
+  });
   for (const g of document.querySelectorAll('#checks .grp')) {
     const phase = Number(g.dataset.phase);
     g.classList.toggle('cut', play.helpers === 'two' && CUT_PHASES.has(phase));
@@ -444,7 +449,7 @@ function setPhase(n) {
   if (n <= st.phase) return;
   st.phase = n;
   [...$('#dots').children].forEach((d, i) => { d.classList.toggle('now', i === n - 1); d.classList.toggle('past', i < n - 1); });
-  checkLis().forEach((li) => { if (CHECK_PHASE[li.dataset.n - 1] < n) li.classList.add('seen'); });
+  checkLis().forEach((li) => { if (checkPhase(li.dataset.n) < n) li.classList.add('seen'); });
   for (const g of document.querySelectorAll('#checks .grp')) g.classList.toggle('now', Number(g.dataset.phase) === n);
 }
 const phaseLabel = (n) => {
@@ -558,7 +563,7 @@ function onEvent(env) {
     const dots = [...$('#dots').children];
     dots.forEach((d, i) => {
       d.classList.remove('now');
-      const mine = checkLis().filter((li) => CHECK_PHASE[li.dataset.n - 1] === i + 1);
+      const mine = checkLis().filter((li) => checkPhase(li.dataset.n) === i + 1);
       const ok = i === 0 ? ev.passed : mine.length > 0 && mine.every((li) => li.classList.contains('pass') || li.classList.contains('skip'));
       d.className = `${ok ? 'pass' : 'fail'}${d.classList.contains('cut') ? ' cut' : ''}`; d.querySelector('.num').textContent = ok ? '✓' : '✕';
     });
@@ -583,7 +588,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!r.ok) { caption('Could not start', (await r.json()).reason, ''); refresh(); }
   });
   $('#speed').addEventListener('change', (e) => setSpeed(e.target.value));
-  $('#helpers').addEventListener('change', (e) => { play.helpers = e.target.value; applyCut(); });
+  $('#helpers').addEventListener('change', (e) => { play.helpers = e.target.value; if ($('#run').disabled) applyCut(); else reset(); });
   const source = new EventSource('/api/events');
   source.addEventListener('reset', (m) => { clearPlayback(); reset(); play.catchUp = JSON.parse(m.data).label === 'current'; });
   source.onmessage = (m) => enqueue(JSON.parse(m.data));
