@@ -2458,6 +2458,137 @@ paths:
             text/html:
               schema:
                 type: string
+  /onboarding/identity/email-return:
+    get:
+      operationId: showIdentityEmailReturn
+      summary: Show the email sign-in return page
+      tags:
+        - Identity
+      servers:
+        - url: http://localhost:3001
+          description: MCP app origin; override with the origin of MCP_PUBLIC_URL.
+        - url: http://localhost:4100
+          description: Authority service; private in the embedded deployment. Override with AUTHORITY_URL.
+      description: >-
+        Redirect target for the default Supabase email link. A hash-pinned inline script reads the
+        access token from the URL fragment, clears it from history, and posts it with the session CSRF
+        token to this path. No AgentPass grant is issued by this UI.
+      responses:
+        '200':
+          description: Browser HTML page.
+          content:
+            text/html:
+              schema:
+                type: string
+    post:
+      operationId: completeIdentityEmailReturn
+      summary: Complete sign-in from the email link token
+      tags:
+        - Identity
+      servers:
+        - url: http://localhost:3001
+          description: MCP app origin; override with the origin of MCP_PUBLIC_URL.
+        - url: http://localhost:4100
+          description: Authority service; private in the embedded deployment. Override with AUTHORITY_URL.
+      security:
+        - IdentityCookie: []
+      description: >-
+        Configuration-dependent trusted browser flow. One-use phase-bound encrypted server session.
+        POST requires exact Origin and CSRF; 2 KiB form limit. Verified email and server-allowlisted
+        callback/client are checked. No AgentPass grant is issued by this UI.
+      parameters:
+        - name: Origin
+          in: header
+          required: true
+          description: Must exactly match the configured browser origin.
+          schema:
+            type: string
+            format: uri
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/IdentityEmailReturnInput'
+      responses:
+        '303':
+          description: Continue browser authentication or return to an allowlisted callback.
+          headers:
+            Location:
+              required: true
+              schema:
+                type: string
+                format: uri-reference
+            Set-Cookie:
+              schema:
+                type: string
+              description: Rotates or clears an HttpOnly Secure one-use session cookie.
+        '400':
+          description: >-
+            Authority errors are JSON. Identity UI errors are HTML; the MCP proxy may return a JSON
+            transport failure.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+            text/html:
+              schema:
+                type: string
+        '401':
+          description: >-
+            Authority errors are JSON. Identity UI errors are HTML; the MCP proxy may return a JSON
+            transport failure.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+            text/html:
+              schema:
+                type: string
+        '403':
+          description: >-
+            Authority errors are JSON. Identity UI errors are HTML; the MCP proxy may return a JSON
+            transport failure.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+            text/html:
+              schema:
+                type: string
+        '413':
+          description: >-
+            Authority errors are JSON. Identity UI errors are HTML; the MCP proxy may return a JSON
+            transport failure.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+            text/html:
+              schema:
+                type: string
+        '502':
+          description: >-
+            Authority errors are JSON. Identity UI errors are HTML; the MCP proxy may return a JSON
+            transport failure.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+            text/html:
+              schema:
+                type: string
+        '503':
+          description: >-
+            Authority errors are JSON. Identity UI errors are HTML; the MCP proxy may return a JSON
+            transport failure.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+            text/html:
+              schema:
+                type: string
   /onboarding/identity/review:
     get:
       operationId: reviewIdentityClient
@@ -5202,6 +5333,20 @@ components:
         token:
           type: string
           pattern: ^\d{6,8}$
+          writeOnly: true
+    IdentityEmailReturnInput:
+      type: object
+      additionalProperties: false
+      required:
+        - csrf
+        - access_token
+      properties:
+        csrf:
+          $ref: '#/components/schemas/CsrfToken'
+        access_token:
+          type: string
+          minLength: 1
+          maxLength: 16384
           writeOnly: true
     IdentityDecisionInput:
       type: object
