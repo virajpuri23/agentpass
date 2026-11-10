@@ -359,7 +359,7 @@ function animate(env) {
         break;
       }
       case 'narrower_requested': go([P.hostingTop, P.leadBottom], 'warn', 'may I do the test copy instead?'); node('hosting', '', 'asking for less'); break;
-      case 'permission_granted': go([P.leadBottom, P.hostingTop], 'good', 'test copy only · 15 min'); setBadge('b-hosting', 'test copy · 15 min'); break;
+      case 'permission_granted': go([P.leadBottom, P.hostingTop], 'good', 'test copy only · 15 min'); setBadge('b-hosting', 'test · 15 min'); break;
       case 'deployment_completed': pulse('r-preview'); node('hosting', 'done', 'test copy is live'); break;
       case 'analytics_analyzed': pulse('r-agg'); node('analytics', 'done', 'totals worked out'); break;
       case 'fix_applied': go([P.lead, P.gate, P.repo], 'good', 'fixes the bug'); node('lead', '', 'fixed the security bug'); break;
