@@ -2464,6 +2464,7 @@ paths:
       summary: Show the email sign-in return page
       tags:
         - Identity
+      security: []
       servers:
         - url: http://localhost:3001
           description: MCP app origin; override with the origin of MCP_PUBLIC_URL.
