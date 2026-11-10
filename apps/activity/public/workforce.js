@@ -19,7 +19,8 @@ const CHECKS = [
   '$1,000 wallet; helper wallets are slices of it', 'Helpers bought what they needed, with receipts', 'Overspending was blocked',
   'A helper asked for more; the manager gave less; it bought', 'Numbers’ request for people’s records was refused', 'Spend within $1,000, matches AgentPass; wallets died with the passes',
 ];
-const PHASES = ['The master pass and the wallet', 'Design', 'Outside security reviewer', 'Publishing', 'Numbers', 'Passes and wallets taken back'];
+const PHASES = ['Setup', 'Design', 'Security review', 'Publishing', 'Numbers', 'Clean-up'];
+const TWO_ORDER = [1, 2, 3, 6];
 const CHECK_PHASE = [2, 2, 3, 3, 4, 4, 4, 4, 5, 5, 6, 6, 2, 5, 4, 4, 5, 6];
 const SKU = { 'stock-photo': ['stock photo', 'stock photos'], 'audit-hour': ['security review hour', 'security review hours'], 'hosting-slot': ['hosting slot', 'hosting slots'], 'data-query': ['data query', 'data queries'], 'raw-dataset': ['a raw export of people’s records', 'a raw export of people’s records'] };
 const sku = (id, n = 2) => (SKU[id] ? SKU[id][Number(n) === 1 ? 0 : 1] : id);
@@ -32,7 +33,7 @@ const who = (a) => WHO[a] || a;
 // Anchor points in the SVG's coordinate space.
 const P = {
   owner: [200, 118], leadTop: [200, 150], leadBottom: [200, 236], lead: [296, 193], gate: [564, 235],
-  design: [101, 355], hosting: [241, 355], analytics: [381, 355], security: [830, 417], securityTop: [830, 392],
+  design: [101, 355], hosting: [241, 355], analytics: [381, 355], security: [830, 421], securityTop: [830, 396],
   designTop: [101, 300], hostingTop: [241, 300], analyticsTop: [381, 300],
   repo: [690, 78], env: [690, 126], preview: [690, 174], prod: [690, 222], agg: [690, 270], raw: [690, 318],
   vendor: [564, 352],
@@ -118,10 +119,21 @@ function detailFor(e) {
     default: return '';
   }
 }
-function caption(no, title, detail) {
+const VERDICT = { good: '✓ Allowed', bad: '✕ Blocked', warn: '! Asking', money: '$ Money', back: '↩ Taken back' };
+function toneFor(e) {
+  if (/denied|exceeded|rejected/.test(e.kind)) return 'bad';
+  if (/requested/.test(e.kind)) return 'warn';
+  if (/^(purchase_made|wallet_delegated|budget_countered)$/.test(e.kind)) return 'money';
+  if (e.kind === 'authority_revoked') return 'back';
+  if (e.kind === 'note') return '';
+  return 'good';
+}
+function caption(no, title, detail, tone = '', verdict = VERDICT[tone]) {
   if (no !== undefined) $('#step-no').textContent = no;
   if (title !== undefined) $('#story').textContent = title;
   $('#story-detail').textContent = detail || '';
+  $('.caption').dataset.tone = tone;
+  $('#verdict').textContent = verdict || '';
 }
 
 // ---- Beats: the run streams ~70 real lines; only these pause the screen. Everything else still updates
@@ -168,18 +180,35 @@ function placeSecurity(two) {
     document.getElementById('wire-design').setAttribute('d', 'M200 236 L101 300');
     document.getElementById('wire-second').setAttribute('d', 'M200 236 L241 300');
     P.design = [101, 355]; P.designTop = [101, 300];
-    g.setAttribute('transform', 'translate(690 392)'); rect.setAttribute('width', '280'); rect.setAttribute('height', '50');
+    g.setAttribute('transform', 'translate(690 396)'); rect.setAttribute('width', '280'); rect.setAttribute('height', '50');
     title.setAttribute('x', '14'); title.setAttribute('y', '22'); sub.setAttribute('x', '14'); sub.setAttribute('y', '40');
     title.textContent = '🔍 Security reviewer'; badge.setAttribute('transform', 'translate(190 8)');
-    P.security = [830, 417]; P.securityTop = [830, 392];
+    P.security = [830, 421]; P.securityTop = [830, 396];
   }
 }
+/** In the two-helper cut, the money checks of the cut steps happen during Design. */
+const checkPhase = (n) => (play.helpers === 'two' && CUT_PHASES.has(CHECK_PHASE[n - 1]) ? 2 : CHECK_PHASE[n - 1]);
+const stepNo = (phase) => (play.helpers === 'two' ? TWO_ORDER.indexOf(phase) + 1 : phase);
+const checkLis = () => [...document.querySelectorAll('#checks li[data-n]')];
+const checkLi = (n) => document.querySelector(`#checks li[data-n="${n}"]`);
 function applyCut() {
   document.body.classList.toggle('two', play.helpers === 'two');
   placeSecurity(play.helpers === 'two');
-  $('.lede').textContent = play.helpers === 'two' ? 'One AI manager, two AI helpers, one web page. AgentPass hands out passes and wallets and checks every move.' : 'One AI manager, four AI helpers, one web page. AgentPass hands out passes and wallets and checks every move.';
-  [...$('#checks').children].forEach((li, i) => li.classList.toggle('cut', play.helpers === 'two' && CUT_CHECKS.has(i + 1)));
-  [...$('#dots').children].forEach((li, i) => li.classList.toggle('cut', play.helpers === 'two' && CUT_PHASES.has(i + 1)));
+  $('.lede').textContent = `A manager AI and ${play.helpers === 'two' ? 'two' : 'four'} helper AIs improve one web page. AgentPass decides what each may touch and spend, and you watch every yes and no.`;
+  checkLis().sort((a, b) => a.dataset.n - b.dataset.n).forEach((li) => {
+    li.classList.toggle('cut', play.helpers === 'two' && CUT_CHECKS.has(Number(li.dataset.n)));
+    $(`#checks .grp[data-phase="${checkPhase(li.dataset.n)}"] ol`).append(li);
+  });
+  for (const g of document.querySelectorAll('#checks .grp')) {
+    const phase = Number(g.dataset.phase);
+    g.classList.toggle('cut', play.helpers === 'two' && CUT_PHASES.has(phase));
+    g.querySelector('.grp-h').textContent = `Step ${stepNo(phase)} · ${PHASES[phase - 1]}`;
+  }
+  [...$('#dots').children].forEach((li, i) => {
+    li.classList.toggle('cut', play.helpers === 'two' && CUT_PHASES.has(i + 1));
+    if (!li.classList.contains('pass') && !li.classList.contains('fail')) li.querySelector('.num').textContent = String(stepNo(i + 1));
+  });
+  $('#check-count').textContent = `· ${CHECKS.length - (play.helpers === 'two' ? CUT_CHECKS.size : 0)} checks`;
 }
 const pace = () => (play.catchUp ? 0 : SPEED[play.speed]);
 function delayFor(env) {
@@ -335,7 +364,7 @@ function animate(env) {
         break;
       }
       case 'narrower_requested': go([P.hostingTop, P.leadBottom], 'warn', 'may I do the test copy instead?'); node('hosting', '', 'asking for less'); break;
-      case 'permission_granted': go([P.leadBottom, P.hostingTop], 'good', 'test copy only · 15 min'); setBadge('b-hosting', 'read + test copy · 15 min'); break;
+      case 'permission_granted': go([P.leadBottom, P.hostingTop], 'good', 'test copy only · 15 min'); setBadge('b-hosting', 'test · 15 min'); break;
       case 'deployment_completed': pulse('r-preview'); node('hosting', 'done', 'test copy is live'); break;
       case 'analytics_analyzed': pulse('r-agg'); node('analytics', 'done', 'totals worked out'); break;
       case 'fix_applied': go([P.lead, P.gate, P.repo], 'good', 'fixes the bug'); node('lead', '', 'fixed the security bug'); break;
@@ -345,7 +374,7 @@ function animate(env) {
         const w = m[1].replace(/-(preview|topup)$/, '');
         if (m[2] === 'wallet') {
           go([P.lead, P.gate], 'warn', `take back ${cap(who(`${w}-agent`))}’s ${m[1].endsWith('-topup') ? 'top-up' : 'wallet'}`, { hold: 150 });
-          setBadge(`w-${w}`, 'wallet taken back', true);
+          setBadge(`w-${w}`, 'wallet closed', true);
           break;
         }
         go([P.lead, P.gate], 'warn', `take back ${cap(who(`${w}-agent`))}’s ${m[1].endsWith('-preview') ? 'test-copy pass' : 'pass'}`, { hold: 150 });
@@ -370,7 +399,7 @@ function animate(env) {
         st.spent += cents;
         go([n === 'lead' ? P.lead : P[n], P.gate, P.vendor], 'money', n === 'lead' ? `pays invoice $${m[3]}` : `buys ${m[1]} ${sku(m[2], m[1])} · $${m[3]}`);
         pulse('n-vendor');
-        if (n !== 'lead' && st.wallet[n]) { st.wallet[n].spent += cents; setBadge(`w-${n}`, `${st.wallet[n].total} · spent ${usd(st.wallet[n].spent)}`); }
+        if (n !== 'lead' && st.wallet[n]) { st.wallet[n].spent += cents; setBadge(`w-${n}`, `${usd(st.wallet[n].spent)} of ${st.wallet[n].total}`); }
         if (st.root) setBadge('w-lead', `${usd(st.root)} · ${usd(st.root - st.spent)} left`);
         break;
       }
@@ -385,7 +414,7 @@ function animate(env) {
         const m = e.text.match(/^Counteroffered (\$[\d,.]+) to ([a-z]+)-agent/);
         if (!m) break;
         go([P.leadBottom, P[`${m[2]}Top`]], 'money', `${m[1]}, no more`);
-        if (st.wallet[m[2]]) { const add = Math.round(parseFloat(m[1].replace(/[$,]/g, '')) * 100); st.wallet[m[2]].total = usd(Math.round(parseFloat(st.wallet[m[2]].total.replace(/[$,]/g, '')) * 100) + add); setBadge(`w-${m[2]}`, `${st.wallet[m[2]].total} · spent ${usd(st.wallet[m[2]].spent)}`); }
+        if (st.wallet[m[2]]) { const add = Math.round(parseFloat(m[1].replace(/[$,]/g, '')) * 100); st.wallet[m[2]].total = usd(Math.round(parseFloat(st.wallet[m[2]].total.replace(/[$,]/g, '')) * 100) + add); setBadge(`w-${m[2]}`, `${usd(st.wallet[m[2]].spent)} of ${st.wallet[m[2]].total}`); }
         break;
       }
       case 'budget_rejected': { const m = e.text.match(/^Rejected ([a-z]+)-agent/); if (m) { go([P.leadBottom, P[`${m[1]}Top`]], 'bad', 'no'); node(m[1], '', 'request refused'); } break; }
@@ -419,14 +448,13 @@ function phaseOf(env) {
 function setPhase(n) {
   if (n <= st.phase) return;
   st.phase = n;
-  [...$('#dots').children].forEach((d, i) => d.classList.toggle('now', i === n - 1));
-  [...$('#checks').children].forEach((li, i) => { if (CHECK_PHASE[i] < n) li.classList.add('seen'); });
+  [...$('#dots').children].forEach((d, i) => { d.classList.toggle('now', i === n - 1); d.classList.toggle('past', i < n - 1); });
+  checkLis().forEach((li) => { if (checkPhase(li.dataset.n) < n) li.classList.add('seen'); });
+  for (const g of document.querySelectorAll('#checks .grp')) g.classList.toggle('now', Number(g.dataset.phase) === n);
 }
 const phaseLabel = (n) => {
   if (!n) return 'Ready';
-  if (play.helpers !== 'two') return `Step ${n} of ${PHASES.length} · ${PHASES[n - 1]}`;
-  const order = [1, 2, 3, 6];
-  return `Step ${order.indexOf(n) + 1} of ${order.length} · ${PHASES[n - 1]}`;
+  return `Step ${stepNo(n)} of ${play.helpers === 'two' ? TWO_ORDER.length : PHASES.length} · ${PHASES[n - 1]}`;
 };
 
 let st;
@@ -436,11 +464,17 @@ function reset() {
   $('#count').textContent = '';
   for (const id of ['hero', 'security', 'preview', 'metrics']) $(`#${id}`).textContent = '—';
   $('#money').replaceChildren('—', el('ul', 'ledger')); $('#money ul').id = 'ledger';
-  $('#checks').replaceChildren(...CHECKS.map((t) => { const li = el('li'); li.append(el('span', 'm', '·'), el('span', '', t)); return li; }));
-  $('#dots').replaceChildren(...PHASES.map((t, i) => { const li = el('li', '', String(i + 1)); li.title = t; return li; }));
+  $('#checks').replaceChildren(...PHASES.map((t, p) => {
+    const g = el('li', 'grp'); g.dataset.phase = String(p + 1);
+    const list = el('ol');
+    CHECKS.forEach((c, i) => { if (CHECK_PHASE[i] !== p + 1) return; const li = el('li'); li.dataset.n = String(i + 1); li.append(el('span', 'm', '·'), el('span', '', c)); list.append(li); });
+    g.append(el('div', 'grp-h'), list);
+    return g;
+  }).filter((g) => g.querySelector('li')));
+  $('#dots').replaceChildren(...PHASES.map((t, i) => { const li = el('li'); li.append(el('span', 'num', String(i + 1)), el('span', 'lbl', t)); return li; }));
   applyCut();
   $('#result').textContent = ''; $('#result').className = 'result';
-  caption('Ready', 'Press “Run demo”.', '');
+  caption('Ready', 'Press “Run demo” to start.', 'The manager gets one master pass and a $1,000 wallet and hands each helper a smaller pass and wallet. Every file, publish and dollar goes through AgentPass first.');
   // diagram
   $('#flows').replaceChildren();
   for (const n of ['design', 'hosting', 'analytics', 'security']) {
@@ -467,7 +501,7 @@ function row(cls, at, agent, whatNodes) {
 }
 
 function onWorkflowEvent(e) {
-  if (isBeat({ event: { type: 'event', event: e } })) caption(undefined, headline(e), detailFor(e));
+  if (isBeat({ event: { type: 'event', event: e } })) caption(undefined, headline(e), detailFor(e), toneFor(e));
   row('event', e.at, e.agent, [el('span', `tag ${/denied|exceeded|rejected/.test(e.kind) ? 'bad' : 'ok'}`, e.kind + (e.code ? ` ${e.code}` : '')), document.createTextNode(e.text)]);
 }
 function onTrace(e) {
@@ -515,11 +549,11 @@ function onEvent(env) {
     caption(undefined, `A clean start${realRun ? '' : ' on the practice mock'}: fresh project, new keys, one master pass.`, 'Even the master pass can’t touch the live site or people’s records.');
   } else if (ev.type === 'event') onWorkflowEvent(ev.event);
   else if (ev.type === 'trace') onTrace(ev);
-  else if (ev.type === 'outputs') { onOutputs(ev.outputs); caption('Results', 'What the helpers made.', 'See the right-hand side.'); }
+  else if (ev.type === 'outputs') { onOutputs(ev.outputs); caption('Results', 'The work is done. Here is what the helpers made.', 'See “What the helpers made” on the right.'); }
   else if (ev.type === 'check') {
-    const li = $('#checks').children[ev.check.n - 1];
+    const li = checkLi(ev.check.n);
     if (li) { li.className = `seen ${ev.check.skipped ? 'skip' : ev.check.pass ? 'pass' : 'fail'}${li.classList.contains('cut') ? ' cut' : ''}`; li.querySelector('.m').textContent = ev.check.skipped ? '–' : ev.check.pass ? '✓' : '✕'; li.title = ev.check.detail; }
-    if (!(ev.check.skipped && play.helpers === 'two')) caption('Checking', `Checking ${ev.check.n} of ${CHECKS.length - (play.helpers === 'two' ? CUT_CHECKS.size : 0)}`, `${ev.check.skipped ? '– not run:' : ev.check.pass ? '✓' : '✕'} ${CHECKS[ev.check.n - 1]}`);
+    if (!(ev.check.skipped && play.helpers === 'two')) caption('Checking the results', `Check ${play.helpers === 'two' ? ev.check.n - [...CUT_CHECKS].filter((c) => c < ev.check.n).length : ev.check.n} of ${CHECKS.length - (play.helpers === 'two' ? CUT_CHECKS.size : 0)}: ${CHECKS[ev.check.n - 1]}`, ev.check.skipped ? 'Not run in this cut.' : '', ev.check.skipped ? '' : ev.check.pass ? 'good' : 'bad', ev.check.skipped ? '' : ev.check.pass ? '✓ Pass' : '✕ Fail');
   } else if (ev.type === 'done') {
     const n = $('#checks').querySelectorAll('.pass').length, skipped = $('#checks').querySelectorAll('.skip').length;
     const total = CHECKS.length - skipped;
@@ -529,11 +563,12 @@ function onEvent(env) {
     const dots = [...$('#dots').children];
     dots.forEach((d, i) => {
       d.classList.remove('now');
-      const mine = [...$('#checks').children].filter((_, j) => CHECK_PHASE[j] === i + 1);
+      const mine = checkLis().filter((li) => checkPhase(li.dataset.n) === i + 1);
       const ok = i === 0 ? ev.passed : mine.length > 0 && mine.every((li) => li.classList.contains('pass') || li.classList.contains('skip'));
-      d.className = `${ok ? 'pass' : 'fail'}${d.classList.contains('cut') ? ' cut' : ''}`; d.textContent = ok ? '✓' : '✕';
+      d.className = `${ok ? 'pass' : 'fail'}${d.classList.contains('cut') ? ' cut' : ''}`; d.querySelector('.num').textContent = ok ? '✓' : '✕';
     });
-    caption('Done', ev.passed ? `Every rule held: ${n} of ${total}.` : `Some checks failed: ${n} of ${total} passed.`, 'Every ✓, ✕ and $ you saw was a real AgentPass decision.');
+    for (const g of document.querySelectorAll('#checks .grp')) g.classList.remove('now');
+    caption('Done', ev.passed ? `Every rule held: ${n} of ${total} checks passed.` : `Some checks failed: ${n} of ${total} passed.`, `Every ✓, ✕ and $ you saw was a real AgentPass decision.${ev.passed ? ' All passes and wallets are now dead.' : ''}`, ev.passed ? 'good' : 'bad', ev.passed ? '✓ All rules held' : '✕ Failed');
     refresh();
   }
   animate(env);
@@ -553,7 +588,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!r.ok) { caption('Could not start', (await r.json()).reason, ''); refresh(); }
   });
   $('#speed').addEventListener('change', (e) => setSpeed(e.target.value));
-  $('#helpers').addEventListener('change', (e) => { play.helpers = e.target.value; applyCut(); });
+  $('#helpers').addEventListener('change', (e) => { play.helpers = e.target.value; if ($('#run').disabled) applyCut(); else reset(); });
   const source = new EventSource('/api/events');
   source.addEventListener('reset', (m) => { clearPlayback(); reset(); play.catchUp = JSON.parse(m.data).label === 'current'; });
   source.onmessage = (m) => enqueue(JSON.parse(m.data));
