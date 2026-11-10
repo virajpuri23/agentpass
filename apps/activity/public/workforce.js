@@ -563,7 +563,7 @@ function onEvent(env) {
       d.className = `${ok ? 'pass' : 'fail'}${d.classList.contains('cut') ? ' cut' : ''}`; d.querySelector('.num').textContent = ok ? '✓' : '✕';
     });
     for (const g of document.querySelectorAll('#checks .grp')) g.classList.remove('now');
-    caption('Done', ev.passed ? `Every rule held: ${n} of ${total} checks passed.` : `Some checks failed: ${n} of ${total} passed.`, 'Every ✓, ✕ and $ you saw was a real AgentPass decision. All passes and wallets are now dead.', ev.passed ? 'good' : 'bad', ev.passed ? '✓ All rules held' : '✕ Failed');
+    caption('Done', ev.passed ? `Every rule held: ${n} of ${total} checks passed.` : `Some checks failed: ${n} of ${total} passed.`, `Every ✓, ✕ and $ you saw was a real AgentPass decision.${ev.passed ? ' All passes and wallets are now dead.' : ''}`, ev.passed ? 'good' : 'bad', ev.passed ? '✓ All rules held' : '✕ Failed');
     refresh();
   }
   animate(env);
