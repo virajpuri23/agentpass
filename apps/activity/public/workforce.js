@@ -548,7 +548,7 @@ function onEvent(env) {
   else if (ev.type === 'check') {
     const li = checkLi(ev.check.n);
     if (li) { li.className = `seen ${ev.check.skipped ? 'skip' : ev.check.pass ? 'pass' : 'fail'}${li.classList.contains('cut') ? ' cut' : ''}`; li.querySelector('.m').textContent = ev.check.skipped ? '–' : ev.check.pass ? '✓' : '✕'; li.title = ev.check.detail; }
-    if (!(ev.check.skipped && play.helpers === 'two')) caption('Checking the results', `Check ${ev.check.n} of ${CHECKS.length - (play.helpers === 'two' ? CUT_CHECKS.size : 0)}: ${CHECKS[ev.check.n - 1]}`, ev.check.skipped ? 'Not run in this cut.' : '', ev.check.skipped ? '' : ev.check.pass ? 'good' : 'bad', ev.check.skipped ? '' : ev.check.pass ? '✓ Pass' : '✕ Fail');
+    if (!(ev.check.skipped && play.helpers === 'two')) caption('Checking the results', `Check ${play.helpers === 'two' ? ev.check.n - [...CUT_CHECKS].filter((c) => c < ev.check.n).length : ev.check.n} of ${CHECKS.length - (play.helpers === 'two' ? CUT_CHECKS.size : 0)}: ${CHECKS[ev.check.n - 1]}`, ev.check.skipped ? 'Not run in this cut.' : '', ev.check.skipped ? '' : ev.check.pass ? 'good' : 'bad', ev.check.skipped ? '' : ev.check.pass ? '✓ Pass' : '✕ Fail');
   } else if (ev.type === 'done') {
     const n = $('#checks').querySelectorAll('.pass').length, skipped = $('#checks').querySelectorAll('.skip').length;
     const total = CHECKS.length - skipped;
