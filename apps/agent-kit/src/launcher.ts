@@ -53,10 +53,14 @@ export async function launchAgents(opts: LaunchOptions) {
   }
 
   /** Agents disconnect on SHUTDOWN before they exit, so a late message to one is dropped instead of crashing the launcher. */
-  function deliver(agent: string, env: Envelope): boolean {
+  function deliver(agent: string, env: Envelope, onError?: (error: Error) => void): boolean {
     const child = procs.get(agent);
     if (!child?.connected) return false;
-    child.send(env, (error) => { if (error) stderr.push(`[launcher] dropped ${env.message.type} to ${agent}: ${error.message}`); });
+    child.send(env, (error) => {
+      if (!error) return;
+      stderr.push(`[launcher] dropped ${env.message.type} to ${agent}: ${error.message}`);
+      onError?.(error);
+    });
     return true;
   }
 
@@ -87,10 +91,13 @@ export async function launchAgents(opts: LaunchOptions) {
         reject(new Error(`${message.type} to ${to} timed out after ${timeoutMs}ms\n${stderr.slice(-5).join('\n')}`));
       }, timeoutMs);
       waiters.set(correlationId, (m) => { clearTimeout(timer); resolve(m); });
-      if (!deliver(to, { from: 'launcher', to, correlationId, message })) {
+      const fail = (error: Error) => {
         clearTimeout(timer);
         waiters.delete(correlationId);
-        reject(new Error(`${to} is not running`));
+        reject(error);
+      };
+      if (!deliver(to, { from: 'launcher', to, correlationId, message }, (error) => fail(new Error(`${message.type} to ${to} failed: ${error.message}`)))) {
+        fail(new Error(`${to} is not running`));
       }
     });
   }
