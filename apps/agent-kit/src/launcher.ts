@@ -52,10 +52,18 @@ export async function launchAgents(opts: LaunchOptions) {
     return child;
   }
 
+  /** Agents disconnect on SHUTDOWN before they exit, so a late message to one is dropped instead of crashing the launcher. */
+  function deliver(agent: string, env: Envelope): boolean {
+    const child = procs.get(agent);
+    if (!child?.connected) return false;
+    child.send(env, (error) => { if (error) stderr.push(`[launcher] dropped ${env.message.type} to ${agent}: ${error.message}`); });
+    return true;
+  }
+
   function route(env: Envelope) {
     if (!env || typeof env !== 'object' || !('message' in env)) return;
     if (env.to !== 'launcher') {
-      procs.get(env.to)?.send(env);
+      deliver(env.to, env);
       return;
     }
     const m = env.message;
@@ -67,7 +75,7 @@ export async function launchAgents(opts: LaunchOptions) {
     if (m.type === 'TRACE') return void opts.onTrace?.(m.event);
     if (m.type === 'SPAWN_REQUESTED' && env.from === 'buyer-agent') {
       const child = procs.get(m.agent) ?? start(m.agent);
-      procs.get(env.from)?.send({ from: 'launcher', to: env.from, correlationId: env.correlationId, replyTo: env.correlationId, message: { type: 'SPAWNED', agent: m.agent, pid: child.pid ?? -1 } } satisfies Envelope);
+      deliver(env.from, { from: 'launcher', to: env.from, correlationId: env.correlationId, replyTo: env.correlationId, message: { type: 'SPAWNED', agent: m.agent, pid: child.pid ?? -1 } } satisfies Envelope);
     }
   }
 
@@ -79,9 +87,11 @@ export async function launchAgents(opts: LaunchOptions) {
         reject(new Error(`${message.type} to ${to} timed out after ${timeoutMs}ms\n${stderr.slice(-5).join('\n')}`));
       }, timeoutMs);
       waiters.set(correlationId, (m) => { clearTimeout(timer); resolve(m); });
-      const target = procs.get(to);
-      if (!target) { clearTimeout(timer); return reject(new Error(`${to} is not running`)); }
-      target.send({ from: 'launcher', to, correlationId, message } satisfies Envelope);
+      if (!deliver(to, { from: 'launcher', to, correlationId, message })) {
+        clearTimeout(timer);
+        waiters.delete(correlationId);
+        reject(new Error(`${to} is not running`));
+      }
     });
   }
 
@@ -109,7 +119,7 @@ export async function launchAgents(opts: LaunchOptions) {
     },
     stderr: () => [...stderr],
     async stop() {
-      for (const [agent, child] of procs) child.send?.({ from: 'launcher', to: agent, correlationId: 'shutdown', message: { type: 'SHUTDOWN' } } satisfies Envelope);
+      for (const agent of procs.keys()) deliver(agent, { from: 'launcher', to: agent, correlationId: 'shutdown', message: { type: 'SHUTDOWN' } });
       await new Promise((r) => setTimeout(r, 300));
       for (const child of procs.values()) child.kill('SIGTERM');
     },
